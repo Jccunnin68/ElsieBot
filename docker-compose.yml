@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  ai_agent:
+    image: ${ECR_REGISTRY}/elsie-ai-agent:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./ai_agent:/app
+    networks:
+      - elsie_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  discord_bot:
+    image: ${ECR_REGISTRY}/elsie-discord-bot:latest
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+    volumes:
+      - ./discord_bot:/app
+    networks:
+      - elsie_network
+    depends_on:
+      ai_agent:
+        condition: service_healthy
+
+networks:
+  elsie_network:
+    driver: bridge 
