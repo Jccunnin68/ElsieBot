@@ -1,6 +1,45 @@
 version: '3.8'
 
 services:
+  elsiebrain_db:
+    image: postgres:15
+    container_name: elsiebrain_postgres_dev
+    environment:
+      - POSTGRES_DB=elsiebrain
+      - POSTGRES_USER=elsie
+      - POSTGRES_PASSWORD=elsie123
+    ports:
+      - "5433:5432"
+    volumes:
+      - elsiebrain_dev_data:/var/lib/postgresql/data
+    networks:
+      - elsie_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elsie -d elsiebrain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db_populator:
+    build:
+      context: ../db_populator
+      dockerfile: Dockerfile
+    container_name: elsiebrain_populator_dev
+    env_file:
+      - ../.env
+    environment:
+      - DB_HOST=elsiebrain_db
+      - DB_NAME=elsiebrain
+      - DB_USER=elsie
+      - DB_PASSWORD=elsie123
+      - DB_PORT=5432
+    networks:
+      - elsie_dev_network
+    depends_on:
+      elsiebrain_db:
+        condition: service_healthy
+    restart: "no"  # Run once and exit
+
   devcontainer:
     image: mcr.microsoft.com/devcontainers/base:ubuntu
     volumes:
@@ -11,6 +50,8 @@ services:
       - elsie_dev_network
     environment:
       - DOCKER_HOST=unix:///var/run/docker-host.sock
+    depends_on:
+      - elsiebrain_db
 
   ai_agent:
     build:
@@ -19,15 +60,25 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ../ai_agent/.env
+      - ../.env
     environment:
       - PORT=8000
       - GEMMA_API_KEY=${GEMMA_API_KEY}
+      - DB_HOST=elsiebrain_db
+      - DB_NAME=elsiebrain
+      - DB_USER=elsie
+      - DB_PASSWORD=elsie123
+      - DB_PORT=5432
     networks:
       - elsie_dev_network
     volumes:
       - ../ai_agent:/app
       - /app/venv
+    depends_on:
+      elsiebrain_db:
+        condition: service_healthy
+      db_populator:
+        condition: service_completed_successfully
     command: python main.py
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
@@ -41,19 +92,24 @@ services:
       context: ../discord_bot
       dockerfile: Dockerfile.dev
     env_file:
-      - ../discord_bot/.env
+      - ../.env
     environment:
       - AI_AGENT_URL=http://ai_agent:8000
       - GEMMA_API_KEY=${GEMMA_API_KEY}
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
     networks:
       - elsie_dev_network
     volumes:
       - ../discord_bot:/app
-      - ../discord_bot/.env:/app/.env:ro
+      - ../.env:/app/.env:ro
     depends_on:
       ai_agent:
         condition: service_healthy
     command: ["go", "run", "main.go"]
+
+volumes:
+  elsiebrain_dev_data:
+    driver: local
 
 networks:
   elsie_dev_network:

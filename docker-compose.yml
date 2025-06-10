@@ -1,17 +1,46 @@
 version: '3.8'
 
 services:
+  elsiebrain_db:
+    image: postgres:15
+    container_name: elsiebrain_postgres
+    environment:
+      - POSTGRES_DB=elsiebrain
+      - POSTGRES_USER=elsie
+      - POSTGRES_PASSWORD=elsie123
+    ports:
+      - "5432:5432"
+    volumes:
+      - elsiebrain_data:/var/lib/postgresql/data
+    networks:
+      - elsie_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elsie -d elsiebrain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   ai_agent:
     image: ${ECR_REGISTRY}/elsie-ai-agent:latest
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - PORT=8000
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMMA_API_KEY=${GEMMA_API_KEY}
+      - DB_HOST=elsiebrain_db
+      - DB_NAME=elsiebrain
+      - DB_USER=elsie
+      - DB_PASSWORD=elsie123
+      - DB_PORT=5432
     volumes:
       - ./ai_agent:/app
     networks:
       - elsie_network
+    depends_on:
+      elsiebrain_db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
@@ -20,8 +49,12 @@ services:
 
   discord_bot:
     image: ${ECR_REGISTRY}/elsie-discord-bot:latest
+    env_file:
+      - .env
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - AI_AGENT_URL=http://ai_agent:8000
+      - GEMMA_API_KEY=${GEMMA_API_KEY}
     volumes:
       - ./discord_bot:/app
     networks:
@@ -29,6 +62,31 @@ services:
     depends_on:
       ai_agent:
         condition: service_healthy
+
+  db_populator:
+    build:
+      context: ./db_populator
+      dockerfile: Dockerfile
+    container_name: elsiebrain_populator
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=elsiebrain_db
+      - DB_NAME=elsiebrain
+      - DB_USER=elsie
+      - DB_PASSWORD=elsie123
+      - DB_PORT=5432
+      - WIKI_UPDATE_INTERVAL=3600  # Update every hour
+    networks:
+      - elsie_network
+    depends_on:
+      elsiebrain_db:
+        condition: service_healthy
+    restart: unless-stopped  # Keep running unless manually stopped
+
+volumes:
+  elsiebrain_data:
+    driver: local
 
 networks:
   elsie_network:

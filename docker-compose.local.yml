@@ -9,7 +9,7 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - GEMMA_API_KEY=${GEMMA_API_KEY:-your_gemma_api_key_here}
     networks:
       - elsie_network
     healthcheck:
