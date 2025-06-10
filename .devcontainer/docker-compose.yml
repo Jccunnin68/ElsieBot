@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    volumes:
+      - ../..:/workspaces:cached
+      - /var/run/docker.sock:/var/run/docker-host.sock
+    command: /bin/sh -c "while sleep 1000; do :; done"
+    networks:
+      - elsie_dev_network
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker-host.sock
+
+  ai_agent:
+    build:
+      context: ../ai_agent
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../ai_agent/.env
+    environment:
+      - PORT=8000
+      - GEMMA_API_KEY=${GEMMA_API_KEY}
+    networks:
+      - elsie_dev_network
+    volumes:
+      - ../ai_agent:/app
+      - /app/venv
+    command: python main.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  discord_bot:
+    build:
+      context: ../discord_bot
+      dockerfile: Dockerfile.dev
+    env_file:
+      - ../discord_bot/.env
+    environment:
+      - AI_AGENT_URL=http://ai_agent:8000
+      - GEMMA_API_KEY=${GEMMA_API_KEY}
+    networks:
+      - elsie_dev_network
+    volumes:
+      - ../discord_bot:/app
+      - ../discord_bot/.env:/app/.env:ro
+    depends_on:
+      ai_agent:
+        condition: service_healthy
+    command: ["go", "run", "main.go"]
+
+networks:
+  elsie_dev_network:
+    driver: bridge 

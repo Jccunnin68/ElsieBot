@@ -1,0 +1,100 @@
+name: Test DevContainer Setup
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '.devcontainer/**'
+      - 'ai_agent/**'
+      - 'discord_bot/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.devcontainer/**'
+      - 'ai_agent/**'  
+      - 'discord_bot/**'
+
+jobs:
+  test-devcontainer:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build DevContainer
+      uses: devcontainers/ci@v0.3
+      with:
+        imageName: elsie-devcontainer
+        runCmd: |
+          echo "🧪 Testing DevContainer Setup..."
+          
+          # Test Go environment
+          go version
+          cd discord_bot
+          go mod verify
+          go build -o test-bot main.go
+          echo "✅ Go Discord bot builds successfully"
+          cd ..
+          
+          # Test Python environment  
+          cd ai_agent
+          python --version
+          pip install -r requirements.txt
+          python -c "import fastapi, uvicorn; print('✅ Python dependencies installed')"
+          cd ..
+          
+          # Test scripts exist and are executable
+          ls -la .devcontainer/scripts/
+          
+          echo "🎉 DevContainer test completed successfully!"
+
+  test-docker-compose:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create test .env file
+      run: |
+        cd Elsie
+        cat > .env << EOF
+        OPENAI_API_KEY=test_key
+        DISCORD_TOKEN=test_token
+        PORT=8000
+        ENVIRONMENT=test
+        EOF
+
+    - name: Test Docker Compose Build
+      run: |
+        cd Elsie
+        # Test development compose file
+        docker-compose -f .devcontainer/docker-compose.yml config
+        docker-compose -f .devcontainer/docker-compose.yml build
+        
+        # Test production compose file
+        docker-compose -f docker-compose.local.yml config
+        docker-compose -f docker-compose.local.yml build
+        
+        echo "✅ All Docker Compose files are valid and build successfully"
+
+    - name: Test AI Agent Container
+      run: |
+        cd Elsie
+        # Start just the AI agent to test it works
+        docker-compose -f .devcontainer/docker-compose.yml up -d ai_agent
+        
+        # Wait for health check
+        sleep 30
+        
+        # Test the API
+        curl -f http://localhost:8000/ || exit 1
+        curl -X POST http://localhost:8000/process \
+          -H "Content-Type: application/json" \
+          -d '{"content": "test", "context": {}}' || exit 1
+        
+        echo "✅ AI Agent container is working"
+        
+        # Cleanup
+        docker-compose -f .devcontainer/docker-compose.yml down 

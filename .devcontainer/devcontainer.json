@@ -1,0 +1,94 @@
+{
+	"name": "Elsie Discord Bot Development",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "devcontainer",
+	"workspaceFolder": "/workspaces/Elsie",
+	"shutdownAction": "stopCompose",
+	
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"installZsh": true,
+			"configureZshAsDefaultShell": true,
+			"installOhMyZsh": true,
+			"upgradePackages": true,
+			"username": "vscode",
+			"userUid": "automatic",
+			"userGid": "automatic"
+		},
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "1.24",
+			"golangciLintVersion": "latest"
+		},
+		"ghcr.io/devcontainers/features/python:1": {
+			"version": "3.9",
+			"installTools": true,
+			"installJupyterlab": false
+		},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"moby": true,
+			"azureDnsAutoDetection": true,
+			"installDockerBuildx": true,
+			"version": "latest",
+			"dockerDashComposeVersion": "v2"
+		},
+		"ghcr.io/devcontainers/features/git:1": {
+			"ppa": true,
+			"version": "latest"
+		}
+	},
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.Go",
+				"ms-python.python",
+				"ms-python.flake8",
+				"ms-python.isort",
+				"ms-vscode.vscode-json",
+				"redhat.vscode-yaml",
+				"ms-azuretools.vscode-docker",
+				"GitHub.copilot"
+			],
+			"settings": {
+				"go.toolsManagement.checkForUpdates": "local",
+				"go.useLanguageServer": true,
+				"go.gopath": "/go",
+				"go.goroot": "/usr/local/go",
+				"python.defaultInterpreterPath": "/usr/local/bin/python",
+				"python.linting.enabled": true,
+				"python.linting.pylintEnabled": true,
+				"python.formatting.autopep8Path": "/usr/local/py-utils/bin/autopep8",
+				"python.formatting.blackPath": "/usr/local/py-utils/bin/black",
+				"python.formatting.yapfPath": "/usr/local/py-utils/bin/yapf",
+				"python.linting.banditPath": "/usr/local/py-utils/bin/bandit",
+				"python.linting.flake8Path": "/usr/local/py-utils/bin/flake8",
+				"python.linting.mypyPath": "/usr/local/py-utils/bin/mypy",
+				"python.linting.pycodestylePath": "/usr/local/py-utils/bin/pycodestyle",
+				"python.linting.pydocstylePath": "/usr/local/py-utils/bin/pydocstyle",
+				"python.linting.pylintPath": "/usr/local/py-utils/bin/pylint"
+			}
+		}
+	},
+
+	"forwardPorts": [8000, 8080, 3000],
+	"portsAttributes": {
+		"8000": {
+			"label": "Elsie AI Agent",
+			"onAutoForward": "notify"
+		},
+		"8080": {
+			"label": "Discord Bot Admin",
+			"onAutoForward": "silent"
+		},
+		"3000": {
+			"label": "Elsie Web Interface",
+			"onAutoForward": "silent"
+		}
+	},
+
+	"postCreateCommand": ".devcontainer/setup.sh",
+	"postStartCommand": "echo '🍺 Elsie Development Container Ready! 🍺'",
+
+	"remoteUser": "vscode",
+	"containerUser": "vscode"
+} 

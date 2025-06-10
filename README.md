@@ -6,13 +6,41 @@ Elsie is a Discord bot that combines Python-based AI agent processing with Go-ba
 
 ```
 Elsie/
+├── .devcontainer/      # DevContainer configuration for VS Code
 ├── ai_agent/           # Python-based AI agent system
 ├── discord_bot/        # Go-based Discord bot implementation
-├── docker/            # Docker configuration files
-└── docs/             # Project documentation
+├── aws/               # AWS deployment configurations
+├── docs/              # Project documentation
+└── .github/           # GitHub Actions workflows
 ```
 
 ## Setup Instructions
+
+### 🚀 Quick Start (DevContainer - Recommended)
+
+1. **Prerequisites:**
+   - VS Code with Remote-Containers extension
+   - Docker Desktop
+
+2. **Open in DevContainer:**
+   ```bash
+   git clone [repository-url]
+   cd Elsie
+   code .
+   ```
+   - Press `F1` → "Dev Containers: Reopen in Container"
+   - Wait for setup to complete
+
+3. **Configure and Start:**
+   ```bash
+   # Edit .env with your Discord token
+   nano .env
+   
+   # Start all services
+   .devcontainer/scripts/start-all.sh
+   ```
+
+### 🛠️ Manual Setup
 
 1. Prerequisites:
    - Python 3.9+
@@ -50,12 +78,23 @@ Elsie/
 
 4. Docker Deployment:
    ```bash
-   docker-compose up --build
+   docker-compose -f docker-compose.local.yml up --build
    ```
 
-## AWS Deployment
+## 🚀 Development
 
-The project is configured for AWS free tier deployment using Docker containers. See `docker/` directory for configuration details.
+For the best development experience, use the DevContainer setup which provides:
+- ✅ Complete Go and Python environments
+- ✅ Hot reload for both services  
+- ✅ Pre-configured VS Code workspace
+- ✅ Docker-in-Docker support
+- ✅ All development tools ready to go
+
+See `.devcontainer/README.md` for detailed development instructions.
+
+## 🌐 AWS Deployment
+
+The project is configured for AWS free tier deployment using Docker containers. See `aws/` directory for CloudFormation templates and deployment configurations.
 
 ## License
 

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  ai_agent:
+    build:
+      context: ./ai_agent
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+    networks:
+      - elsie_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  discord_bot:
+    build:
+      context: ./discord_bot
+      dockerfile: Dockerfile
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN:-your_discord_token_here}
+      - AI_AGENT_URL=http://ai_agent:8000
+    networks:
+      - elsie_network
+    depends_on:
+      ai_agent:
+        condition: service_healthy
+
+networks:
+  elsie_network:
+    driver: bridge 
