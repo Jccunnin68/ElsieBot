@@ -51,3 +51,5 @@ Thumbs.db
 # AWS
 .aws/
 *.pem 
+# Database backups
+Elsie/db_populator/backups/*.sql 
