@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elsie AI Agent</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .chat-container {
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .response {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Elsie AI Agent</h1>
+            <p>Ask me about fleet operations, mission logs, or anything else!</p>
+        </div>
+        
+        <div class="chat-container">
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="Type your message here..." />
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            
+            <div id="response" class="response" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const responseDiv = document.getElementById('response');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            responseDiv.style.display = 'block';
+            responseDiv.innerHTML = '<span class="loading">Thinking...</span>';
+            responseDiv.className = 'response loading';
+            
+            try {
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversation_history: []
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    responseDiv.innerHTML = data.response;
+                    responseDiv.className = 'response';
+                } else {
+                    responseDiv.innerHTML = `Error: ${data.detail || 'Unknown error'}`;
+                    responseDiv.className = 'response';
+                    responseDiv.style.borderLeftColor = '#dc3545';
+                }
+            } catch (error) {
+                responseDiv.innerHTML = `Error: ${error.message}`;
+                responseDiv.className = 'response';
+                responseDiv.style.borderLeftColor = '#dc3545';
+            }
+            
+            input.value = '';
+        }
+        
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 

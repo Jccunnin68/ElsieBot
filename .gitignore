@@ -53,3 +53,4 @@ Thumbs.db
 *.pem 
 # Database backups
 Elsie/db_populator/backups/*.sql 
+db_populator/backups/seed_backup.sql

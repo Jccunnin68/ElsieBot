@@ -9,28 +9,90 @@ def is_log_query(query: str) -> bool:
     query_lower = query.lower()
     return any(indicator in query_lower for indicator in LOG_INDICATORS)
 
-def is_ship_log_page(page_title: str) -> bool:
-    """Determine if a page title follows the [Ship Name] [Date] log pattern"""
+def is_ship_log_title(title: str) -> bool:
+    """Enhanced ship log title detection supporting multiple formats:
+    - Ship Name Date
+    - Date Ship Name Log  
+    - Date Ship Name
+    - Ship Name Date Log
+    - Something like 'The Anevian Incident' Log
+    """
+    title_lower = title.lower().strip()
     
-    title_lower = page_title.lower().strip()
-    
-    # Pattern: [Ship Name] [Date] (with optional "log" at the end)
-    # Examples: "Adagio 2024/01/06", "Stardancer 2024/09/21 Log", "Pilgrim 2024/04/02"
+    # Basic log patterns for any ship name
     for ship in SHIP_NAMES:
-        # Match patterns like "shipname yyyy/mm/dd" or "shipname mm/dd/yyyy" or "shipname yyyy-mm-dd"
-        patterns = [
-            f"^{ship}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}",  # ship 2024/01/06
-            f"^{ship}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}",   # ship 1/6/2024
-            f"^{ship}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}",   # ship 2024-01-06
-            f"^{ship}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}",   # ship 1-6-2024
-            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship}",   # 2024/01/06 ship
+        ship_lower = ship.lower()
+        
+        # Pattern 1: Ship Name Date (e.g., "Adagio 2024/01/06")
+        date_patterns = [
+            f"^{ship_lower}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}",  # ship 2024/01/06
+            f"^{ship_lower}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}",   # ship 1/6/2024
+            f"^{ship_lower}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}",   # ship 2024-01-06
+            f"^{ship_lower}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}",   # ship 1-6-2024
         ]
         
-        for pattern in patterns:
+        for pattern in date_patterns:
+            if re.match(pattern, title_lower):
+                return True
+        
+        # Pattern 2: Date Ship Name (e.g., "2024/01/06 Adagio")
+        date_ship_patterns = [
+            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship_lower}",   # 2024/01/06 ship
+            f"^\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+{ship_lower}",   # 1/6/2024 ship
+            f"^\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+{ship_lower}",   # 2024-01-06 ship
+            f"^\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+{ship_lower}",   # 1-6-2024 ship
+        ]
+        
+        for pattern in date_ship_patterns:
+            if re.match(pattern, title_lower):
+                return True
+        
+        # Pattern 3: Ship Name Date Log (e.g., "Adagio 2024/01/06 Log")
+        date_log_patterns = [
+            f"^{ship_lower}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+log",
+            f"^{ship_lower}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+log",
+            f"^{ship_lower}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+log",
+            f"^{ship_lower}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+log",
+        ]
+        
+        for pattern in date_log_patterns:
+            if re.match(pattern, title_lower):
+                return True
+        
+        # Pattern 4: Date Ship Name Log (e.g., "2024/01/06 Adagio Log") 
+        date_ship_log_patterns = [
+            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship_lower}\\s+log",
+            f"^\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+{ship_lower}\\s+log",
+            f"^\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+{ship_lower}\\s+log",
+            f"^\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+{ship_lower}\\s+log",
+        ]
+        
+        for pattern in date_ship_log_patterns:
             if re.match(pattern, title_lower):
                 return True
     
+    # Pattern 5: Named incidents/events ending with "Log" (e.g., "The Anevian Incident Log")
+    if title_lower.endswith(' log') and len(title_lower) > 4:
+        # Check if it contains words that suggest it's an event/incident
+        event_indicators = ['incident', 'event', 'mission', 'encounter', 'crisis', 'affair', 'operation']
+        if any(indicator in title_lower for indicator in event_indicators):
+            return True
+        
+        # Check if it contains "the" at the beginning, suggesting a named event
+        if title_lower.startswith('the ') and len(title_lower.split()) >= 3:
+            return True
+    
+    # Pattern 6: Any title with ship name and "log" anywhere
+    for ship in SHIP_NAMES:
+        ship_lower = ship.lower()
+        if ship_lower in title_lower and 'log' in title_lower:
+            return True
+    
     return False
+
+def is_ship_log_page(page_title: str) -> bool:
+    """Legacy function - now uses enhanced is_ship_log_title"""
+    return is_ship_log_title(page_title)
 
 def correct_character_name(name: str) -> str:
     """Apply character corrections and rank/title fixes"""

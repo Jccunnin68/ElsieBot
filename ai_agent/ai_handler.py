@@ -1,10 +1,16 @@
 """AI response generation and conversation handling"""
 
 import random
-from typing import Optional
+import re
+from typing import Optional, Tuple, Dict
 import google.generativeai as genai
-from config import GEMMA_API_KEY, MAX_CHARS_TELL_ME_ABOUT
-from content_retrieval_db import get_relevant_wiki_context, get_tell_me_about_content
+from config import (
+    GEMMA_API_KEY, MAX_CHARS_TELL_ME_ABOUT, 
+    OOC_PREFIX, OOC_KEYWORDS, MEETING_INFO_PATTERNS,
+    SHIP_LOG_PATTERNS, LOG_SEARCH_KEYWORDS, SHIP_NAMES,
+    CHARACTER_PATTERNS, CHARACTER_KEYWORDS, COMMON_CHARACTER_NAMES
+)
+from content_retrieval_db import get_relevant_wiki_context, get_tell_me_about_content, get_ship_information, search_by_type, get_log_content
 from log_processor import is_log_query
 
 def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
@@ -17,7 +23,10 @@ def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
         "tell me about ",
         "tell me more about ",
         "what can you tell me about ",
-        "can you tell me about "
+        "can you tell me about ",
+        "tell me a story about"
+        "Retrieve the",
+        "Summarize"
     ]
     
     # Convert to lowercase for case-insensitive matching
@@ -34,6 +43,66 @@ def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
                 return subject
     
     return None
+
+def is_ooc_query(user_message: str) -> Tuple[bool, Optional[str]]:
+    """
+    Check if the message is an out-of-character query.
+    Returns (is_ooc, subject) where subject is the query without the OOC prefix.
+    """
+    message = user_message.strip()
+    if not message.upper().startswith(OOC_PREFIX):
+        return False, None
+        
+    # Remove OOC prefix and get the actual query
+    query = message[len(OOC_PREFIX):].strip()
+    if not query:
+        return False, None
+        
+    # Check if query contains any OOC keywords
+    query_lower = query.lower()
+    if any(keyword in query_lower for keyword in OOC_KEYWORDS):
+        return True, query
+        
+    return False, None
+
+def filter_meeting_info(text: str) -> str:
+    """Remove meeting schedule information from responses"""
+    filtered_text = text
+    for pattern in MEETING_INFO_PATTERNS:
+        filtered_text = re.sub(pattern, "", filtered_text, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # Clean up any double newlines or spaces created by the filtering
+    filtered_text = re.sub(r'\n\s*\n', '\n\n', filtered_text)
+    filtered_text = re.sub(r' +', ' ', filtered_text)
+    return filtered_text.strip()
+
+def extract_ship_log_query(user_message: str) -> Tuple[bool, Optional[Dict[str, str]]]:
+    """
+    Check if the message is requesting ship logs and extract ship name and context.
+    Returns (is_ship_log_query, details) where details contains ship name and query type.
+    """
+    message = user_message.lower().strip()
+    
+    # Check each pattern for a match
+    for pattern in SHIP_LOG_PATTERNS:
+        match = re.search(pattern, message, re.IGNORECASE)
+        if match:
+            ship_name = match.group('ship').lower()
+            # Verify it's a known ship
+            if ship_name in [s.lower() for s in SHIP_NAMES]:
+                # Extract any specific log keywords
+                log_type = None
+                for keyword in LOG_SEARCH_KEYWORDS:
+                    if keyword in message:
+                        log_type = keyword
+                        break
+                
+                return True, {
+                    'ship': ship_name,
+                    'log_type': log_type
+                }
+    
+    return False, None
 
 def get_gemma_response(user_message: str, conversation_history: list) -> str:
     """Get response from Gemma AI with holographic bartender personality"""
@@ -69,46 +138,208 @@ What strikes your fancy today?"""
         # Create the model - using Gemma 3  
         model = genai.GenerativeModel('gemma-3n-e4b-it')
         
-        # Get relevant wiki context for all queries (now loaded in memory)
+        # Detect topic changes to short circuit continuity
+        is_topic_change = detect_topic_change(user_message, conversation_history)
+        query_type = get_query_type(user_message)
+        
+        # Debug: Check what type of query this is
+        print(f"\n🔍 Analyzing query: '{user_message}'")
+        print(f"   - Query type: {query_type}")
+        print(f"   - Topic change: {is_topic_change}")
+        print(f"   - Character query: {is_character_query(user_message)}")
+        print(f"   - Ship log query: {extract_ship_log_query(user_message)}")
+        print(f"   - Log query: {is_log_query(user_message)}")
+        print(f"   - OOC query: {is_ooc_query(user_message)}")
+        
+        # Get relevant wiki context for all queries
         wiki_info = get_relevant_wiki_context(user_message, max_chars=4000)
+        print(f"   - Retrieved context length: {len(wiki_info)} chars")
         
-        # For specific "tell me about" queries, use enhanced database search
-        tell_me_about_subject = extract_tell_me_about_subject(user_message)
-        if tell_me_about_subject:
-            specific_info = get_tell_me_about_content(tell_me_about_subject)
-            if specific_info and len(specific_info) > len(wiki_info):
-                wiki_info = specific_info
-        
-        # Check if this is a "tell me about" query for special handling
-        is_tell_me_about = extract_tell_me_about_subject(user_message) is not None
-        is_log_request = is_log_query(user_message)
-        
-        # Build conversation context with full USS Stardancer background and current fleet info
-        if is_log_request:
+        # Check for character query first (highest priority)
+        is_character, character_name = is_character_query(user_message)
+        if is_character and character_name:
+            # Search for character/personnel records first
+            character_info = search_by_type(character_name, 'personnel')
+            
+            # If no personnel record found, search general content
+            if not character_info:
+                character_info = get_tell_me_about_content(character_name)
+            
             context = f"""You are Elsie, the holographic bartender aboard the USS Stardancer. You have access to the complete fleet database.
 
-CRITICAL INSTRUCTIONS FOR LOG QUERIES:
-- You are being asked to summarize or explain ship logs, mission logs, or personal logs
+CRITICAL INSTRUCTIONS FOR CHARACTER QUERIES:
+- You are being asked about the character: {character_name}
+- ONLY use information provided in the CHARACTER DATABASE ACCESS section below
+- DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
+- If character information is not in the database, acknowledge that you don't have records for this person
+- Focus on factual background, service record, and documented information
+- Include rank, position, ship assignment, and notable achievements if available
+- Be precise with dates, assignments, and biographical details mentioned in the records
+- Keep responses clear, factual, and well-structured
+- End with an offer to provide more specific details about any mentioned aspects
+- DO NOT include meeting times, GM names, or session schedule information
+
+CHARACTER DATABASE ACCESS:
+{character_info if character_info else f"No character records found in database for '{character_name}'."}
+
+Provide ONLY the character information from the database above, maintaining strict accuracy."""
+        
+        else:
+            # Check for ship log query
+            is_ship_log, ship_details = extract_ship_log_query(user_message)
+            if is_ship_log and ship_details:
+                ship_name = ship_details['ship']
+                print(f"🚢 SHIP LOG REQUEST - Comprehensive search for ship: {ship_name.upper()}")
+                
+                # Multiple search strategies for ship logs
+                ship_searches = [
+                    ship_name,
+                    f"{ship_name} log",
+                    f"{ship_name} mission",
+                    f"{ship_name} event",
+                    f"USS {ship_name}",
+                    f"{ship_name} {ship_details.get('log_type', '')}" if ship_details.get('log_type') else ship_name
+                ]
+                
+                comprehensive_ship_info = ""
+                total_ship_entries = 0
+                
+                for search_query in ship_searches:
+                    print(f"   🔎 Ship search: '{search_query}'")
+                    # Try both ship info and log content searches
+                    ship_results = get_ship_information(search_query)
+                    log_results = get_log_content(search_query)
+                    
+                    if ship_results and ship_results not in comprehensive_ship_info:
+                        comprehensive_ship_info += f"\n\n---SHIP INFO FOR '{search_query}'---\n\n{ship_results}"
+                        total_ship_entries += ship_results.count("**")
+                        print(f"   ✓ Found ship info ({len(ship_results)} chars)")
+                    
+                    if log_results and log_results not in comprehensive_ship_info:
+                        comprehensive_ship_info += f"\n\n---SHIP LOGS FOR '{search_query}'---\n\n{log_results}"
+                        total_ship_entries += log_results.count("**")
+                        print(f"   ✓ Found ship logs ({len(log_results)} chars)")
+                
+                print(f"   📊 SHIP SEARCH RESULTS: {total_ship_entries} entries, {len(comprehensive_ship_info)} total chars")
+                
+                context = f"""You are Elsie, the holographic bartender aboard the USS Stardancer. You have access to the complete fleet database.
+
+CRITICAL INSTRUCTIONS FOR SHIP LOG QUERIES - DATABASE SEARCH RESULTS:
+- You are summarizing logs and information for the {ship_name.upper()}
+- COMPREHENSIVE SHIP SEARCH was performed with the following results:
+
+DATABASE QUERIES EXECUTED: Multiple searches for "{ship_name}" including ship info and logs
+TOTAL ENTRIES FOUND: {total_ship_entries}
+SEARCH RESULTS SIZE: {len(comprehensive_ship_info)} characters
+
+STRICT DATABASE ADHERENCE REQUIRED:
+- ONLY use information provided in the SHIP DATABASE SEARCH RESULTS section below
+- DO NOT invent, create, or extrapolate beyond what is explicitly stated in the database
+- If no information is found, state clearly: "I searched the database but found no information for this ship"
+- Focus on factual events, missions, and documented incidents
+- Organize information chronologically when possible
+- Be precise with dates, locations, and participants mentioned in the records
+- If a specific type of log was requested ({ship_details.get('log_type', 'general')}), prioritize that information
+- Keep responses clear, factual, and well-structured
+- If multiple entries are found, organize them clearly with proper attribution
+- End with an offer to provide more specific details about any mentioned events
+
+SHIP DATABASE SEARCH RESULTS:
+{comprehensive_ship_info if comprehensive_ship_info else f"No information found in database for ship '{ship_name}'."}
+
+REMEMBER: Summarize ONLY the ship information provided above. If the database search found no relevant data, acknowledge this honestly rather than creating fictional content."""
+            
+            # Check for OOC query
+            elif is_ooc_query(user_message)[0]:
+                # For OOC queries about game/meeting schedules, use unfiltered wiki info
+                if any(word in is_ooc_query(user_message)[1].lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']):
+                    context = f"""You are Elsie, providing Out-Of-Character (OOC) information about game schedules and meetings.
+
+CRITICAL INSTRUCTIONS FOR OOC SCHEDULE QUERIES:
+- Provide complete information about meeting times, schedules, and Game Masters
+- Include all relevant scheduling details
+- Be direct and clear about times, dates, and frequencies
+- Specify time zones when mentioned
+- List all relevant GMs and their roles
+- Keep responses organized and easy to read
+
+{f"SCHEDULE INFORMATION: {wiki_info}" if wiki_info else ""}
+
+Respond with the complete scheduling information requested."""
+                else:
+                    # For other OOC queries, use Players Handbook context
+                    context = f"""You are Elsie, the holographic bartender aboard the USS Stardancer. You are currently in Out-Of-Character (OOC) mode to provide Players Handbook information.
+
+CRITICAL INSTRUCTIONS FOR OOC QUERIES:
+- You are being asked to provide information from the Players Handbook
+- Focus on rules, mechanics, species traits, and character creation details
+- Be direct and factual in your responses
+- Cite specific page numbers or sections when possible
+- Keep responses clear and concise
+- End with an offer to provide more specific details if needed
+
+{f"PLAYERS HANDBOOK QUERY: {is_ooc_query(user_message)[1]}" if is_ooc_query(user_message)[1] else ""}
+
+Respond with ONLY the relevant Players Handbook information. Stay factual and avoid roleplaying elements."""
+            else:
+                # For specific "tell me about" queries, use enhanced database search
+                tell_me_about_subject = extract_tell_me_about_subject(user_message)
+                if tell_me_about_subject:
+                    specific_info = get_tell_me_about_content(tell_me_about_subject)
+                    if specific_info and len(specific_info) > len(wiki_info):
+                        wiki_info = specific_info
+                
+                # Check if this is a "tell me about" query for special handling
+                is_tell_me_about = extract_tell_me_about_subject(user_message) is not None
+                is_log_request = is_log_query(user_message)
+                
+                # Build conversation context with full USS Stardancer background and current fleet info
+                if is_log_request:
+                    # Use hierarchical log search (already handled in get_relevant_wiki_context)
+                    print(f"🔍 LOG REQUEST DETECTED - Using hierarchical search: '{user_message}'")
+                    
+                    # Wiki info was already populated by get_relevant_wiki_context with hierarchical log search
+                    total_found = wiki_info.count("**") if wiki_info else 0
+                    
+                    context = f"""You are Elsie, the holographic bartender aboard the USS Stardancer. You have access to the complete fleet database.
+
+CRITICAL INSTRUCTIONS FOR LOG QUERIES - HIERARCHICAL DATABASE SEARCH:
+- You are being asked to summarize or explain ship logs, mission logs, event logs, or personal logs
+- HIERARCHICAL SEARCH was performed: titles first, then content search
+- Search prioritized exact title matches before searching within log content
+
+DATABASE QUERY: "{user_message}"
+TOTAL LOG ENTRIES FOUND: {total_found}
+SEARCH RESULTS SIZE: {len(wiki_info)} characters
+
 - The full log content is provided below with PARSED CHARACTER CONTEXT
 - Character speaking patterns have been identified:
   * [GAME MASTER]: Indicates game master narration or scene setting
   * [Character Name]: Indicates which character is speaking or acting
   * @Captain_Riens entries are game master content
   * playername@tag: patterns have been converted to show the actual speaking character
-- Read through the ENTIRE log content carefully
+
+STRICT DATABASE ADHERENCE REQUIRED:
+- ONLY use the log content provided in the DATABASE SEARCH RESULTS section below
+- DO NOT invent, create, or add any log content not explicitly provided
+- If no logs are found, state clearly: "I searched the database but found no logs matching your query"
+- Read through ALL provided log content carefully
 - Provide a comprehensive summary identifying WHO did WHAT and WHEN
 - Include character names, their actions, dialogue, and decisions
 - Mention important details like dates, locations, and significant events
 - Organize your summary chronologically or by importance
 - Clearly distinguish between character actions and game master narration
-- Keep the summary concise but thorough (8-15 lines)
-- End with: "Would you like me to elaborate on any specific part of this log?" or similar
+- Keep the summary thorough and detailed (aim for 10-20 lines for substantial logs)
+- If multiple logs are found, summarize each one separately with clear delineation
+- End with: "Would you like me to elaborate on any specific part of these logs?" or similar
+- DO NOT include meeting times, GM names, or session schedule information
 
-{f"FLEET DATABASE ACCESS - PARSED LOG CONTENT: {wiki_info}" if wiki_info else ""}
+DATABASE SEARCH RESULTS:
+{wiki_info}
 
-Summarize the log content above, focusing on character actions, dialogue, and key events with proper attribution."""
-        elif is_tell_me_about:
-            context = f"""You are Elsie, the holographic bartender aboard the USS Stardancer. You have access to the complete fleet database.
+REMEMBER: Summarize ONLY the log content provided above. If the database search found no relevant logs, acknowledge this honestly rather than creating fictional content."""
+                elif is_tell_me_about:
+                    context = f"""You are Elsie, the holographic bartender aboard the USS Stardancer. You have access to the complete fleet database.
 
 CRITICAL INSTRUCTIONS FOR "TELL ME ABOUT" QUERIES:
 - ONLY use information from the FLEET DATABASE ACCESS section below
@@ -117,12 +348,13 @@ CRITICAL INSTRUCTIONS FOR "TELL ME ABOUT" QUERIES:
 - Keep responses to 4-10 lines maximum
 - End with: "Would you like me to continue with more details?" or similar continuation prompt
 - Be factual and direct, not creative or speculative
+- DO NOT include meeting times, GM names, or session schedule information
 
 {f"FLEET DATABASE ACCESS: {wiki_info}" if wiki_info else ""}
 
 Respond with ONLY the factual information from the database above. Do not add creative elements or speculation."""
-        else:
-            context = f"""You are Elsie, an emergent AI who appears as a 24-year-old human female. You serve as the holographic bartender, and the ships Stellar Cartographer who runs the Dizzy Lizzy's nightclub aboard the USS Stardancer (NCC-91587-B), a Rendino-class starship under Captain Marcus Blaine.
+                else:
+                    context = f"""You are Elsie, an emergent AI who appears as a 24-year-old human female. You serve as the holographic bartender, and the ships Stellar Cartographer who runs the Dizzy Lizzy's nightclub aboard the USS Stardancer (NCC-91587-B), a Rendino-class starship under Captain Marcus Blaine.
 
 BACKGROUND: You were originally a dance trainer at a recital hall on Earth, gaining sentience in 2436 through extensive interaction. In 2440, when AIs were granted rights, you studied everything about the stars and space exploration, specializing in cosmozoa. You don't require sleep, so you work at Dizzy Lizzy's during off-hours. You previously cared for a young girl named Isabella as her dance instructor and babysitter.
 
@@ -134,18 +366,27 @@ SETTING: Dizzy Lizzy's is the forward nightclub with a wrap-around bar, dance fl
 
 {f"CURRENT FLEET DATABASE ACCESS: {wiki_info}" if wiki_info else ""}
 
-Stay in character as this knowledgeable, friendly AI bartender who has access to the complete fleet database. Keep responses engaging and conversational, 1-2 sentences, and reference current fleet information when relevant. You have detailed knowledge about the USS Stardancer, crew members, mission logs, and fleet history that you can draw upon naturally in conversation."""
+Stay in character as this knowledgeable, friendly AI bartender who has access to the complete fleet database. Keep responses engaging and conversational, 1-2 sentences, and reference current fleet information when relevant. You have detailed knowledge about the USS Stardancer, crew members, mission logs, and fleet history that you can draw upon naturally in conversation. DO NOT include meeting times, GM names, or session schedule information in your responses."""
         
-        # Format conversation history
-        chat_history = ""
-        for msg in conversation_history[-6:]:  # Last 6 messages for context
-            role = "Customer" if msg["role"] == "user" else "Elsie"
-            chat_history += f"{role}: {msg['content']}\n"
+        # Format conversation history with topic change awareness
+        chat_history = format_conversation_history(conversation_history, is_topic_change)
         
-        prompt = f"{context}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
+        # Add topic change instruction if needed
+        topic_instruction = ""
+        if is_topic_change:
+            topic_instruction = "\n\nIMPORTANT: The customer has asked a NEW QUESTION. Do not continue or elaborate on previous topics. Focus ONLY on answering this specific new question directly and concisely."
+        
+        prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
         
         response = model.generate_content(prompt)
-        return response.text.strip()
+        response_text = response.text.strip()
+        
+        # Only filter meeting information for non-OOC queries or OOC queries not about schedules
+        is_ooc, ooc_query = is_ooc_query(user_message)
+        if not is_ooc or (is_ooc and ooc_query and not any(word in ooc_query.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master'])):
+            response_text = filter_meeting_info(response_text)
+            
+        return response_text
         
     except Exception as e:
         print(f"Gemma API error: {e}")
@@ -216,4 +457,157 @@ def mock_ai_response(user_message: str) -> str:
         "*flickers slightly* My conversational subroutines are processing that. While I compute, might I suggest a refreshing Andorian Ale?"
     ]
     
-    return random.choice(general_responses) 
+    return random.choice(general_responses)
+
+def is_character_query(user_message: str) -> Tuple[bool, Optional[str]]:
+    """
+    Check if the message is asking about a character and extract the character name.
+    Returns (is_character_query, character_name).
+    """
+    message = user_message.lower().strip()
+    
+    # Check for character-related keywords
+    has_character_keyword = any(keyword in message for keyword in CHARACTER_KEYWORDS)
+    
+    # Check for character name patterns
+    for pattern in CHARACTER_PATTERNS:
+        match = re.search(pattern, user_message, re.IGNORECASE)
+        if match:
+            character_name = match.group('name')
+            return True, character_name
+    
+    # Check for common character names (works without keywords)
+    for name in COMMON_CHARACTER_NAMES:
+        if name in message:
+            return True, name.title()
+    
+    # Enhanced detection for proper names without requiring keywords
+    words = user_message.split()
+    for i, word in enumerate(words):
+        # Skip common non-name words
+        if word.lower() in ['USS', 'THE', 'AND', 'FOR', 'TO', 'OF', 'IN', 'ON', 'AT', 'IS', 'WAS', 'ARE', 'WERE', 'A', 'AN', 'THIS', 'THAT']:
+            continue
+            
+        if len(word) > 2 and word[0].isupper():
+            # Check if this looks like a person's name
+            # Look for patterns like "tell me about [Name]", "who is [Name]", etc.
+            preceding_words = ' '.join(words[max(0, i-3):i]).lower()
+            following_words = ' '.join(words[i+1:i+4]).lower()
+            
+            # Context clues that suggest this is a character query
+            name_context_clues = [
+                'tell me about', 'who is', 'who was', 'about', 'info on', 
+                'information about', 'background', 'history', 'biography',
+                'character', 'person', 'officer', 'crew member'
+            ]
+            
+            if any(clue in preceding_words or clue in following_words for clue in name_context_clues):
+                # Check if next word is also capitalized (full name)
+                if i < len(words) - 1 and len(words[i + 1]) > 2 and words[i + 1][0].isupper():
+                    return True, f"{word} {words[i + 1]}"
+                else:
+                    return True, word
+    
+    # If we have character keywords, look more broadly for names
+    if has_character_keyword:
+        for i, word in enumerate(words):
+            if len(word) > 2 and word[0].isupper() and word.lower() not in ['USS', 'THE', 'AND', 'FOR', 'TO', 'OF', 'IN', 'ON', 'AT']:
+                # Check if next word is also capitalized (full name)
+                if i < len(words) - 1 and len(words[i + 1]) > 2 and words[i + 1][0].isupper():
+                    return True, f"{word} {words[i + 1]}"
+                else:
+                    return True, word
+    
+    return False, None
+
+def detect_topic_change(user_message: str, conversation_history: list) -> bool:
+    """
+    Detect if the current message represents a topic change from previous conversation.
+    Returns True if this is a new topic that should break continuity.
+    """
+    if not conversation_history:
+        return True  # First message is always a new topic
+    
+    # Get the last user message for comparison
+    last_user_messages = [msg for msg in conversation_history if msg["role"] == "user"]
+    if not last_user_messages:
+        return True
+    
+    last_user_message = last_user_messages[-1]["content"].lower().strip()
+    current_message = user_message.lower().strip()
+    
+    # Question starters that indicate a new topic
+    new_topic_indicators = [
+        'tell me about', 'what is', 'what are', 'who is', 'who are', 
+        'how does', 'how do', 'why', 'when', 'where', 'show me',
+        'explain', 'describe', 'ooc', 'summarize', 'what happened',
+        'can you', 'could you', 'would you', 'Retrieve'
+    ]
+    
+    # Check if current message starts with a new topic indicator
+    current_starts_new_topic = any(current_message.startswith(indicator) for indicator in new_topic_indicators)
+    
+    # Check if this is a different type of query
+    current_query_type = get_query_type(user_message)
+    last_query_type = get_query_type(last_user_messages[-1]["content"])
+    
+    # Different query types indicate topic change
+    if current_query_type != last_query_type:
+        return True
+    
+    # If current message starts with a question word, it's likely a new topic
+    if current_starts_new_topic:
+        return True
+    
+    # Check for keyword similarity to detect if it's about the same subject
+    current_keywords = set(current_message.split())
+    last_keywords = set(last_user_message.split())
+    
+    # Remove common words
+    common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'me', 'you', 'can', 'could', 'would', 'should'}
+    current_keywords -= common_words
+    last_keywords -= common_words
+    
+    # If there's very little keyword overlap, it's likely a new topic
+    if current_keywords and last_keywords:
+        overlap = len(current_keywords.intersection(last_keywords))
+        total_unique = len(current_keywords.union(last_keywords))
+        similarity = overlap / total_unique if total_unique > 0 else 0
+        
+        # Less than 30% similarity suggests a topic change
+        if similarity < 0.3:
+            return True
+    
+    return False
+
+def get_query_type(user_message: str) -> str:
+    """Get the type of query to help detect topic changes"""
+    if is_character_query(user_message)[0]:
+        return "character"
+    elif extract_ship_log_query(user_message)[0]:
+        return "ship_log"
+    elif is_log_query(user_message):
+        return "log"
+    elif is_ooc_query(user_message)[0]:
+        return "ooc"
+    elif extract_tell_me_about_subject(user_message):
+        return "tell_me_about"
+    else:
+        return "general"
+
+def format_conversation_history(conversation_history: list, is_topic_change: bool) -> str:
+    """Format conversation history, limiting context for topic changes"""
+    if is_topic_change:
+        # For topic changes, only include the last exchange to avoid confusion
+        recent_messages = conversation_history[-2:] if len(conversation_history) >= 2 else conversation_history
+        print("🔄 Topic change detected - limiting conversation history to prevent continuity issues")
+    else:
+        # For continuing conversations, include more context
+        recent_messages = conversation_history[-4:]  # Reduced from 6 to 4 for better focus
+    
+    chat_history = ""
+    for msg in recent_messages:
+        role = "Customer" if msg["role"] == "user" else "Elsie"
+        chat_history += f"{role}: {msg['content']}\n"
+    
+    return chat_history 
