@@ -27,8 +27,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Ship names for classification
+# Ship names for classification - Updated with actual 22nd Mobile Fleet ships
 SHIP_NAMES = [
+    # 22nd Mobile Daedalus Fleet Ships
+    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel',
+    'caelian', 'montagnier', 'faraday', 'cook', 'mjolnir', 'rendino', 
+    'gigantes', 'banshee',
+    
+    # Classic Star Trek Ships (for reference/comparison)
     'voyager', 'defiant', 'enterprise', 'discovery', 'reliant', 'excelsior',
     'constitution', 'intrepid', 'sovereign', 'galaxy', 'miranda', 'oberth',
     'akira', 'steam runner', 'saber', 'norway', 'prometheus'
@@ -77,43 +83,82 @@ class WikiCrawlerContainer:
         raise Exception("Database connection failed")
     
     def classify_page_type(self, title: str, content: str) -> Tuple[str, Optional[str], Optional[str]]:
-        """Classify page type and extract metadata"""
+        """Classify page type and extract metadata with improved ship name detection"""
         title_lower = title.lower()
         
         # Check if it's a ship log (date pattern)
         date_pattern = r'(\d{4}/\d{1,2}/\d{1,2})|(\d{1,2}/\d{1,2}/\d{4})'
         if re.search(date_pattern, title):
-            # Extract ship name
-            ship_name = None
-            for ship in SHIP_NAMES:
-                if ship in title_lower:
-                    ship_name = ship
-                    break
+            # Enhanced ship name extraction for mission logs
+            ship_name = self.extract_ship_name_from_title(title)
             
             # Extract date
             log_date = self.extract_log_date(title)
+            
+            print(f"   🚢 Classified as mission_log: '{title}' -> ship: '{ship_name}', date: '{log_date}'")
             return "mission_log", ship_name, log_date
         
         # Check if it's a ship info page
         ship_pattern = r'uss\s+(\w+)|(\w+)\s+\(ncc-\d+\)'
         if re.search(ship_pattern, title_lower):
-            ship_name = None
-            for ship in SHIP_NAMES:
-                if ship in title_lower:
-                    ship_name = ship
-                    break
+            ship_name = self.extract_ship_name_from_title(title)
+            print(f"   🚢 Classified as ship_info: '{title}' -> ship: '{ship_name}'")
             return "ship_info", ship_name, None
         
         # Check if it's a character/personnel page
         if any(keyword in title_lower for keyword in ['captain', 'commander', 'lieutenant', 'ensign', 'admiral']):
+            print(f"   👤 Classified as personnel: '{title}'")
             return "personnel", None, None
         
         # Check if it's a location/system page
         if any(keyword in title_lower for keyword in ['system', 'planet', 'station', 'starbase']):
+            print(f"   🌍 Classified as location: '{title}'")
             return "location", None, None
         
         # Default to general article
+        print(f"   📄 Classified as general: '{title}'")
         return "general", None, None
+    
+    def extract_ship_name_from_title(self, title: str) -> Optional[str]:
+        """Enhanced ship name extraction with multiple patterns"""
+        title_lower = title.lower()
+        
+        # Pattern 1: Direct ship name match in known ships list
+        for ship in SHIP_NAMES:
+            if ship in title_lower:
+                print(f"      ✓ Found ship '{ship}' in title")
+                return ship
+        
+        # Pattern 2: Extract from "USS [ShipName]" format
+        uss_pattern = r'uss\s+(\w+)'
+        uss_match = re.search(uss_pattern, title_lower)
+        if uss_match:
+            ship_candidate = uss_match.group(1)
+            # Check if it's a known ship
+            if ship_candidate in SHIP_NAMES:
+                print(f"      ✓ Found USS ship '{ship_candidate}' in title")
+                return ship_candidate
+        
+        # Pattern 3: Extract from ship name at start of title (e.g., "Stardancer 4/23/2022")
+        ship_start_pattern = r'^(\w+)\s+\d'
+        ship_start_match = re.search(ship_start_pattern, title_lower)
+        if ship_start_match:
+            ship_candidate = ship_start_match.group(1)
+            if ship_candidate in SHIP_NAMES:
+                print(f"      ✓ Found ship '{ship_candidate}' at start of title")
+                return ship_candidate
+        
+        # Pattern 4: Extract from "Date Ship Log" format (e.g., "2024/09/29 Adagio Log")
+        date_ship_pattern = r'\d+[/-]\d+[/-]\d+\s+(\w+)'
+        date_ship_match = re.search(date_ship_pattern, title_lower)
+        if date_ship_match:
+            ship_candidate = date_ship_match.group(1)
+            if ship_candidate in SHIP_NAMES:
+                print(f"      ✓ Found ship '{ship_candidate}' after date")
+                return ship_candidate
+        
+        print(f"      ⚠️  No ship name found in title: '{title}'")
+        return None
     
     def extract_log_date(self, title: str) -> Optional[str]:
         """Extract and normalize log date from title"""
@@ -274,12 +319,12 @@ class WikiCrawlerContainer:
                             # Update existing page
                             cur.execute("""
                                 UPDATE wiki_pages 
-                                SET raw_content = %s, url = %s, crawl_date = %s,
+                                SET content = %s, raw_content = %s, url = %s, crawl_date = %s,
                                     page_type = %s, ship_name = %s, log_date = %s, updated_at = NOW()
                                 WHERE title = %s
                             """, (
                                 part_content,
-                                page_data.get('raw_content', part_content),
+                                part_content,
                                 page_data['url'],
                                 page_data['crawled_at'],
                                 page_type,
@@ -292,12 +337,12 @@ class WikiCrawlerContainer:
                             # Insert new page
                             cur.execute("""
                                 INSERT INTO wiki_pages 
-                                (title, raw_content, url, crawl_date, page_type, ship_name, log_date)
+                                (title, content, raw_content, url, crawl_date, page_type, ship_name, log_date)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             """, (
                                 title,
                                 part_content,
-                                page_data.get('raw_content', part_content),
+                                part_content,
                                 page_data['url'],
                                 page_data['crawled_at'],
                                 page_type,
@@ -595,7 +640,7 @@ class WikiCrawlerContainer:
                 # First, do a quick content check
                 page_data = self.extract_page_content(page_title)
                 if page_data:
-                    content_hash = self.calculate_content_hash(page_data['content'])
+                    content_hash = self.calculate_content_hash(page_data['raw_content'])
                     if not self.should_update_page(page_title, content_hash):
                         logger.info(f"  ⏭️  Skipping - no changes detected")
                         skipped_pages += 1
@@ -605,7 +650,7 @@ class WikiCrawlerContainer:
             
             if page_data:
                 # Calculate content hash
-                content_hash = self.calculate_content_hash(page_data['content'])
+                content_hash = self.calculate_content_hash(page_data['raw_content'])
                 
                 # Save to database
                 if self.save_page_to_database(page_data):
@@ -716,7 +761,7 @@ def main():
             print(f"Crawling specific page: {specific_page}")
             page_data = crawler.extract_page_content(specific_page)
             if page_data:
-                content_hash = crawler.calculate_content_hash(page_data['content'])
+                content_hash = crawler.calculate_content_hash(page_data['raw_content'])
                 if crawler.save_page_to_database(page_data):
                     crawler.upsert_page_metadata(
                         page_data['title'],

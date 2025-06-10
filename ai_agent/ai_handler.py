@@ -12,6 +12,7 @@ from config import (
     validate_total_prompt_size, estimate_token_count, truncate_to_token_limit
 )
 from content_retrieval_db import (
+    get_log_content,
     get_relevant_wiki_context, 
     get_ship_information, 
     get_recent_logs, 

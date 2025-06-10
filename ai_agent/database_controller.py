@@ -262,7 +262,7 @@ class FleetDatabaseController:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     query = """
-                        SELECT id, title, raw_content, ship_name, log_date, url
+                        SELECT id, title, raw_content, ship_name, log_date, url, page_type
                         FROM wiki_pages 
                         WHERE page_type = 'mission_log'
                     """
