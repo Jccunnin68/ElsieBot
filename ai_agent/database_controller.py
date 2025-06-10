@@ -41,16 +41,43 @@ class FleetDatabaseController:
     
     def search_pages(self, query: str, page_type: Optional[str] = None, 
                     ship_name: Optional[str] = None, limit: int = 10) -> List[Dict]:
-        """Search pages using hierarchical search: titles first, then content"""
+        """Enhanced search with better ship name handling and fallbacks"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     
-                    # STEP 1: Search for title matches first (highest priority)
-                    print(f"🔍 HIERARCHICAL SEARCH - Step 1: Title search for '{query}'")
+                    print(f"🔍 ENHANCED SEARCH - Query: '{query}'")
                     
+                    all_results = []
+                    
+                    # STEP 1: Direct ship name matches (highest priority)
+                    if not ship_name and any(ship in query.lower() for ship in ['stardancer', 'adagio', 'pilgrim', 'sentinel', 'banshee', 'protector', 'manta', 'gigantes']):
+                        print(f"   🚢 Ship name detected in query, searching ship-specific logs...")
+                        
+                        # Extract ship name from query
+                        detected_ship = None
+                        for ship in ['stardancer', 'adagio', 'pilgrim', 'sentinel', 'banshee', 'protector', 'manta', 'gigantes']:
+                            if ship in query.lower():
+                                detected_ship = ship
+                                break
+                        
+                        if detected_ship:
+                            ship_query = """
+                                SELECT id, title, content, raw_content, page_type, ship_name, log_date
+                                FROM wiki_pages 
+                                WHERE ship_name = %s
+                                ORDER BY log_date DESC
+                                LIMIT %s
+                            """
+                            cur.execute(ship_query, [detected_ship, limit])
+                            ship_results = [dict(row) for row in cur.fetchall()]
+                            print(f"   📊 Ship-specific search found {len(ship_results)} results")
+                            all_results.extend(ship_results)
+                    
+                    # STEP 2: Title-based full-text search
+                    print(f"   🔍 Title FTS search...")
                     title_query = """
-                        SELECT id, title, content, page_type, ship_name, log_date,
+                        SELECT id, title, content, raw_content, page_type, ship_name, log_date,
                                ts_rank(to_tsvector('english', title), 
                                       plainto_tsquery('english', %s)) as rank
                         FROM wiki_pages 
@@ -67,76 +94,104 @@ class FleetDatabaseController:
                         title_query += " AND ship_name = %s"
                         title_params.append(ship_name)
                     
+                    # Exclude already found ship results
+                    if all_results:
+                        existing_ids = [str(r['id']) for r in all_results]
+                        title_query += f" AND id NOT IN ({','.join(['%s'] * len(existing_ids))})"
+                        title_params.extend(existing_ids)
+                    
                     title_query += " ORDER BY rank DESC, log_date DESC LIMIT %s"
-                    title_params.append(limit)
+                    title_params.append(limit - len(all_results))
                     
                     cur.execute(title_query, title_params)
                     title_results = [dict(row) for row in cur.fetchall()]
+                    print(f"   📊 Title FTS found {len(title_results)} results")
+                    all_results.extend(title_results)
                     
-                    print(f"   📊 Title search found {len(title_results)} results")
+                    # STEP 3: Content-based search if still need more results
+                    if len(all_results) < limit:
+                        print(f"   🔍 Content FTS search...")
+                        content_query = """
+                            SELECT id, title, content, raw_content, page_type, ship_name, log_date,
+                                   ts_rank(to_tsvector('english', raw_content), 
+                                          plainto_tsquery('english', %s)) as rank
+                            FROM wiki_pages 
+                            WHERE to_tsvector('english', raw_content) @@ plainto_tsquery('english', %s)
+                        """
+                        
+                        content_params = [query, query]
+                        
+                        if page_type:
+                            content_query += " AND page_type = %s"
+                            content_params.append(page_type)
+                        
+                        if ship_name:
+                            content_query += " AND ship_name = %s"
+                            content_params.append(ship_name)
+                        
+                        # Exclude already found results
+                        if all_results:
+                            existing_ids = [str(r['id']) for r in all_results]
+                            content_query += f" AND id NOT IN ({','.join(['%s'] * len(existing_ids))})"
+                            content_params.extend(existing_ids)
+                        
+                        remaining_limit = limit - len(all_results)
+                        content_query += " ORDER BY rank DESC, log_date DESC LIMIT %s"
+                        content_params.append(remaining_limit)
+                        
+                        cur.execute(content_query, content_params)
+                        content_results = [dict(row) for row in cur.fetchall()]
+                        print(f"   📊 Content FTS found {len(content_results)} results")
+                        all_results.extend(content_results)
                     
-                    # Debug: Show first 50 chars of each title result
-                    for i, result in enumerate(title_results[:3]):  # Show max 3 for brevity
+                    # STEP 4: Fallback to LIKE search if FTS fails
+                    if not all_results:
+                        print(f"   🔄 Fallback LIKE search...")
+                        like_query = """
+                            SELECT id, title, content, raw_content, page_type, ship_name, log_date
+                            FROM wiki_pages 
+                            WHERE (LOWER(title) LIKE LOWER(%s) OR LOWER(raw_content) LIKE LOWER(%s))
+                        """
+                        
+                        like_params = [f'%{query}%', f'%{query}%']
+                        
+                        if page_type:
+                            like_query += " AND page_type = %s"
+                            like_params.append(page_type)
+                        
+                        if ship_name:
+                            like_query += " AND ship_name = %s"
+                            like_params.append(ship_name)
+                        
+                        like_query += " ORDER BY log_date DESC LIMIT %s"
+                        like_params.append(limit)
+                        
+                        cur.execute(like_query, like_params)
+                        like_results = [dict(row) for row in cur.fetchall()]
+                        print(f"   📊 LIKE search found {len(like_results)} results")
+                        all_results.extend(like_results)
+                    
+                    # Remove duplicates and limit results
+                    seen_ids = set()
+                    unique_results = []
+                    for result in all_results:
+                        if result['id'] not in seen_ids:
+                            unique_results.append(result)
+                            seen_ids.add(result['id'])
+                            if len(unique_results) >= limit:
+                                break
+                    
+                    print(f"✅ ENHANCED SEARCH COMPLETE: {len(unique_results)} unique results")
+                    
+                    # Debug: Show results
+                    for i, result in enumerate(unique_results[:3]):
                         title_preview = result['title'][:50] + "..." if len(result['title']) > 50 else result['title']
-                        content_preview = result['raw_content'][:50] + "..." if len(result['raw_content']) > 50 else result['raw_content']
-                        print(f"      📄 Result {i+1}: Title='{title_preview}' Content='{content_preview}'")
+                        print(f"      📄 Result {i+1}: '{title_preview}' ({result['ship_name']})")
                     
-                    # If we have good title matches, return them
-                    if len(title_results) >= 3:
-                        print(f"✅ HIERARCHICAL SEARCH - Using title results ({len(title_results)} found)")
-                        return title_results
-                    
-                    # STEP 2: Fall back to content search if title search insufficient
-                    print(f"🔍 HIERARCHICAL SEARCH - Step 2: Content search (insufficient title results)")
-                    
-                    content_query = """
-                        SELECT id, title, raw_content, page_type, ship_name, log_date,
-                               ts_rank(to_tsvector('english', raw_content), 
-                                      plainto_tsquery('english', %s)) as rank
-                        FROM wiki_pages 
-                        WHERE to_tsvector('english', raw_content) @@ plainto_tsquery('english', %s)
-                    """
-                    
-                    content_params = [query, query]
-                    
-                    if page_type:
-                        content_query += " AND page_type = %s"
-                        content_params.append(page_type)
-                    
-                    if ship_name:
-                        content_query += " AND ship_name = %s"
-                        content_params.append(ship_name)
-                    
-                    # Exclude already found title results
-                    if title_results:
-                        title_ids = [str(r['id']) for r in title_results]
-                        content_query += f" AND id NOT IN ({','.join(['%s'] * len(title_ids))})"
-                        content_params.extend(title_ids)
-                    
-                    remaining_limit = limit - len(title_results)
-                    content_query += " ORDER BY rank DESC, log_date DESC LIMIT %s"
-                    content_params.append(remaining_limit)
-                    
-                    cur.execute(content_query, content_params)
-                    content_results = [dict(row) for row in cur.fetchall()]
-                    
-                    print(f"   📊 Content search found {len(content_results)} results")
-                    
-                    # Debug: Show first 50 chars of each content result
-                    for i, result in enumerate(content_results[:3]):  # Show max 3 for brevity
-                        title_preview = result['title'][:50] + "..." if len(result['title']) > 50 else result['title']
-                        content_preview = result['raw_content'][:50] + "..." if len(result['raw_content']) > 50 else result['raw_content']
-                        print(f"      📄 Result {i+1}: Title='{title_preview}' Content='{content_preview}'")
-                    
-                    # Combine results: title matches first, then content matches
-                    combined_results = title_results + content_results
-                    
-                    print(f"✅ HIERARCHICAL SEARCH - Combined results: {len(title_results)} title + {len(content_results)} content = {len(combined_results)} total")
-                    
-                    return combined_results
+                    return unique_results
                     
         except Exception as e:
-            print(f"✗ Error in hierarchical search: {e}")
+            print(f"✗ Error in enhanced search: {e}")
             return []
     
     def get_log_content(self, query: str, max_chars: int = 8000) -> str:
@@ -207,7 +262,7 @@ class FleetDatabaseController:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     query = """
-                        SELECT id, title, raw_content, ship_name, log_date
+                        SELECT id, title, raw_content, ship_name, log_date, url
                         FROM wiki_pages 
                         WHERE page_type = 'mission_log'
                     """

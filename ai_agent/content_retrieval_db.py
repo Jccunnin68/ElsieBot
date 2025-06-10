@@ -1,9 +1,11 @@
 """Database-driven content retrieval and wiki search functionality"""
 
 from database_controller import get_db_controller
-from config import MAX_CHARS_LOG, MAX_CHARS_CONTEXT
+from config import MAX_CHARS_LOG, MAX_CHARS_CONTEXT, MAX_CHARS_TELL_ME_ABOUT, MAX_CHARS_SHIP_INFO, truncate_to_token_limit
 from log_processor import is_log_query, parse_log_characters, is_ship_log_title
 from typing import Optional
+import psycopg2
+import psycopg2.extras
 
 def check_elsiebrain_connection() -> bool:
     """Check if the elsiebrain database is accessible and populated"""
@@ -195,14 +197,14 @@ def get_ship_information(ship_name: str) -> str:
         
         ship_info = []
         total_chars = 0
-        max_chars = MAX_CHARS_CONTEXT
-        
+        max_chars = MAX_CHARS_SHIP_INFO
+
         for result in results:
             title = result['title']
             content = result['raw_content']
-            
+
             page_text = f"**{title}**\n{content[:800]}"  # Limit individual entries
-            
+
             if total_chars + len(page_text) <= max_chars:
                 ship_info.append(page_text)
                 total_chars += len(page_text)
@@ -211,8 +213,9 @@ def get_ship_information(ship_name: str) -> str:
                 if remaining_chars > 100:
                     ship_info.append(page_text[:remaining_chars] + "...")
                 break
-        
-        return '\n\n---\n\n'.join(ship_info)
+
+        final_content = '\n\n---\n\n'.join(ship_info)
+        return truncate_to_token_limit(final_content, MAX_CHARS_SHIP_INFO // 4)
         
     except Exception as e:
         print(f"✗ Error getting ship information: {e}")
@@ -228,14 +231,27 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 5) -> str:
             return ""
         
         log_summaries = []
+        total_chars = 0
+        max_chars = MAX_CHARS_LOG
+
         for result in results:
             title = result['title']
-            content = result['content'][:300]  # Brief summary
+            content = result['raw_content'][:5000]  # Limit individual log content
             log_date = result['log_date']
+
+            log_entry = f"**{title}** ({log_date})\n{content}"
             
-            log_summaries.append(f"**{title}** ({log_date})\n{content}...")
-        
-        return '\n\n---\n\n'.join(log_summaries)
+            if total_chars + len(log_entry) <= max_chars:
+                log_summaries.append(log_entry)
+                total_chars += len(log_entry)
+            else:
+                remaining_chars = max_chars - total_chars
+                if remaining_chars > 200:
+                    log_summaries.append(log_entry[:remaining_chars] + "...[LOG TRUNCATED]")
+                break
+
+        final_content = '\n\n---\n\n'.join(log_summaries)
+        return truncate_to_token_limit(final_content, MAX_CHARS_LOG // 4)
         
     except Exception as e:
         print(f"✗ Error getting recent logs: {e}")
@@ -253,13 +269,13 @@ def search_by_type(query: str, content_type: str) -> str:
         search_results = []
         total_chars = 0
         max_chars = MAX_CHARS_CONTEXT
-        
+
         for result in results:
             title = result['title']
             content = result['raw_content']
-            
-            page_text = f"**{title}**\n{content[:600]}"
-            
+
+            page_text = f"**{title}**\n{content[:60000]}"
+
             if total_chars + len(page_text) <= max_chars:
                 search_results.append(page_text)
                 total_chars += len(page_text)
@@ -268,8 +284,9 @@ def search_by_type(query: str, content_type: str) -> str:
                 if remaining_chars > 100:
                     search_results.append(page_text[:remaining_chars] + "...")
                 break
-        
-        return '\n\n---\n\n'.join(search_results)
+
+        final_content = '\n\n---\n\n'.join(search_results)
+        return truncate_to_token_limit(final_content, MAX_CHARS_CONTEXT // 4)
         
     except Exception as e:
         print(f"✗ Error searching by type: {e}")
@@ -303,8 +320,8 @@ def get_tell_me_about_content(subject: str) -> str:
         # Format the results
         content_parts = []
         total_chars = 0
-        max_chars = 5000  # Higher limit for "tell me about" queries
-        
+        max_chars = MAX_CHARS_TELL_ME_ABOUT
+
         for result in results[:5]:  # Top 5 results
             title = result['title']
             content = result['raw_content']
@@ -332,12 +349,101 @@ def get_tell_me_about_content(subject: str) -> str:
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ HIERARCHICAL 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
-        return final_content
+        return truncate_to_token_limit(final_content, MAX_CHARS_TELL_ME_ABOUT // 4)
         
     except Exception as e:
         print(f"✗ Error getting 'tell me about' content: {e}")
         return ""
 
+def get_tell_me_about_content_prioritized(subject: str) -> str:
+    """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs"""
+    try:
+        controller = get_db_controller()
+        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}'")
+        
+        # Step 1: Search for ship info specifically first
+        ship_info_results = []
+        if any(indicator in subject.lower() for indicator in ['uss', 'ship', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise']):
+            print(f"   🚢 PRIORITY: Searching ship info pages first...")
+            ship_info_results = controller.search_pages(subject, page_type='ship_info', limit=5)
+            print(f"   📊 Ship info search found {len(ship_info_results)} results")
+        
+        # Step 2: Search for personnel records
+        personnel_results = []
+        if any(indicator in subject.lower() for indicator in ['captain', 'commander', 'lieutenant', 'ensign', 'admiral', 'officer']):
+            print(f"   👥 PRIORITY: Searching personnel records...")
+            personnel_results = controller.search_pages(subject, page_type='personnel', limit=3)
+            print(f"   📊 Personnel search found {len(personnel_results)} results")
+        
+        # Step 3: If we have ship info or personnel, use those first
+        priority_results = ship_info_results + personnel_results
+        
+        # Step 4: Only search general content if no specific ship/personnel info found
+        general_results = []
+        if not priority_results:
+            print(f"   📝 No ship/personnel info found, searching general content...")
+            general_results = controller.search_pages(subject, limit=5)
+            print(f"   📊 General search found {len(general_results)} results")
+        
+        # Combine results, prioritizing ship info and personnel
+        all_results = priority_results + general_results
+        
+        # Remove duplicates
+        seen_ids = set()
+        unique_results = []
+        for result in all_results:
+            if result['id'] not in seen_ids:
+                unique_results.append(result)
+                seen_ids.add(result['id'])
+        
+        if not unique_results:
+            print(f"✗ No content found for prioritized 'tell me about' query: '{subject}'")
+            return ""
+        
+        # Format the results, excluding mission logs unless specifically requested
+        content_parts = []
+        total_chars = 0
+        max_chars = MAX_CHARS_TELL_ME_ABOUT
+
+        for result in unique_results[:5]:  # Top 5 results
+            title = result['title']
+            content = result['raw_content']
+            page_type = result.get('page_type', 'general')
+            
+            # Skip mission logs unless no other content was found
+            if page_type == 'mission_log' and priority_results:
+                print(f"   ⏭️  Skipping mission log '{title}' (ship/personnel info available)")
+                continue
+            
+            # Add type indicator for clarity
+            type_indicator = ""
+            if page_type == 'mission_log':
+                type_indicator = " [Mission Log]"
+            elif page_type == 'ship_info':
+                type_indicator = " [Ship Information]"
+            elif page_type == 'personnel':
+                type_indicator = " [Personnel File]"
+            
+            page_text = f"**{title}{type_indicator}**\n{content}"
+            
+            if total_chars + len(page_text) <= max_chars:
+                content_parts.append(page_text)
+                total_chars += len(page_text)
+                print(f"   ✓ Added {page_type}: '{title}'")
+            else:
+                remaining_chars = max_chars - total_chars
+                if remaining_chars > 200:
+                    content_parts.append(page_text[:remaining_chars] + "...[CONTENT TRUNCATED]")
+                    print(f"   ✓ Added truncated {page_type}: '{title}'")
+                break
+        
+        final_content = '\n\n---\n\n'.join(content_parts)
+        print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
+        return truncate_to_token_limit(final_content, MAX_CHARS_TELL_ME_ABOUT // 4)
+        
+    except Exception as e:
+        print(f"✗ Error getting prioritized 'tell me about' content: {e}")
+        return ""
 
 def debug_manual_query(query: str, page_type: str = None) -> str:
     """Manual query function for debugging database searches"""
@@ -357,7 +463,7 @@ def debug_manual_query(query: str, page_type: str = None) -> str:
             print(f"  Title: '{result['title']}'")
             print(f"  Page Type: '{result['page_type']}'")
             print(f"  Ship Name: '{result['ship_name']}'")
-            print(f"  Content (50 chars): '{result['content'][:50]}...'")
+            print(f"  Content (50 chars): '{result['raw_content'][:50]}...'")
             print(f"  Log Date: {result['log_date']}")
         
         print("-" * 40)
@@ -365,7 +471,7 @@ def debug_manual_query(query: str, page_type: str = None) -> str:
         
     except Exception as e:
         print(f"✗ Error in manual query: {e}")
-        return "" 
+        return ""
 
 def run_database_cleanup():
     """Run all database cleanup operations"""
@@ -420,4 +526,115 @@ def cleanup_seed_data_only():
         return controller.cleanup_seed_data()
     except Exception as e:
         print(f"✗ Error cleaning up seed data: {e}")
-        return {} 
+        return {}
+
+def get_log_url(search_query: str) -> str:
+    """Get the URL for a log based on search query (ship name, title, date, etc.)"""
+    try:
+        controller = get_db_controller()
+        print(f"🔗 SEARCHING FOR LOG URL: '{search_query}'")
+        
+        # Try different search strategies in priority order
+        best_result = None
+        best_strategy = None
+        
+        # Strategy 1: Check if it's a "last [ship]" request - search recent mission logs
+        if search_query.lower().startswith('last '):
+            ship_name = search_query[5:].strip().lower()
+            print(f"   📋 Strategy 1: Last mission log for ship '{ship_name}'")
+            results = controller.get_recent_logs(ship_name=ship_name, limit=3)
+            if results:
+                # Find the first result that has a URL and is actually a mission log
+                for result in results:
+                    if result.get('url') and result.get('page_type') == 'mission_log':
+                        best_result = result
+                        best_strategy = f"most recent mission log for {ship_name}"
+                        print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
+                        break
+                print(f"   📊 Found {len(results)} recent logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        
+        # Strategy 2: Direct ship name - search mission logs only  
+        elif any(ship in search_query.lower() for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee']):
+            # Extract ship name
+            ship_name = None
+            for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee']:
+                if ship in search_query.lower():
+                    ship_name = ship
+                    break
+            
+            if ship_name:
+                print(f"   📋 Strategy 2: Recent mission logs for ship '{ship_name}'")
+                results = controller.get_recent_logs(ship_name=ship_name, limit=5)
+                if results:
+                    # Find the first result that has a URL
+                    for result in results:
+                        if result.get('url'):
+                            best_result = result
+                            best_strategy = f"recent mission logs for {ship_name}"
+                            print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
+                            break
+                    print(f"   📊 Found {len(results)} recent logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        
+        # Strategy 3: Search by exact title match in mission logs only
+        if not best_result:
+            print(f"   📋 Strategy 3: Exact title search in mission logs")
+            title_results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            if title_results:
+                # Prioritize exact title matches that have URLs
+                for result in title_results:
+                    title = result.get('title', '')
+                    if result.get('url') and (search_query.lower() in title.lower() or title.lower() in search_query.lower()):
+                        best_result = result
+                        best_strategy = "exact title match in mission logs"
+                        print(f"   ✓ Found exact match with URL: '{title}'")
+                        break
+                
+                # If no exact match with URL, use first result with URL
+                if not best_result:
+                    for result in title_results:
+                        if result.get('url'):
+                            best_result = result
+                            best_strategy = "mission log with URL"
+                            print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
+                            break
+                
+                print(f"   📊 Found {len(title_results)} mission logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        
+        # Strategy 4: General mission log search
+        if not best_result:
+            print(f"   📋 Strategy 4: General mission log search")
+            general_results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            if general_results:
+                # Find first result with URL
+                for result in general_results:
+                    if result.get('url'):
+                        best_result = result
+                        best_strategy = "general mission log search"
+                        print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
+                        break
+                print(f"   📊 Found {len(general_results)} mission logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        
+        if not best_result:
+            print(f"✗ No mission logs with URLs found for query: '{search_query}'")
+            return f"No mission logs with URLs found matching '{search_query}' in the database."
+        
+        # Extract information from the best result
+        title = best_result.get('title', 'Unknown Title')
+        url = best_result.get('url', None)
+        log_date = best_result.get('log_date', 'Unknown date')
+        ship_name = best_result.get('ship_name', 'Unknown ship')
+        
+        print(f"✅ Found log via {best_strategy}: '{title}' - {url}")
+        
+        if url:
+            return f"**Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
+        else:
+            return f"**Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n⚠️  No direct URL available for this log."
+        
+    except Exception as e:
+        print(f"✗ Error searching for log URL: {e}")
+        return f"Error retrieving log URL for '{search_query}': {e}"
+
+def get_recent_log_url(search_query: str) -> str:
+    """Legacy function - redirects to get_log_url for backward compatibility"""
+    return get_log_url(search_query) 

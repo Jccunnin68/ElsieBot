@@ -186,7 +186,7 @@ class WikiCrawlerContainer:
         """Save page data to the database"""
         try:
             # Check content length
-            content = page_data['content']
+            content = page_data['raw_content']
             content_parts = []
             
             # If content is too long (>25000 chars), split it into parts
@@ -274,7 +274,7 @@ class WikiCrawlerContainer:
                             # Update existing page
                             cur.execute("""
                                 UPDATE wiki_pages 
-                                SET content = %s, raw_content = %s, url = %s, crawl_date = %s,
+                                SET raw_content = %s, url = %s, crawl_date = %s,
                                     page_type = %s, ship_name = %s, log_date = %s, updated_at = NOW()
                                 WHERE title = %s
                             """, (
@@ -292,7 +292,7 @@ class WikiCrawlerContainer:
                             # Insert new page
                             cur.execute("""
                                 INSERT INTO wiki_pages 
-                                (title, content, raw_content, url, crawl_date, page_type, ship_name, log_date)
+                                (title, raw_content, url, crawl_date, page_type, ship_name, log_date)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             """, (
                                 title,
@@ -371,13 +371,13 @@ class WikiCrawlerContainer:
                 "USS Defiant", "USS Discovery", "USS Excelsior", "USS Intrepid",
                 "USS Sovereign", "USS Galaxy", "USS Miranda", "USS Oberth",
                 "USS Akira", "USS Steam Runner", "USS Saber", "USS Norway",
-                "USS Prometheus", "22nd Mobile Daedalus Fleet", "The Primacy",
+                "USS Prometheus", "Talia", "The Primacy",
                 "Samwise Blake", "Lilith", "Cetas", "Tatpha", "Beryxian",
-                "Orzaul Gate", "Commander Tiberius Asada", "Commander Sif",
-                "Lieutenant Commander Luka", "Lieutenant Commander Saiv Daly",
-                "Lieutenant Commander Surithrae Alemyn", "Commander Priti Mehta",
-                "Doctor Jiratha", "Lieutenant Commander Aija Bessley",
-                "Ensign Maeve Tolena Blaine"
+                "Orzaul Gate", "Tiberius Asada", "Sif",
+                "Saiv Daly",
+                "Surithrae Alemyn", "Priti Mehta",
+                "Jiratha", "Aija Bessley",
+                "Maeve Tolena Blaine"
             ]
             logger.warning(f"  ⚠️  Using fallback list: {len(page_titles)} pages")
         
@@ -410,7 +410,7 @@ class WikiCrawlerContainer:
                     page_data = {
                         'title': page_title,
                         'url': url,
-                        'content': content,
+                        'raw_content': content,
                         'raw_content': content,
                         'crawled_at': datetime.now()
                     }
@@ -536,7 +536,6 @@ class WikiCrawlerContainer:
                     page_data = {
                         'title': page.title if hasattr(page, 'title') else page_title,
                         'url': page.url if hasattr(page, 'url') else f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'content': full_content,
                         'raw_content': full_content,
                         'crawled_at': datetime.now()
                     }

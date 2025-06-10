@@ -22,7 +22,7 @@ var (
 )
 
 type Message struct {
-	Content string                 `json:"content"`
+	Message string                 `json:"message"`
 	Context map[string]interface{} `json:"context"`
 }
 
@@ -161,7 +161,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 func processWithAI(content string, channelID string) string {
 	// Create message payload
 	message := Message{
-		Content: content,
+		Message: content,
 		Context: map[string]interface{}{
 			"session_id": channelID, // Use channel ID as session ID
 			"platform":   "discord",
@@ -200,7 +200,8 @@ func processWithAI(content string, channelID string) string {
 		return ""
 	}
 
-	if aiResponse.Status == "success" {
+	// Return the response if it exists (AI agent doesn't send status field)
+	if aiResponse.Response != "" {
 		return aiResponse.Response
 	}
 
