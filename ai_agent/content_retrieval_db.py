@@ -529,10 +529,10 @@ def cleanup_seed_data_only():
         return {}
 
 def get_log_url(search_query: str) -> str:
-    """Get the URL for a log based on search query (ship name, title, date, etc.)"""
+    """Get the URL for a page based on search query (ship name, title, date, etc.) - searches all page types"""
     try:
         controller = get_db_controller()
-        print(f"🔗 SEARCHING FOR LOG URL: '{search_query}'")
+        print(f"🔗 SEARCHING FOR PAGE URL: '{search_query}'")
         
         # Try different search strategies in priority order
         best_result = None
@@ -553,17 +553,31 @@ def get_log_url(search_query: str) -> str:
                         break
                 print(f"   📊 Found {len(results)} recent logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
         
-        # Strategy 2: Direct ship name - search mission logs only  
-        elif any(ship in search_query.lower() for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee']):
+        # Strategy 2: Check for ship info pages (USS [ship] format or ship names)
+        if not best_result:
+            print(f"   📋 Strategy 2: Ship info page search")
+            ship_results = controller.search_pages(search_query, page_type='ship_info', limit=10)
+            if ship_results:
+                # Find first ship info page with URL
+                for result in ship_results:
+                    if result.get('url'):
+                        best_result = result
+                        best_strategy = "ship information page"
+                        print(f"   ✓ Found ship info with URL: '{result.get('title')}'")
+                        break
+                print(f"   📊 Found {len(ship_results)} ship info pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        
+        # Strategy 3: Direct ship name - search mission logs  
+        if not best_result and any(ship in search_query.lower() for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee', 'caelian']):
             # Extract ship name
             ship_name = None
-            for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee']:
+            for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee', 'caelian']:
                 if ship in search_query.lower():
                     ship_name = ship
                     break
             
             if ship_name:
-                print(f"   📋 Strategy 2: Recent mission logs for ship '{ship_name}'")
+                print(f"   📋 Strategy 3: Recent mission logs for ship '{ship_name}'")
                 results = controller.get_recent_logs(ship_name=ship_name, limit=5)
                 if results:
                     # Find the first result that has a URL
@@ -575,18 +589,18 @@ def get_log_url(search_query: str) -> str:
                             break
                     print(f"   📊 Found {len(results)} recent logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
         
-        # Strategy 3: Search by exact title match in mission logs only
+        # Strategy 4: Search by exact title match (all page types)
         if not best_result:
-            print(f"   📋 Strategy 3: Exact title search in mission logs")
-            title_results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            print(f"   📋 Strategy 4: Exact title search (all page types)")
+            title_results = controller.search_pages(search_query, limit=10)
             if title_results:
                 # Prioritize exact title matches that have URLs
                 for result in title_results:
                     title = result.get('title', '')
                     if result.get('url') and (search_query.lower() in title.lower() or title.lower() in search_query.lower()):
                         best_result = result
-                        best_strategy = "exact title match in mission logs"
-                        print(f"   ✓ Found exact match with URL: '{title}'")
+                        best_strategy = f"exact title match ({result.get('page_type', 'unknown')})"
+                        print(f"   ✓ Found exact match with URL: '{title}' ({result.get('page_type')})")
                         break
                 
                 # If no exact match with URL, use first result with URL
@@ -594,46 +608,55 @@ def get_log_url(search_query: str) -> str:
                     for result in title_results:
                         if result.get('url'):
                             best_result = result
-                            best_strategy = "mission log with URL"
-                            print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
+                            best_strategy = f"{result.get('page_type', 'page')} with URL"
+                            print(f"   ✓ Found page with URL: '{result.get('title')}' ({result.get('page_type')})")
                             break
                 
-                print(f"   📊 Found {len(title_results)} mission logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+                print(f"   📊 Found {len(title_results)} pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
         
-        # Strategy 4: General mission log search
+        # Strategy 5: General search (all page types)
         if not best_result:
-            print(f"   📋 Strategy 4: General mission log search")
-            general_results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            print(f"   📋 Strategy 5: General search (all page types)")
+            general_results = controller.search_pages(search_query, limit=10)
             if general_results:
                 # Find first result with URL
                 for result in general_results:
                     if result.get('url'):
                         best_result = result
-                        best_strategy = "general mission log search"
-                        print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
+                        best_strategy = f"general search ({result.get('page_type', 'unknown')})"
+                        print(f"   ✓ Found page with URL: '{result.get('title')}' ({result.get('page_type')})")
                         break
-                print(f"   📊 Found {len(general_results)} mission logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+                print(f"   📊 Found {len(general_results)} pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
         
         if not best_result:
-            print(f"✗ No mission logs with URLs found for query: '{search_query}'")
-            return f"No mission logs with URLs found matching '{search_query}' in the database."
+            print(f"✗ No pages with URLs found for query: '{search_query}'")
+            return f"No pages with URLs found matching '{search_query}' in the database."
         
         # Extract information from the best result
         title = best_result.get('title', 'Unknown Title')
         url = best_result.get('url', None)
-        log_date = best_result.get('log_date', 'Unknown date')
-        ship_name = best_result.get('ship_name', 'Unknown ship')
+        page_type = best_result.get('page_type', 'page')
+        log_date = best_result.get('log_date', None)
+        ship_name = best_result.get('ship_name', None)
         
-        print(f"✅ Found log via {best_strategy}: '{title}' - {url}")
+        print(f"✅ Found page via {best_strategy}: '{title}' - {url}")
         
         if url:
-            return f"**Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
+            # Format response based on page type
+            if page_type == 'mission_log':
+                return f"**Mission Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
+            elif page_type == 'ship_info':
+                return f"**Ship Information Found:**\n\n**{title}**\nType: Ship Information Page\n🔗 Direct Link: {url}"
+            elif page_type == 'personnel':
+                return f"**Personnel Record Found:**\n\n**{title}**\nType: Personnel File\n🔗 Direct Link: {url}"
+            else:
+                return f"**Page Found:**\n\n**{title}**\nType: {page_type.title()}\n🔗 Direct Link: {url}"
         else:
-            return f"**Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n⚠️  No direct URL available for this log."
+            return f"**Page Found:**\n\n**{title}**\nType: {page_type.title()}\n⚠️  No direct URL available for this page."
         
     except Exception as e:
-        print(f"✗ Error searching for log URL: {e}")
-        return f"Error retrieving log URL for '{search_query}': {e}"
+        print(f"✗ Error searching for page URL: {e}")
+        return f"Error retrieving URL for '{search_query}': {e}"
 
 def get_recent_log_url(search_query: str) -> str:
     """Legacy function - redirects to get_log_url for backward compatibility"""

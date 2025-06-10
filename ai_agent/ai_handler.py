@@ -15,9 +15,7 @@ from content_retrieval_db import (
     get_log_content,
     get_relevant_wiki_context, 
     get_ship_information, 
-    get_recent_logs, 
     search_by_type, 
-    get_tell_me_about_content,
     get_tell_me_about_content_prioritized,
     get_log_url
 )
@@ -108,15 +106,31 @@ def extract_ooc_log_url_request(user_message: str) -> Tuple[bool, Optional[str]]
         # "link to [anything] log"
         r'link\s+to\s+(.+)\s+log',
         # "URL for [anything]"
-        r'url\s+for\s+(.+)'
+        r'url\s+for\s+(.+)',
+        # "link me the [anything] page" - flexible page pattern
+        r'link\s+me\s+the\s+(.+?)\s+page',
+        # "link me [anything]" - most flexible
+        r'link\s+me\s+(.+)',
+        # "get me [anything]" - flexible get pattern
+        r'get\s+me\s+(.+)',
+        # "[anything] link" or "[anything] url"
+        r'(.+?)\s+(?:link|url)',
+        # "show me [anything]"
+        r'show\s+me\s+(.+)'
     ]
     
     for pattern in log_url_patterns:
         url_match = re.search(pattern, query, re.IGNORECASE)
         if url_match:
             search_query = url_match.group(1).strip()
-            print(f"   🔗 OOC URL pattern matched: '{pattern}' -> '{search_query}'")
-            return True, search_query
+            # Remove common words that don't help with search
+            search_query = re.sub(r'\b(the|page|for|USS|of|a|an)\b', '', search_query, flags=re.IGNORECASE).strip()
+            # Clean up extra spaces
+            search_query = re.sub(r'\s+', ' ', search_query).strip()
+            
+            if search_query:  # Only return if we have a valid search query
+                print(f"   🔗 OOC URL pattern matched: '{pattern}' -> '{search_query}'")
+                return True, search_query
     
     return False, None
 

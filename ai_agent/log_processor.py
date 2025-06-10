@@ -90,9 +90,6 @@ def is_ship_log_title(title: str) -> bool:
     
     return False
 
-def is_ship_log_page(page_title: str) -> bool:
-    """Legacy function - now uses enhanced is_ship_log_title"""
-    return is_ship_log_title(page_title)
 
 def correct_character_name(name: str) -> str:
     """Apply character corrections and rank/title fixes"""

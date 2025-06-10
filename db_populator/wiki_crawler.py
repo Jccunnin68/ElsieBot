@@ -455,7 +455,7 @@ class WikiCrawlerContainer:
                     page_data = {
                         'title': page_title,
                         'url': url,
-                        'raw_content': content,
+                        'content': content,
                         'raw_content': content,
                         'crawled_at': datetime.now()
                     }
