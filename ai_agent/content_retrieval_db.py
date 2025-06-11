@@ -10,10 +10,15 @@ import requests
 import json
 from urllib.parse import quote
 
-def search_memory_alpha(query: str, limit: int = 3) -> str:
+def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool = False) -> str:
     """
     Search Memory Alpha (Star Trek wiki) using MediaWiki API as fallback when local database has no results.
     Returns formatted content from Memory Alpha articles.
+    
+    Args:
+        query: Search query
+        limit: Number of results to return
+        is_federation_archives: If True, adds [Federation Archives] tags for explicit federation archives requests
     """
     try:
         print(f"🌟 MEMORY ALPHA SEARCH: '{query}' (fallback search)")
@@ -85,9 +90,12 @@ def search_memory_alpha(query: str, limit: int = 3) -> str:
                 if len(extract) > 1000:
                     extract = extract[:1000] + "..."
                 
-                # Format for Elsie's response
+                # Format for Elsie's response - only add [Federation Archives] tag if explicitly requested
                 page_url = f"https://memory-alpha.fandom.com/wiki/{quote(title.replace(' ', '_'))}"
-                formatted_content = f"**{title}** [Federation Archives]\n{extract}"
+                if is_federation_archives:
+                    formatted_content = f"**{title}** [Federation Archives]\n{extract}"
+                else:
+                    formatted_content = f"**{title}**\n{extract}"
                 memory_alpha_content.append(formatted_content)
                 print(f"   ✓ Retrieved Memory Alpha article: '{title}' ({len(extract)} chars)")
         
@@ -95,7 +103,11 @@ def search_memory_alpha(query: str, limit: int = 3) -> str:
             print(f"   ❌ No usable Memory Alpha content found")
             return ""
         
-        final_content = '\n\n---FEDERATION ARCHIVES---\n\n'.join(memory_alpha_content)
+        # Only use Federation Archives separator when explicitly requested
+        if is_federation_archives:
+            final_content = '\n\n---FEDERATION ARCHIVES---\n\n'.join(memory_alpha_content)
+        else:
+            final_content = '\n\n---\n\n'.join(memory_alpha_content)
         print(f"✅ MEMORY ALPHA SEARCH COMPLETE: {len(final_content)} characters from {len(memory_alpha_content)} articles")
         return final_content
         
