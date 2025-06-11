@@ -55,7 +55,10 @@ func main() {
 	dg.AddHandler(messageCreate)
 	dg.AddHandler(ready)
 
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+	// Add direct message intent
+	dg.Identify.Intents = discordgo.IntentsGuildMessages |
+		discordgo.IntentsMessageContent |
+		discordgo.IntentsDirectMessages
 
 	err = dg.Open()
 	if err != nil {
@@ -85,6 +88,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
+	// Check if message is a DM
+	isDM := m.GuildID == ""
+
 	// Check if message mentions the bot or starts with !elsie
 	mentioned := false
 	for _, user := range m.Mentions {
@@ -113,8 +119,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		mentioned = true
 	}
 
-	// Only respond if mentioned or command used
-	if !mentioned {
+	// Only respond if mentioned, command used, or in DM
+	if !mentioned && !isDM {
 		return
 	}
 
@@ -132,6 +138,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 • ` + "`!elsie menu`" + ` - View the galactic drink menu
 • ` + "`!elsie help`" + ` - Show this help message
 • ` + "`!elsie ping`" + ` - Test if I'm online
+
+**Direct Messages:**
+You can also chat with me privately by sending me a direct message! I'll respond to any message you send.
 
 **Example Drinks to Order:**
 • "Romulan Ale" - Blue and mysterious

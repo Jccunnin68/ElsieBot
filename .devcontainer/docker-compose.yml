@@ -7,11 +7,11 @@ services:
     env_file:
       - ../.env
     environment:
-      - DB_HOST=elsiebrain_db
+      - DB_HOST=host.docker.internal
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_PORT=${DB_PORT}
+      - DB_PORT=5433
     networks:
       - elsie_dev_network
     restart: "no"  # Run once and exit
@@ -38,11 +38,11 @@ services:
     environment:
       - PORT=8000
       - GEMMA_API_KEY=${GEMMA_API_KEY}
-      - DB_HOST=elsiebrain_db
+      - DB_HOST=host.docker.internal
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_PORT=${DB_PORT}
+      - DB_PORT=5433
     networks:
       - elsie_dev_network
     volumes:
