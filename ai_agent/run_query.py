@@ -35,6 +35,8 @@ def print_examples():
     print("   SELECT page_type, COUNT(*) as count FROM wiki_pages GROUP BY page_type ORDER BY count DESC;")
     print("\n6. Find specific character mentions:")
     print("   SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;")
+    print("\n7. Content access statistics:")
+    print("   SELECT title, page_type, content_accessed FROM wiki_pages WHERE content_accessed > 0 ORDER BY content_accessed DESC LIMIT 10;")
 
 def print_tables():
     """Show available tables and their structure"""
@@ -161,7 +163,8 @@ def run_predefined_query(query_name: str, show_full: bool = False) -> bool:
         "stats": "SELECT page_type, COUNT(*) as count FROM wiki_pages GROUP BY page_type ORDER BY count DESC;",
         "recent": "SELECT title, ship_name, log_date FROM wiki_pages WHERE page_type = 'mission_log' ORDER BY log_date DESC LIMIT 10;",
         "ship_counts": "SELECT ship_name, COUNT(*) as log_count FROM wiki_pages WHERE page_type = 'mission_log' GROUP BY ship_name ORDER BY log_count DESC;",
-        "characters": "SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;"
+        "characters": "SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;",
+        "access": "SELECT title, page_type, content_accessed FROM wiki_pages WHERE content_accessed > 0 ORDER BY content_accessed DESC LIMIT 10;"
     }
     
     if query_name not in predefined_queries:
@@ -200,7 +203,7 @@ def main():
         elif command == "tables":
             print_tables()
             
-        elif command in ["ships", "stats", "recent", "ship_counts", "characters"]:
+        elif command in ["ships", "stats", "recent", "ship_counts", "characters", "access"]:
             run_predefined_query(command)
             
         elif command == "custom" and len(sys.argv) > 2:
@@ -212,7 +215,7 @@ def main():
         elif command == "full" and len(sys.argv) > 2:
             # Run any command with full content display
             sub_command = sys.argv[2].lower()
-            if sub_command in ["ships", "stats", "recent", "ship_counts", "characters"]:
+            if sub_command in ["ships", "stats", "recent", "ship_counts", "characters", "access"]:
                 print("📄 (Showing full content - no truncation)")
                 run_predefined_query(sub_command, show_full=True)
             elif sub_command == "custom" and len(sys.argv) > 3:
@@ -221,7 +224,7 @@ def main():
                 print("📄 (Showing full content - no truncation)")
                 execute_query(custom_query, show_full=True)
             else:
-                print("Usage: python run_query.py full [ships|stats|recent|ship_counts|characters]")
+                print("Usage: python run_query.py full [ships|stats|recent|ship_counts|characters|access]")
                 print("   or: python run_query.py full custom 'SQL_QUERY'")
             
         else:
@@ -235,6 +238,7 @@ def main():
             print("  python run_query.py recent         # Recent mission logs")
             print("  python run_query.py ship_counts    # Log counts per ship")
             print("  python run_query.py characters     # Find character mentions")
+            print("  python run_query.py access         # Content access statistics")
             print("  python run_query.py custom 'SQL'   # Run custom SQL query")
             print("  python run_query.py full [command] # Show full content without truncation")
             

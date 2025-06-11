@@ -98,7 +98,7 @@ def create_schema():
             cur.execute("CREATE INDEX idx_page_metadata_last_crawled ON page_metadata(last_crawled);")
             
             # Create full-text search index
-            cur.execute("CREATE INDEX idx_wiki_pages_content_search ON wiki_pages USING gin(to_tsvector('english', title || ' ' || content));")
+            cur.execute("CREATE INDEX idx_wiki_pages_content_search ON wiki_pages USING gin(to_tsvector('english', title || ' ' || raw_content));")
             
             conn.commit()
             print("✅ Database schema created successfully")
@@ -225,16 +225,16 @@ def populate_sample_data():
         with conn.cursor() as cur:
             inserted_count = 0
             
-            for title, content, raw_content, url, page_type, ship_name in sample_data:
+            for title, raw_content, url, page_type, ship_name in sample_data:
                 try:
                     # Generate content hash
-                    content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
+                    content_hash = hashlib.sha256(raw_content.encode('utf-8')).hexdigest()
                     
                     # Insert into wiki_pages
                     cur.execute("""
                         INSERT INTO wiki_pages (title, raw_content, url, page_type, ship_name)
                         VALUES (%s, %s, %s, %s, %s)
-                    """, (title, content, raw_content, url, page_type, ship_name))
+                    """, (title, raw_content, url, page_type, ship_name))
                     
                     # Insert into page_metadata
                     cur.execute("""
