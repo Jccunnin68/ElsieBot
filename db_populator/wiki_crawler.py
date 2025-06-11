@@ -5,7 +5,6 @@ Extracts content from the wiki and stores directly in the elsiebrain PostgreSQL 
 Designed to run within the db_populator Docker container.
 """
 
-import fandom
 import time
 import os
 import json
@@ -53,9 +52,6 @@ class WikiCrawlerContainer:
         
         # MediaWiki API URL
         self.api_url = "https://22ndmobile.fandom.com/api.php"
-        
-        # Set the wiki to 22ndmobile
-        fandom.set_wiki("22ndmobile")
     
     def get_connection(self):
         """Get database connection"""
@@ -411,16 +407,13 @@ class WikiCrawlerContainer:
             # Fallback to curated list
             page_titles = [
                 "USS Stardancer", "USS Adagio", "USS Pilgrim", "USS Protector",
-                "USS Manta", "Captain Marcus Blaine", "Large Magellanic Cloud Expedition",
-                "Rendino-class Starship", "USS Voyager", "USS Enterprise",
-                "USS Defiant", "USS Discovery", "USS Excelsior", "USS Intrepid",
-                "USS Sovereign", "USS Galaxy", "USS Miranda", "USS Oberth",
-                "USS Akira", "USS Steam Runner", "USS Saber", "USS Norway",
+                "USS Manta", "Marcus Blaine", "Large Magellanic Cloud Expedition",
+                "Luna Class Starship",
                 "USS Prometheus", "Talia", "The Primacy",
                 "Samwise Blake", "Lilith", "Cetas", "Tatpha", "Beryxian",
                 "Orzaul Gate", "Tiberius Asada", "Sif",
                 "Saiv Daly",
-                "Surithrae Alemyn", "Priti Mehta",
+                "Surithrae Alemyn",
                 "Jiratha", "Aija Bessley",
                 "Maeve Tolena Blaine"
             ]
@@ -429,7 +422,7 @@ class WikiCrawlerContainer:
         return page_titles
     
     def get_page_content_from_api(self, page_title: str):
-        """Get page content directly from MediaWiki API"""
+        """Get page content directly from MediaWiki API - Legacy method with improved processing"""
         try:
             # First get the page ID
             params = {
@@ -449,151 +442,572 @@ class WikiCrawlerContainer:
                 page = next(iter(data['query']['pages'].values()))
                 
                 if 'revisions' in page:
-                    content = page['revisions'][0]['slots']['main']['*']
-                    url = f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}"
+                    raw_wikitext = page['revisions'][0]['slots']['main']['*']
                     
-                    page_data = {
-                        'title': page_title,
-                        'url': url,
-                        'content': content,
-                        'raw_content': content,
-                        'crawled_at': datetime.now()
-                    }
+                    # Process the raw wikitext to make it more readable
+                    processed_content = self._process_wikitext(page_title, raw_wikitext)
                     
-                    print(f"  ✓ Successfully extracted {len(content)} characters from API")
-                    return page_data
-                    
+                    if processed_content and len(processed_content) > 30:  # Very low threshold
+                        url = f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}"
+                        
+                        page_data = {
+                            'title': page_title,
+                            'url': url,
+                            'content': processed_content,
+                            'raw_content': processed_content,
+                            'crawled_at': datetime.now()
+                        }
+                        
+                        print(f"  ✓ Successfully extracted {len(processed_content)} characters from legacy API")
+                        return page_data
+                    else:
+                        print(f"  ⚠️  Processed content too short: {len(processed_content) if processed_content else 0} chars")
+                        
             return None
             
         except Exception as e:
-            print(f"  ⚠️  Error getting content from API: {e}")
+            print(f"  ⚠️  Error getting content from legacy API: {e}")
+            return None
+    
+    def _process_wikitext(self, title: str, wikitext: str) -> str:
+        """Process raw wikitext into readable content"""
+        try:
+            content_parts = []
+            
+            # Add title
+            content_parts.append(f"**{title}**\n")
+            
+            # Remove common wikitext elements
+            text = wikitext
+            
+            # Remove template calls (simple version)
+            text = re.sub(r'\{\{[^}]+\}\}', '', text)
+            
+            # Remove file/image references
+            text = re.sub(r'\[\[File:[^\]]+\]\]', '', text)
+            text = re.sub(r'\[\[Image:[^\]]+\]\]', '', text)
+            
+            # Remove category links
+            text = re.sub(r'\[\[Category:[^\]]+\]\]', '', text)
+            
+            # Convert internal links to plain text
+            text = re.sub(r'\[\[([^|\]]+)\|([^\]]+)\]\]', r'\2', text)  # [[Page|Display]] -> Display
+            text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)  # [[Page]] -> Page
+            
+            # Remove external link formatting
+            text = re.sub(r'\[([^ ]+) ([^\]]+)\]', r'\2', text)  # [URL Text] -> Text
+            
+            # Remove bold/italic markup
+            text = re.sub(r"'{3,5}", '', text)
+            
+            # Remove HTML tags
+            text = re.sub(r'<[^>]+>', '', text)
+            
+            # Remove ref tags and content
+            text = re.sub(r'<ref[^>]*>.*?</ref>', '', text, flags=re.DOTALL)
+            text = re.sub(r'<ref[^>]*/?>', '', text)
+            
+            # Split into lines and process
+            lines = text.split('\n')
+            current_section = ""
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Handle section headers
+                if line.startswith('='):
+                    level = 0
+                    while line.startswith('='):
+                        level += 1
+                        line = line[1:]
+                    while line.endswith('='):
+                        line = line[:-1]
+                    line = line.strip()
+                    
+                    if line and level <= 4:  # Only include up to level 4 headers
+                        heading = '#' * max(2, level)
+                        content_parts.append(f"{heading} {line}\n")
+                
+                # Handle regular content
+                elif len(line) > 10 and not line.startswith(('#', '*', ':', ';')):
+                    # Clean up the line further
+                    clean_line = line.strip()
+                    if clean_line and not clean_line.lower().startswith(('category:', 'file:', 'image:')):
+                        content_parts.append(f"{clean_line}\n")
+            
+            # Join and clean up
+            result = '\n'.join(content_parts)
+            result = re.sub(r'\n{3,}', '\n\n', result)
+            return result.strip()
+            
+        except Exception as e:
+            print(f"  ⚠️  Error processing wikitext: {e}")
+            # Return basic processed version - NO TRUNCATION for mission logs
+            basic_text = re.sub(r'\{\{[^}]+\}\}', '', wikitext)  # Remove templates
+            basic_text = re.sub(r'\[\[[^\]]+\]\]', '', basic_text)  # Remove links
+            basic_text = re.sub(r'<[^>]+>', '', basic_text)  # Remove HTML
+            # Remove truncation - keep full content for mission logs
+            return f"**{title}**\n\n{basic_text}"
+    
+    def _get_parsed_content(self, page_title: str) -> Optional[Dict]:
+        """Get parsed HTML content with section structure"""
+        try:
+            params = {
+                'action': 'parse',
+                'format': 'json',
+                'page': page_title,
+                'prop': 'text|sections|displaytitle',
+                'disableeditsection': True,
+                'wrapoutputclass': ''
+            }
+            
+            response = requests.get(self.api_url, params=params)
+            data = response.json()
+            
+            if 'parse' in data:
+                return {
+                    'html': data['parse'].get('text', {}).get('*', ''),
+                    'sections': data['parse'].get('sections', []),
+                    'title': data['parse'].get('displaytitle', page_title)
+                }
             return None
             
+        except Exception as e:
+            print(f"  ⚠️  Error getting parsed content: {e}")
+            return None
+    
+    def _get_text_extract(self, page_title: str) -> Optional[str]:
+        """Get clean text summary"""
+        try:
+            params = {
+                'action': 'query',
+                'format': 'json',
+                'titles': page_title,
+                'prop': 'extracts',
+                'exintro': True,
+                'explaintext': True,
+                'exsectionformat': 'plain',
+                'exchars': 500
+            }
+            
+            response = requests.get(self.api_url, params=params)
+            data = response.json()
+            
+            if 'query' in data and 'pages' in data['query']:
+                page = next(iter(data['query']['pages'].values()))
+                return page.get('extract', '').strip()
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️  Error getting text extract: {e}")
+            return None
+    
+    def _extract_infobox_from_html(self, html: str) -> Optional[str]:
+        """Extract and format infobox data from HTML"""
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Look for portable infobox (Fandom's standard)
+            infobox = soup.find('aside', class_='portable-infobox')
+            if not infobox:
+                # Look for traditional infobox
+                infobox = soup.find('table', class_='infobox')
+            
+            if infobox:
+                # Extract text content and format it nicely
+                infobox_text = infobox.get_text(separator='\n', strip=True)
+                if infobox_text:
+                    return f"## Information\n{infobox_text}\n"
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️  Error extracting infobox: {e}")
+            return None
+    
+    def _build_formatted_content(self, title: str, parsed_content: Dict, text_extract: str, raw_wikitext: str = None) -> str:
+        """Build comprehensive formatted content similar to fandom-py output"""
+        content_parts = []
+        
+        # Add title
+        content_parts.append(f"**{title}**\n")
+        
+        # Add summary if available
+        if text_extract and len(text_extract.strip()) > 20:
+            content_parts.append(f"## Summary\n{text_extract}\n")
+        
+        # Extract and add infobox if present
+        if parsed_content and parsed_content.get('html'):
+            infobox_content = self._extract_infobox_from_html(parsed_content['html'])
+            if infobox_content:
+                content_parts.append(infobox_content)
+        
+        # Process sections from parsed content
+        content_added = False
+        if parsed_content and parsed_content.get('sections'):
+            try:
+                html = parsed_content.get('html', '')
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # Remove infoboxes since we already extracted them
+                for infobox in soup.find_all(['aside', 'table'], class_=['portable-infobox', 'infobox']):
+                    infobox.decompose()
+                
+                # Remove navigation boxes and other clutter
+                for nav in soup.find_all('table', class_='navbox'):
+                    nav.decompose()
+                for toc in soup.find_all('div', id='toc'):
+                    toc.decompose()
+                
+                # Extract sections based on headings
+                sections = parsed_content['sections']
+                if sections:
+                    # Find content before first section (overview) - NO LIMITS
+                    overview_content = []
+                    for elem in soup.find_all(['p', 'div']):
+                        text = elem.get_text(strip=True)
+                        if text and len(text) > 20:
+                            overview_content.append(text)
+                            # Remove limit - get ALL overview content for mission logs
+                    
+                    if overview_content:
+                        content_parts.append(f"## Overview\n{' '.join(overview_content)}\n")
+                        content_added = True
+                    
+                    # Add sections with proper hierarchy (NO LIMITS for mission logs)
+                    for section in sections:  # Get ALL sections, not just first 10
+                        section_title = section.get('line', '')
+                        section_level = int(section.get('level', 2))
+                        
+                        if section_title and section_title.lower() not in ['references', 'external links', 'see also']:
+                            heading = '#' * max(2, section_level)
+                            content_parts.append(f"{heading} {section_title}\n")
+                            
+                            # Try to extract section content
+                            section_anchor = section.get('anchor', '')
+                            if section_anchor:
+                                section_content = self._extract_section_content(soup, section_anchor)
+                                if section_content:
+                                    content_parts.append(f"{section_content}\n")
+                                    content_added = True
+                
+            except Exception as e:
+                print(f"  ⚠️  Error processing sections: {e}")
+        
+        # Enhanced fallback content extraction
+        current_content = '\n'.join(content_parts)
+        if len(current_content) < 200 and parsed_content and parsed_content.get('html'):
+            fallback_content = self._extract_fallback_content(parsed_content['html'])
+            if fallback_content:
+                content_parts.append(fallback_content)
+                content_added = True
+        
+        # Join all content and clean up
+        full_content = '\n'.join(content_parts)
+        full_content = re.sub(r'\n{3,}', '\n\n', full_content)
+        return full_content.strip()
+    
+    def _extract_section_content(self, soup: BeautifulSoup, section_anchor: str) -> Optional[str]:
+        """Extract content for a specific section"""
+        try:
+            # Find the heading with this anchor
+            heading = soup.find(attrs={'id': section_anchor})
+            if heading:
+                content_parts = []
+                current = heading.find_next_sibling()
+                
+                while current and current.name not in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                    if current.name in ['p', 'div'] and current.get_text(strip=True):
+                        text = current.get_text(strip=True)
+                        if len(text) > 20:
+                            content_parts.append(text)
+                    current = current.find_next_sibling()
+                    # Remove limit - get ALL section content for mission logs
+                
+                return ' '.join(content_parts) if content_parts else None
+            return None
+            
+        except Exception as e:
+            return None
+    
+    def _extract_fallback_content(self, html: str) -> Optional[str]:
+        """Enhanced fallback content extraction for pages with minimal structured content"""
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Remove unwanted elements more aggressively
+            for elem in soup.find_all(['script', 'style', 'nav', 'aside', 'footer', 'header']):
+                elem.decompose()
+            
+            # Remove specific Fandom elements
+            for elem in soup.find_all(class_=['navbox', 'toc', 'mw-references-wrap', 'printfooter']):
+                elem.decompose()
+            
+            # Strategy 1: Try to find main content area
+            main_content = soup.find('div', class_='mw-parser-output')
+            if not main_content:
+                main_content = soup.find('div', id='mw-content-text')
+            if not main_content:
+                main_content = soup
+            
+            # Strategy 2: Extract meaningful paragraphs (NO LIMITS for mission logs)
+            paragraphs = []
+            for p in main_content.find_all(['p', 'div']):
+                text = p.get_text(strip=True)
+                # More lenient criteria for content
+                if text and len(text) > 15 and not text.startswith(('Category:', 'File:', 'Template:')):
+                    # Skip navigation-like content
+                    if not any(nav_word in text.lower() for nav_word in ['navigation', 'menu', 'edit', 'view source']):
+                        paragraphs.append(text)
+                        # Remove limit for mission logs - get ALL content
+            
+            # Strategy 3: If still no content, try lists and other elements
+            if len(paragraphs) < 2:
+                for elem in main_content.find_all(['li', 'dd', 'td']):
+                    text = elem.get_text(strip=True)
+                    if text and len(text) > 15:
+                        paragraphs.append(text)
+                        # Remove limit - get ALL content
+            
+            # Strategy 4: As last resort, get any text content
+            if len(paragraphs) < 2:
+                clean_text = main_content.get_text(separator=' ', strip=True)
+                if clean_text:
+                    # For mission logs, take ALL content, not just a few sentences
+                    paragraphs = [clean_text]
+            
+            if paragraphs:
+                content = ' '.join(paragraphs)
+                # Clean up the content
+                content = re.sub(r'\s+', ' ', content)  # Normalize whitespace
+                content = re.sub(r'\[edit\]', '', content)  # Remove edit links
+                return f"## Content\n{content}\n"
+            
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️  Error in fallback extraction: {e}")
+            return None
+    
+    def _get_comprehensive_text_extract(self, page_title: str) -> Optional[str]:
+        """Get more comprehensive text extract without intro limitation"""
+        try:
+            params = {
+                'action': 'query',
+                'format': 'json',
+                'titles': page_title,
+                'prop': 'extracts',
+                'exintro': False,  # Get full content, not just intro
+                'explaintext': True,
+                'exsectionformat': 'plain'
+                # No exchars limit - get full content for mission logs
+            }
+            
+            response = requests.get(self.api_url, params=params)
+            data = response.json()
+            
+            if 'query' in data and 'pages' in data['query']:
+                page = next(iter(data['query']['pages'].values()))
+                extract = page.get('extract', '').strip()
+                if extract and len(extract) > 50:  # Lower threshold
+                    return extract
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️  Error getting comprehensive extract: {e}")
+            return None
+    
+    def get_enhanced_page_content_optimized(self, page_title: str):
+        """Optimized enhanced MediaWiki API content extraction with fewer API calls"""
+        try:
+            print(f"  🚀 Fetching optimized content from MediaWiki API...")
+            
+            # Step 1: Get combined data in single API call
+            combined_data = self._get_combined_page_data(page_title)
+            
+            if not combined_data or not combined_data.get('page_exists'):
+                print(f"  ⚠️  Page '{page_title}' does not exist")
+                return None
+            
+            # Step 2: Try to use extract content first (often sufficient for mission logs)
+            extract_content = combined_data.get('extract', '')
+            if extract_content and len(extract_content) > 1000:  # Good extract available
+                print(f"  ✓ Using high-quality extract: {len(extract_content)} chars")
+                formatted_content = self._build_simple_formatted_content(
+                    page_title, extract_content
+                )
+                
+                if formatted_content and len(formatted_content) > 50:
+                    return {
+                        'title': page_title,
+                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'content': formatted_content,
+                        'raw_content': formatted_content,
+                        'crawled_at': datetime.now()
+                    }
+            
+            # Step 3: If extract insufficient, get parsed HTML (only if needed)
+            parsed_content = self._get_parsed_html_optimized(page_title)
+            
+            # Step 4: Build comprehensive formatted content
+            if parsed_content or extract_content:
+                formatted_content = self._build_formatted_content(
+                    page_title, parsed_content, extract_content
+                )
+                
+                if formatted_content and len(formatted_content) > 50:
+                    print(f"  ✓ Successfully extracted {len(formatted_content)} characters (optimized)")
+                    return {
+                        'title': page_title,
+                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'content': formatted_content,
+                        'raw_content': formatted_content,
+                        'crawled_at': datetime.now()
+                    }
+            
+            # Step 5: Final fallback to raw wikitext processing
+            raw_wikitext = combined_data.get('raw_wikitext', '')
+            if raw_wikitext:
+                print(f"  📝 Processing raw wikitext: {len(raw_wikitext)} chars")
+                processed_content = self._process_wikitext(page_title, raw_wikitext)
+                
+                if processed_content and len(processed_content) > 30:
+                    return {
+                        'title': page_title,
+                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'content': processed_content,
+                        'raw_content': processed_content,
+                        'crawled_at': datetime.now()
+                    }
+            
+            print(f"  ✗ Unable to extract sufficient content")
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️  Error in optimized extraction: {e}")
+            return None
+    
+    def _build_simple_formatted_content(self, title: str, extract_content: str) -> str:
+        """Build simple formatted content from extract (faster for mission logs)"""
+        try:
+            content_parts = []
+            
+            # Add title
+            content_parts.append(f"**{title}**\n")
+            
+            # Add the extract content with minimal processing
+            if extract_content:
+                # Clean up the content slightly
+                clean_content = re.sub(r'\s+', ' ', extract_content)  # Normalize whitespace
+                content_parts.append(f"## Content\n{clean_content}\n")
+            
+            return '\n'.join(content_parts)
+            
+        except Exception as e:
+            print(f"  ⚠️  Error building simple content: {e}")
+            return f"**{title}**\n\n{extract_content}"
+    
+    def _get_combined_page_data(self, page_title: str) -> Dict:
+        """Optimized method to get multiple types of content in fewer API calls"""
+        try:
+            # Single API call to get parsed content, extract, and page info
+            params = {
+                'action': 'query',
+                'format': 'json',
+                'titles': page_title,
+                'prop': 'extracts|info|revisions',
+                'exintro': False,  # Get full content
+                'explaintext': True,
+                'exsectionformat': 'plain',
+                'rvprop': 'content',
+                'rvslots': '*',
+                # No character limits for full content
+            }
+            
+            response = requests.get(self.api_url, params=params)
+            data = response.json()
+            
+            if 'query' not in data or 'pages' not in data['query']:
+                return {}
+            
+            page = next(iter(data['query']['pages'].values()))
+            
+            # Extract all available data from single response
+            result = {
+                'title': page_title,
+                'page_id': page.get('pageid', -1),
+                'extract': page.get('extract', '').strip() if 'extract' in page else '',
+                'raw_wikitext': '',
+                'page_exists': page.get('pageid', -1) != -1
+            }
+            
+            # Get raw wikitext if available
+            if 'revisions' in page and page['revisions']:
+                result['raw_wikitext'] = page['revisions'][0]['slots']['main']['*']
+            
+            return result
+            
+        except Exception as e:
+            print(f"  ⚠️  Error in combined API call: {e}")
+            return {}
+    
+    def _get_parsed_html_optimized(self, page_title: str) -> Optional[Dict]:
+        """Optimized parsed HTML extraction with retry logic"""
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                params = {
+                    'action': 'parse',
+                    'format': 'json',
+                    'page': page_title,
+                    'prop': 'text|sections|displaytitle',
+                    'disableeditsection': True,
+                    'wrapoutputclass': ''
+                }
+                
+                response = requests.get(self.api_url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                if 'parse' in data:
+                    return {
+                        'html': data['parse'].get('text', {}).get('*', ''),
+                        'sections': data['parse'].get('sections', []),
+                        'title': data['parse'].get('displaytitle', page_title)
+                    }
+                    
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"  ⚠️  Parse API attempt {attempt + 1} failed, retrying...")
+                    time.sleep(1)
+                else:
+                    print(f"  ⚠️  Parse API failed after {max_retries} attempts: {e}")
+        
+        return None
+    
     def extract_page_content(self, page_title: str):
-        """Extract content from a single page"""
+        """Extract content from a single page - Optimized MediaWiki API"""
         try:
             print(f"Crawling: {page_title}")
             
-            # First try fandom-py
-            try:
-                page = fandom.page(title=page_title)
+            # Use optimized MediaWiki API method first
+            page_data = self.get_enhanced_page_content_optimized(page_title)
+            
+            if page_data and page_data.get('raw_content') and len(page_data['raw_content']) > 30:
+                print(f"  ✓ Successfully extracted {len(page_data['raw_content'])} characters")
+                return page_data
+            else:
+                # Fallback to original enhanced method if optimized fails
+                print(f"  ⚠️  Optimized extraction failed, trying legacy enhanced method...")
+                page_data = self.get_enhanced_page_content_from_api(page_title)
                 
-                # Extract content parts
-                content_parts = []
-                
-                # Add title
-                if hasattr(page, 'title'):
-                    content_parts.append(f"**{page.title}**\n")
-                else:
-                    content_parts.append(f"**{page_title}**\n")
-                
-                # Try to get plain text first as fallback
-                if hasattr(page, 'plain_text') and page.plain_text:
-                    content_parts.append(page.plain_text)
-                
-                # Add summary if available
-                if hasattr(page, 'summary') and page.summary:
-                    if not any(page.summary in part for part in content_parts):
-                        content_parts.append(f"## Summary\n{page.summary}\n")
-                
-                # Get structured content
-                if hasattr(page, 'content') and page.content:
-                    try:
-                        page_content = page.content
-                        
-                        # Handle main content before sections
-                        if isinstance(page_content, dict):
-                            if 'content' in page_content and page_content['content']:
-                                content_parts.append(f"## Overview\n{page_content['content']}\n")
-                            
-                            # Handle infobox if present
-                            if 'infobox' in page_content and page_content['infobox']:
-                                content_parts.append(f"## Information\n{page_content['infobox']}\n")
-                            
-                            # Handle sections recursively
-                            def process_sections(sections, level=2):
-                                if not isinstance(sections, (list, tuple)):
-                                    return
-                                    
-                                for section in sections:
-                                    if not isinstance(section, dict):
-                                        continue
-                                        
-                                    try:
-                                        # Add section title with appropriate heading level
-                                        if 'title' in section:
-                                            content_parts.append(f"{'#' * level} {section['title']}\n")
-                                        
-                                        # Add section content
-                                        if 'content' in section:
-                                            if isinstance(section['content'], str):
-                                                content_parts.append(f"{section['content']}\n")
-                                            elif isinstance(section['content'], dict):
-                                                if 'text' in section['content']:
-                                                    content_parts.append(f"{section['content']['text']}\n")
-                                        
-                                        # Process subsections recursively
-                                        if 'sections' in section and section['sections']:
-                                            process_sections(section['sections'], level + 1)
-                                    except Exception as e:
-                                        print(f"  ⚠️  Error processing section: {e}")
-                                        continue
-                            
-                            # Process all sections
-                            try:
-                                if 'sections' in page_content and page_content['sections']:
-                                    process_sections(page_content['sections'])
-                            except Exception as e:
-                                print(f"  ⚠️  Error processing sections: {e}")
-                        else:
-                            # Handle plain text content
-                            content_parts.append(f"## Content\n{page_content}\n")
-                    except Exception as e:
-                        print(f"  ⚠️  Error processing content: {e}")
-                
-                # Add sections if available separately
-                if hasattr(page, 'sections') and page.sections:
-                    try:
-                        for section_title in page.sections[:10]:  # Limit to first 10 sections
-                            try:
-                                section_content = page.section(section_title)
-                                if section_content:
-                                    if isinstance(section_content, str):
-                                        if len(section_content.strip()) > 10:
-                                            content_parts.append(f"## {section_title}\n{section_content}\n")
-                                    elif isinstance(section_content, dict):
-                                        if 'text' in section_content and len(section_content['text'].strip()) > 10:
-                                            content_parts.append(f"## {section_title}\n{section_content['text']}\n")
-                            except Exception as e:
-                                print(f"  ⚠️  Error getting section '{section_title}': {e}")
-                                continue
-                    except Exception as e:
-                        print(f"  ⚠️  Error processing sections list: {e}")
-                
-                # Join all content
-                full_content = '\n'.join(content_parts)
-                
-                # Clean up excessive whitespace
-                full_content = re.sub(r'\n{3,}', '\n\n', full_content)
-                full_content = full_content.strip()
-                
-                if full_content and len(full_content) > 100:
-                    page_data = {
-                        'title': page.title if hasattr(page, 'title') else page_title,
-                        'url': page.url if hasattr(page, 'url') else f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'raw_content': full_content,
-                        'crawled_at': datetime.now()
-                    }
-                    
-                    print(f"  ✓ Successfully extracted {len(full_content)} characters")
+                if page_data and page_data.get('raw_content') and len(page_data['raw_content']) > 30:
+                    print(f"  ✓ Successfully extracted {len(page_data['raw_content'])} characters (fallback)")
                     return page_data
                 else:
-                    print(f"  ✗ Insufficient content extracted from fandom-py, trying API...")
-                    return self.get_page_content_from_api(page_title)
-                    
-            except Exception as e:
-                print(f"  ⚠️  Error with fandom-py: {e}, trying API...")
-                return self.get_page_content_from_api(page_title)
+                    print(f"  ✗ Insufficient content extracted ({len(page_data['raw_content']) if page_data and page_data.get('raw_content') else 0} chars)")
+                    return None
                 
         except Exception as e:
             print(f"Error crawling {page_title}: {e}")
@@ -608,20 +1022,70 @@ class WikiCrawlerContainer:
             
         return None
     
+    def get_enhanced_page_content_from_api(self, page_title: str):
+        """Enhanced MediaWiki API content extraction - Legacy method"""
+        try:
+            print(f"  📡 Fetching enhanced content from MediaWiki API...")
+            
+            # Step 1: Get parsed HTML content with sections
+            parsed_content = self._get_parsed_content(page_title)
+            
+            # Step 2: Get plain text extract for summary  
+            text_extract = self._get_text_extract(page_title)
+            
+            # Step 3: If initial extract is insufficient, try comprehensive extract
+            if not text_extract or len(text_extract) < 50:
+                text_extract = self._get_comprehensive_text_extract(page_title)
+                print(f"  📝 Using comprehensive extract: {len(text_extract) if text_extract else 0} chars")
+            
+            # Step 4: Build formatted content
+            if parsed_content or text_extract:
+                formatted_content = self._build_formatted_content(
+                    page_title, parsed_content, text_extract
+                )
+                
+                # Lower threshold for acceptance (50 instead of 100)
+                min_content_length = 50
+                if formatted_content and len(formatted_content) > min_content_length:
+                    page_data = {
+                        'title': page_title,
+                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'content': formatted_content,      # Same content in both fields
+                        'raw_content': formatted_content,  # Same content in both fields  
+                        'crawled_at': datetime.now()
+                    }
+                    
+                    print(f"  ✓ Successfully extracted {len(formatted_content)} characters from enhanced API")
+                    return page_data
+                else:
+                    print(f"  ⚠️  Content too short ({len(formatted_content) if formatted_content else 0} chars), trying legacy API...")
+            else:
+                print(f"  ⚠️  No parsed content or text extract available, trying legacy API...")
+            
+            # Fallback to legacy method if enhanced extraction fails
+            return self.get_page_content_from_api(page_title)
+            
+        except Exception as e:
+            print(f"  ⚠️  Error with enhanced API: {e}, trying legacy API...")
+            return self.get_page_content_from_api(page_title)
+    
     def crawl_wiki_pages(self, use_comprehensive_list=False, force_update=False, limit=None):
-        """Crawl wiki pages and save to database"""
-        logger.info("🌐 Starting wiki crawl to elsiebrain database...")
+        """Crawl wiki pages and save to database - Optimized version"""
+        logger.info("🌐 Starting optimized wiki crawl to elsiebrain database...")
         
         # Get page titles
         if use_comprehensive_list:
             page_titles = self.get_all_page_titles_from_special_pages()
         else:
-            # Use a curated list for faster crawling
+            # Use updated curated list
             page_titles = [
                 "22nd Mobile Daedalus Fleet", "USS Stardancer", "USS Adagio", 
-                "USS Pilgrim", "USS Protector", "USS Manta", "Captain Marcus Blaine",
-                "Large Magellanic Cloud Expedition", "Rendino-class Starship",
-                "Main Page", "USS Voyager", "USS Enterprise"
+                "USS Pilgrim", "USS Protector", "USS Manta", "Marcus Blaine",
+                "Large Magellanic Cloud Expedition", "Luna Class Starship",
+                "Main Page", "USS Prometheus", "Talia", "The Primacy",
+                "Samwise Blake", "Lilith", "Cetas", "Tatpha", "Beryxian",
+                "Orzaul Gate", "Tiberius Asada", "Sif", "Saiv Daly",
+                "Surithrae Alemyn", "Jiratha", "Aija Bessley", "Maeve Tolena Blaine"
             ]
         
         # Limit results if specified
@@ -631,9 +1095,11 @@ class WikiCrawlerContainer:
         successful_crawls = 0
         updated_pages = 0
         skipped_pages = 0
+        start_time = time.time()
         
         for i, page_title in enumerate(page_titles, 1):
             logger.info(f"\n[{i}/{len(page_titles)}] Processing: {page_title}")
+            page_start_time = time.time()
             
             # Check if we should update this page
             if not force_update:
@@ -664,14 +1130,20 @@ class WikiCrawlerContainer:
                         status='active'
                     )
                     updated_pages += 1
+                    
+                    # Performance metrics
+                    page_time = time.time() - page_start_time
+                    print(f"  ⏱️  Processed in {page_time:.2f}s")
             
-            # Be respectful to the API
-            time.sleep(2)
+            # Reduced sleep time for better performance
+            time.sleep(1)  # Reduced from 2 seconds
         
-        logger.info(f"\n🌐 Wiki crawling complete!")
+        total_time = time.time() - start_time
+        logger.info(f"\n🌐 Optimized wiki crawling complete in {total_time:.2f} seconds!")
         logger.info(f"✓ Successfully crawled: {successful_crawls} pages")
         logger.info(f"✓ Updated: {updated_pages} pages")
         logger.info(f"⏭️  Skipped (unchanged): {skipped_pages} pages")
+        logger.info(f"⚡ Average time per page: {total_time/len(page_titles):.2f}s")
         
         return successful_crawls
     
@@ -802,7 +1274,7 @@ def main():
         print(f"❌ Error during crawling: {e}")
         print("Make sure:")
         print("- The elsiebrain database exists and is accessible")
-        print("- You have installed required packages: pip install fandom-py psycopg2-binary requests beautifulsoup4")
+        print("- You have installed required packages: pip install psycopg2-binary requests beautifulsoup4")
 
 if __name__ == "__main__":
     main() 
