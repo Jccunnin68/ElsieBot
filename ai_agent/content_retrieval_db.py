@@ -1,11 +1,110 @@
 """Database-driven content retrieval and wiki search functionality"""
 
 from database_controller import get_db_controller
-from config import MAX_CHARS_LOG, MAX_CHARS_CONTEXT, MAX_CHARS_TELL_ME_ABOUT, MAX_CHARS_SHIP_INFO, truncate_to_token_limit
-from log_processor import is_log_query, parse_log_characters, is_ship_log_title
+from config import truncate_to_token_limit
+from log_processor import is_log_query, parse_log_characters, is_ship_log_title, parse_character_dialogue
 from typing import Optional
 import psycopg2
 import psycopg2.extras
+import requests
+import json
+from urllib.parse import quote
+
+def search_memory_alpha(query: str, limit: int = 3) -> str:
+    """
+    Search Memory Alpha (Star Trek wiki) using MediaWiki API as fallback when local database has no results.
+    Returns formatted content from Memory Alpha articles.
+    """
+    try:
+        print(f"🌟 MEMORY ALPHA SEARCH: '{query}' (fallback search)")
+        
+        # Clean up the query for better search results
+        search_query = query.strip()
+        
+        # MediaWiki API search endpoint
+        base_url = "https://memory-alpha.fandom.com/api.php"
+        
+        # First, search for articles
+        search_params = {
+            'action': 'query',
+            'format': 'json',
+            'list': 'search',
+            'srsearch': search_query,
+            'srlimit': limit,
+            'srnamespace': 0,  # Main namespace only
+            'srprop': 'snippet|titlesnippet'
+        }
+        
+        search_response = requests.get(base_url, params=search_params, timeout=10)
+        search_data = search_response.json()
+        
+        if 'query' not in search_data or 'search' not in search_data['query']:
+            print(f"   ❌ No Memory Alpha search results found")
+            return ""
+        
+        search_results = search_data['query']['search']
+        if not search_results:
+            print(f"   ❌ No Memory Alpha articles found for '{query}'")
+            return ""
+        
+        print(f"   📊 Found {len(search_results)} Memory Alpha articles")
+        
+        # Get content for the top results
+        memory_alpha_content = []
+        page_titles = [result['title'] for result in search_results[:limit]]
+        
+        # Get page content
+        content_params = {
+            'action': 'query',
+            'format': 'json',
+            'titles': '|'.join(page_titles),
+            'prop': 'extracts',
+            'exintro': True,  # Only get intro section
+            'explaintext': True,  # Plain text, no HTML
+            'exsectionformat': 'plain'
+        }
+        
+        content_response = requests.get(base_url, params=content_params, timeout=10)
+        content_data = content_response.json()
+        
+        if 'query' not in content_data or 'pages' not in content_data['query']:
+            print(f"   ❌ Could not retrieve Memory Alpha content")
+            return ""
+        
+        pages = content_data['query']['pages']
+        
+        for page_id, page_data in pages.items():
+            if page_id == '-1':  # Page not found
+                continue
+                
+            title = page_data.get('title', 'Unknown Title')
+            extract = page_data.get('extract', '')
+            
+            if extract:
+                # Truncate very long extracts
+                if len(extract) > 1000:
+                    extract = extract[:1000] + "..."
+                
+                # Format for Elsie's response
+                page_url = f"https://memory-alpha.fandom.com/wiki/{quote(title.replace(' ', '_'))}"
+                formatted_content = f"**{title}** [Federation Archives]\n{extract}"
+                memory_alpha_content.append(formatted_content)
+                print(f"   ✓ Retrieved Memory Alpha article: '{title}' ({len(extract)} chars)")
+        
+        if not memory_alpha_content:
+            print(f"   ❌ No usable Memory Alpha content found")
+            return ""
+        
+        final_content = '\n\n---FEDERATION ARCHIVES---\n\n'.join(memory_alpha_content)
+        print(f"✅ MEMORY ALPHA SEARCH COMPLETE: {len(final_content)} characters from {len(memory_alpha_content)} articles")
+        return final_content
+        
+    except requests.RequestException as e:
+        print(f"   ❌ Memory Alpha API request failed: {e}")
+        return ""
+    except Exception as e:
+        print(f"   ❌ Memory Alpha search error: {e}")
+        return ""
 
 def check_elsiebrain_connection() -> bool:
     """Check if the elsiebrain database is accessible and populated"""
@@ -15,11 +114,6 @@ def check_elsiebrain_connection() -> bool:
         
         if stats and stats.get('total_pages', 0) > 0:
             print(f"✓ elsiebrain database ready: {stats.get('total_pages', 0)} pages, {stats.get('mission_logs', 0)} logs")
-            
-            # Also show schema info for debugging
-            print("\n🔍 PERFORMING SCHEMA ANALYSIS FOR DEBUGGING:")
-            schema_info = controller.get_schema_info()
-            
         else:
             print("⚠️  elsiebrain database is connected but empty - needs to be populated externally")
         
@@ -39,18 +133,29 @@ def debug_schema_info():
         print(f"✗ Error getting schema info: {e}")
         return {}
 
-def get_log_content(query: str) -> str:
-    """Get full log content using hierarchical search (titles first, then content)"""
+def get_log_content(query: str, mission_logs_only: bool = False) -> str:
+    """Get full log content using hierarchical search (titles first, then content) - NO TRUNCATION
+    
+    Args:
+        query: Search query
+        mission_logs_only: If True, only search mission_log type pages, ignore other types
+    """
     try:
         controller = get_db_controller()
-        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}'")
+        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
         
         # Search for different types of logs using hierarchical search
-        log_types = ["mission_log"]
+        if mission_logs_only:
+            log_types = ["mission_log"]
+            print(f"   🎯 SPECIFIC LOG REQUEST: Only searching mission_log type pages")
+        else:
+            log_types = ["mission_log"]
+            print(f"   📊 GENERAL LOG REQUEST: Comprehensive search including fallback")
+        
         all_results = []
         
         for log_type in log_types:
-            results = controller.search_pages(query, page_type=log_type, limit=3)
+            results = controller.search_pages(query, page_type=log_type, limit=10)  # Increased limit
             print(f"   📊 {log_type} hierarchical search returned {len(results)} results")
             all_results.extend(results)
         
@@ -64,10 +169,10 @@ def get_log_content(query: str) -> str:
         
         print(f"   📊 Total unique log results: {len(unique_results)}")
         
-        if not unique_results:
-            # Fallback: Try general hierarchical search with log keywords
+        if not unique_results and not mission_logs_only:
+            # Fallback: Try general hierarchical search with log keywords (only if not mission_logs_only)
             print(f"   🔄 No typed logs found, trying general hierarchical search...")
-            results = controller.search_pages(f"{query} log", limit=8)
+            results = controller.search_pages(f"{query} log", limit=20)  # Increased limit
             print(f"   📊 General hierarchical search returned {len(results)} results")
             
             # Filter to ship logs and other log-like titles using enhanced detection
@@ -89,22 +194,23 @@ def get_log_content(query: str) -> str:
             
             print(f"   📊 Enhanced filtering found {len(log_results)} log-like results")
             unique_results = log_results
+        elif not unique_results and mission_logs_only:
+            print(f"   🎯 No mission logs found for specific request: '{query}'")
+            return ""
         
         if not unique_results:
             print(f"✗ No log content found for query: '{query}'")
             return ""
         
         log_contents = []
-        total_chars = 0
-        max_chars = MAX_CHARS_LOG
         
         for result in unique_results:
             title = result['title']
-            content = result['raw_content']
+            content = result['raw_content']  # NO LENGTH LIMIT
             page_type = result.get('page_type', 'unknown')
             print(f"   📄 Processing {page_type}: '{title}' ({len(content)} chars)")
             
-            # Parse character speaking patterns in the log
+            # Parse character speaking patterns in the log using enhanced dialogue parsing
             parsed_content = parse_log_characters(content)
             
             # Format the log with title and parsed content
@@ -114,18 +220,8 @@ def get_log_content(query: str) -> str:
             formatted_preview = formatted_log[:100].replace('\n', ' ') + "..." if len(formatted_log) > 100 else formatted_log.replace('\n', ' ')
             print(f"   📝 Formatted log preview: '{formatted_preview}'")
             
-            if total_chars + len(formatted_log) <= max_chars:
-                log_contents.append(formatted_log)
-                total_chars += len(formatted_log)
-                print(f"   ✓ Added {page_type}: {title}")
-            else:
-                # Add partial content if it fits
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 500:  # Only add if substantial content fits
-                    truncated_log = formatted_log[:remaining_chars] + "...[LOG TRUNCATED]"
-                    log_contents.append(truncated_log)
-                    print(f"   ✓ Added truncated {page_type}: {title}")
-                break
+            log_contents.append(formatted_log)
+            print(f"   ✓ Added {page_type}: {title}")
         
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ HIERARCHICAL LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
@@ -135,23 +231,30 @@ def get_log_content(query: str) -> str:
         print(f"✗ Error getting log content: {e}")
         return ""
 
-def get_relevant_wiki_context(query: str, max_chars: int = MAX_CHARS_CONTEXT) -> str:
-    """Get relevant wiki content using hierarchical search (titles first, then content)"""
+def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> str:
+    """Get relevant wiki content using hierarchical search (titles first, then content) - NO TRUNCATION
+    
+    Args:
+        query: Search query
+        mission_logs_only: If True, only search mission_log type pages when detecting log queries
+    """
     try:
         controller = get_db_controller()
         
         # Check if this is a log query - handle with hierarchical log retrieval
         if is_log_query(query):
-            log_content = get_log_content(query)
+            log_content = get_log_content(query, mission_logs_only=mission_logs_only)
             if log_content:
-                print(f"✓ Log query detected, retrieved {len(log_content)} chars of log content")
+                log_type_msg = "mission logs only" if mission_logs_only else "all log types"
+                print(f"✓ Log query detected, retrieved {len(log_content)} chars of log content ({log_type_msg})")
                 return log_content
             else:
-                print("⚠️  Log query detected but no log content found")
+                log_type_msg = "mission logs only" if mission_logs_only else "all log types"
+                print(f"⚠️  Log query detected but no log content found ({log_type_msg})")
         
         # Use hierarchical database search for better results
         print(f"🔍 HIERARCHICAL WIKI SEARCH: '{query}'")
-        results = controller.search_pages(query, limit=10)
+        results = controller.search_pages(query, limit=20)  # Increased limit
         
         if not results:
             print(f"✗ No wiki content found for query: {query}")
@@ -160,23 +263,13 @@ def get_relevant_wiki_context(query: str, max_chars: int = MAX_CHARS_CONTEXT) ->
         print(f"   📊 Hierarchical search returned {len(results)} results")
         
         context_parts = []
-        total_chars = 0
         
         for result in results:
             title = result['title']
-            content = result['raw_content'][:30000]  # Limit individual content
+            content = result['raw_content']  # NO LENGTH LIMIT
             
             page_text = f"**{title}**\n{content}"
-            
-            if total_chars + len(page_text) <= max_chars:
-                context_parts.append(page_text)
-                total_chars += len(page_text)
-            else:
-                # Add partial content if it fits
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 100:
-                    context_parts.append(page_text[:remaining_chars] + "...")
-                break
+            context_parts.append(page_text)
         
         final_context = '\n\n---\n\n'.join(context_parts)
         print(f"✅ HIERARCHICAL WIKI SEARCH COMPLETE: {len(final_context)} characters from {len(context_parts)} pages")
@@ -187,7 +280,7 @@ def get_relevant_wiki_context(query: str, max_chars: int = MAX_CHARS_CONTEXT) ->
         return ""
 
 def get_ship_information(ship_name: str) -> str:
-    """Get detailed information about a specific ship"""
+    """Get detailed information about a specific ship - NO TRUNCATION"""
     try:
         controller = get_db_controller()
         results = controller.get_ship_info(ship_name)
@@ -196,33 +289,23 @@ def get_ship_information(ship_name: str) -> str:
             return ""
         
         ship_info = []
-        total_chars = 0
-        max_chars = MAX_CHARS_SHIP_INFO
 
         for result in results:
             title = result['title']
-            content = result['raw_content']
+            content = result['raw_content']  # NO LENGTH LIMIT
 
-            page_text = f"**{title}**\n{content[:800]}"  # Limit individual entries
-
-            if total_chars + len(page_text) <= max_chars:
-                ship_info.append(page_text)
-                total_chars += len(page_text)
-            else:
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 100:
-                    ship_info.append(page_text[:remaining_chars] + "...")
-                break
+            page_text = f"**{title}**\n{content}"
+            ship_info.append(page_text)
 
         final_content = '\n\n---\n\n'.join(ship_info)
-        return truncate_to_token_limit(final_content, MAX_CHARS_SHIP_INFO // 4)
+        return final_content
         
     except Exception as e:
         print(f"✗ Error getting ship information: {e}")
         return ""
 
-def get_recent_logs(ship_name: Optional[str] = None, limit: int = 5) -> str:
-    """Get recent mission logs"""
+def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
+    """Get recent mission logs - NO TRUNCATION"""
     try:
         controller = get_db_controller()
         results = controller.get_recent_logs(ship_name=ship_name, limit=limit)
@@ -231,81 +314,61 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 5) -> str:
             return ""
         
         log_summaries = []
-        total_chars = 0
-        max_chars = MAX_CHARS_LOG
 
         for result in results:
             title = result['title']
-            content = result['raw_content'][:50000]  # Limit individual log content
+            content = result['raw_content']  # NO LENGTH LIMIT
             log_date = result['log_date']
 
             log_entry = f"**{title}** ({log_date})\n{content}"
-            
-            if total_chars + len(log_entry) <= max_chars:
-                log_summaries.append(log_entry)
-                total_chars += len(log_entry)
-            else:
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 200:
-                    log_summaries.append(log_entry[:remaining_chars] + "...[LOG TRUNCATED]")
-                break
+            log_summaries.append(log_entry)
 
         final_content = '\n\n---\n\n'.join(log_summaries)
-        return truncate_to_token_limit(final_content, MAX_CHARS_LOG // 4)
+        return final_content
         
     except Exception as e:
         print(f"✗ Error getting recent logs: {e}")
         return ""
 
 def search_by_type(query: str, content_type: str) -> str:
-    """Search for specific type of content"""
+    """Search for specific type of content - NO TRUNCATION"""
     try:
         controller = get_db_controller()
-        results = controller.search_pages(query, page_type=content_type, limit=5)
+        results = controller.search_pages(query, page_type=content_type, limit=10)  # Increased limit
         
         if not results:
             return ""
         
         search_results = []
-        total_chars = 0
-        max_chars = MAX_CHARS_CONTEXT
 
         for result in results:
             title = result['title']
-            content = result['raw_content']
+            content = result['raw_content']  # NO LENGTH LIMIT
 
-            page_text = f"**{title}**\n{content[:60000]}"
-
-            if total_chars + len(page_text) <= max_chars:
-                search_results.append(page_text)
-                total_chars += len(page_text)
-            else:
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 100:
-                    search_results.append(page_text[:remaining_chars] + "...")
-                break
+            page_text = f"**{title}**\n{content}"
+            search_results.append(page_text)
 
         final_content = '\n\n---\n\n'.join(search_results)
-        return truncate_to_token_limit(final_content, MAX_CHARS_CONTEXT // 4)
+        return final_content
         
     except Exception as e:
         print(f"✗ Error searching by type: {e}")
         return ""
 
 def get_tell_me_about_content(subject: str) -> str:
-    """Enhanced 'tell me about' functionality using hierarchical search"""
+    """Enhanced 'tell me about' functionality using hierarchical search - NO TRUNCATION"""
     try:
         controller = get_db_controller()
         print(f"🔍 HIERARCHICAL 'TELL ME ABOUT' SEARCH: '{subject}'")
         
         # Use hierarchical search - will search titles first, then content
-        results = controller.search_pages(subject, limit=8)
+        results = controller.search_pages(subject, limit=15)  # Increased limit
         print(f"   📊 Hierarchical search returned {len(results)} results")
         
         # If it looks like a ship name, also search ship-specific content
         if any(ship in subject.lower() for ship in ['uss', 'ship', 'vessel']):
             print(f"   🚢 Ship detected, searching ship-specific content...")
-            ship_results = controller.search_pages(subject, page_type='ship_info', limit=3)
+            ship_results = controller.search_pages(subject, page_type='ship_info', limit=10)  # Increased limit
             print(f"   📊 Ship-specific search returned {len(ship_results)} results")
             
             # Merge ship results with general results, prioritizing ship info
@@ -319,12 +382,10 @@ def get_tell_me_about_content(subject: str) -> str:
         
         # Format the results
         content_parts = []
-        total_chars = 0
-        max_chars = MAX_CHARS_TELL_ME_ABOUT
 
-        for result in results[:5]:  # Top 5 results
+        for result in results:  # Include ALL results
             title = result['title']
-            content = result['raw_content']
+            content = result['raw_content']  # NO LENGTH LIMIT
             page_type = result.get('page_type', 'general')
             
             # Add type indicator for clarity
@@ -337,26 +398,18 @@ def get_tell_me_about_content(subject: str) -> str:
                 type_indicator = " [Personnel File]"
             
             page_text = f"**{title}{type_indicator}**\n{content}"
-            
-            if total_chars + len(page_text) <= max_chars:
-                content_parts.append(page_text)
-                total_chars += len(page_text)
-            else:
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 200:
-                    content_parts.append(page_text[:remaining_chars] + "...[CONTENT TRUNCATED]")
-                break
+            content_parts.append(page_text)
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ HIERARCHICAL 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
-        return truncate_to_token_limit(final_content, MAX_CHARS_TELL_ME_ABOUT // 4)
+        return final_content
         
     except Exception as e:
         print(f"✗ Error getting 'tell me about' content: {e}")
         return ""
 
 def get_tell_me_about_content_prioritized(subject: str) -> str:
-    """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs"""
+    """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs - NO TRUNCATION"""
     try:
         controller = get_db_controller()
         print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}'")
@@ -365,14 +418,14 @@ def get_tell_me_about_content_prioritized(subject: str) -> str:
         ship_info_results = []
         if any(indicator in subject.lower() for indicator in ['uss', 'ship', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise']):
             print(f"   🚢 PRIORITY: Searching ship info pages first...")
-            ship_info_results = controller.search_pages(subject, page_type='ship_info', limit=5)
+            ship_info_results = controller.search_pages(subject, page_type='ship_info', limit=10)  # Increased limit
             print(f"   📊 Ship info search found {len(ship_info_results)} results")
         
         # Step 2: Search for personnel records
         personnel_results = []
         if any(indicator in subject.lower() for indicator in ['captain', 'commander', 'lieutenant', 'ensign', 'admiral', 'officer']):
             print(f"   👥 PRIORITY: Searching personnel records...")
-            personnel_results = controller.search_pages(subject, page_type='personnel', limit=3)
+            personnel_results = controller.search_pages(subject, page_type='personnel', limit=10)  # Increased limit
             print(f"   📊 Personnel search found {len(personnel_results)} results")
         
         # Step 3: If we have ship info or personnel, use those first
@@ -382,7 +435,7 @@ def get_tell_me_about_content_prioritized(subject: str) -> str:
         general_results = []
         if not priority_results:
             print(f"   📝 No ship/personnel info found, searching general content...")
-            general_results = controller.search_pages(subject, limit=5)
+            general_results = controller.search_pages(subject, limit=15)  # Increased limit
             print(f"   📊 General search found {len(general_results)} results")
         
         # Combine results, prioritizing ship info and personnel
@@ -402,12 +455,10 @@ def get_tell_me_about_content_prioritized(subject: str) -> str:
         
         # Format the results, excluding mission logs unless specifically requested
         content_parts = []
-        total_chars = 0
-        max_chars = MAX_CHARS_TELL_ME_ABOUT
 
-        for result in unique_results[:5]:  # Top 5 results
+        for result in unique_results:  # Include ALL unique results
             title = result['title']
-            content = result['raw_content']
+            content = result['raw_content']  # NO LENGTH LIMIT
             page_type = result.get('page_type', 'general')
             
             # Skip mission logs unless no other content was found
@@ -425,21 +476,12 @@ def get_tell_me_about_content_prioritized(subject: str) -> str:
                 type_indicator = " [Personnel File]"
             
             page_text = f"**{title}{type_indicator}**\n{content}"
-            
-            if total_chars + len(page_text) <= max_chars:
-                content_parts.append(page_text)
-                total_chars += len(page_text)
-                print(f"   ✓ Added {page_type}: '{title}'")
-            else:
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 200:
-                    content_parts.append(page_text[:remaining_chars] + "...[CONTENT TRUNCATED]")
-                    print(f"   ✓ Added truncated {page_type}: '{title}'")
-                break
+            content_parts.append(page_text)
+            print(f"   ✓ Added {page_type}: '{title}'")
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
-        return truncate_to_token_limit(final_content, MAX_CHARS_TELL_ME_ABOUT // 4)
+        return final_content
         
     except Exception as e:
         print(f"✗ Error getting prioritized 'tell me about' content: {e}")

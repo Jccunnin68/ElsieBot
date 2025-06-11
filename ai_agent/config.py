@@ -20,12 +20,13 @@ GEMMA_MAX_TOKENS = 8192
 GEMMA_SAFETY_MARGIN = 1000  # Reserve tokens for response generation
 MAX_INPUT_TOKENS = GEMMA_MAX_TOKENS - GEMMA_SAFETY_MARGIN  # 7192 tokens
 
-# Character-based limits (conservative estimates)
-MAX_CHARS_CONTEXT = 15000    # ~4000 tokens for context
-MAX_CHARS_LOG = 6000         # ~1500 tokens for logs
-MAX_CHARS_TELL_ME_ABOUT = 3000  # ~750 tokens for tell me about
-MAX_CHARS_SHIP_INFO = 4000   # ~1000 tokens for ship info
-MAX_CHARS_PROMPT_BASE = 8000 # ~2000 tokens for base prompt/instructions
+# Character-based limits REMOVED - Elsie now gets full context
+# These were previously used for truncation but are now disabled
+# MAX_CHARS_CONTEXT = 15000    # ~4000 tokens for context
+# MAX_CHARS_LOG = 6000         # ~1500 tokens for logs
+# MAX_CHARS_TELL_ME_ABOUT = 3000  # ~750 tokens for tell me about
+# MAX_CHARS_SHIP_INFO = 4000   # ~1000 tokens for ship info
+MAX_CHARS_PROMPT_BASE = 8000 # ~2000 tokens for base prompt/instructions (kept for prompt validation)
 
 def estimate_token_count(text: str) -> int:
     """
