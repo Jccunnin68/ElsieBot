@@ -1,6 +1,8 @@
 services:
   ai_agent:
-    image: ${ECR_REGISTRY}/elsie-ai-agent:latest
+    build:
+      context: ./ai_agent
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
@@ -25,9 +27,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
 
   discord_bot:
-    image: ${ECR_REGISTRY}/elsie-discord-bot:latest
+    build:
+      context: ./discord_bot
+      dockerfile: Dockerfile
     env_file:
       - .env
     environment:
@@ -41,6 +46,7 @@ services:
     depends_on:
       ai_agent:
         condition: service_healthy
+    restart: unless-stopped
 
   db_populator:
     build:
@@ -58,10 +64,7 @@ services:
       - WIKI_UPDATE_INTERVAL=3600  # Update every hour
     networks:
       - elsie_network
-    depends_on:
-      elsiebrain_db:
-        condition: service_healthy
-    restart: unless-stopped  # Keep running unless manually stopped
+      
 
 volumes:
   elsiebrain_data:

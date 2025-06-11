@@ -55,18 +55,20 @@ func main() {
 	dg.AddHandler(messageCreate)
 	dg.AddHandler(ready)
 
-	// Add direct message intent
+	// Add required intents
 	dg.Identify.Intents = discordgo.IntentsGuildMessages |
 		discordgo.IntentsMessageContent |
-		discordgo.IntentsDirectMessages
+		discordgo.IntentsDirectMessages |
+		discordgo.IntentsGuildMembers |
+		discordgo.IntentsGuilds
 
 	err = dg.Open()
 	if err != nil {
 		log.Fatal("Error opening connection: ", err)
 	}
 
-	fmt.Println("🍺 Elsie the Holographic Bartender is now online! 🍺")
-	fmt.Println("Press CTRL-C to shut down the holographic matrix.")
+	log.Printf("🍺 Elsie the Holographic Bartender is now online! 🍺")
+	log.Printf("Press CTRL-C to shut down the holographic matrix.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
 	<-sc
@@ -79,10 +81,25 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 	if err != nil {
 		log.Println("Error setting status:", err)
 	}
-	fmt.Printf("Logged in as: %v#%v\n", s.State.User.Username, s.State.User.Discriminator)
+	log.Printf("Logged in as: %v#%v\n", s.State.User.Username, s.State.User.Discriminator)
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	// Enhanced mention detection
+	mentioned := false
+	content := strings.TrimSpace(m.Content)
+
+	/* Debug logging
+	log.Printf("DEBUG: ========= Message Details =========")
+	log.Printf("DEBUG: From: %s (ID: %s)", m.Author.Username, m.Author.ID)
+	log.Printf("DEBUG: Channel: %s", m.ChannelID)
+	log.Printf("DEBUG: Raw Content: %q", m.Content)
+	log.Printf("DEBUG: Mentions: %+v", m.Mentions)
+	log.Printf("DEBUG: Role Mentions: %+v", m.MentionRoles)
+	log.Printf("DEBUG: Bot ID: %s", s.State.User.ID)
+	log.Printf("DEBUG: Bot Username: %s", s.State.User.Username)
+	log.Printf("DEBUG: ================================")
+	*/
 	// Ignore own messages
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -91,22 +108,34 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Check if message is a DM
 	isDM := m.GuildID == ""
 
-	// Check if message mentions the bot or starts with !elsie
-	mentioned := false
-	for _, user := range m.Mentions {
-		if user.ID == s.State.User.ID {
-			mentioned = true
-			break
+	// Simple mention detection - if there are any mentions, process them
+	if len(m.Mentions) > 0 || len(m.MentionRoles) > 0 {
+		// Check user mentions
+		for _, user := range m.Mentions {
+			if user.ID == s.State.User.ID {
+				mentioned = true
+				log.Printf("DEBUG: Bot was mentioned via user mention!")
+				break
+			}
 		}
-	}
 
-	content := strings.TrimSpace(m.Content)
-
-	// Remove bot mention from content
-	if mentioned {
-		content = strings.ReplaceAll(content, "<@"+s.State.User.ID+">", "")
-		content = strings.ReplaceAll(content, "<@!"+s.State.User.ID+">", "")
-		content = strings.TrimSpace(content)
+		// Check role mentions
+		if !mentioned && m.GuildID != "" {
+			for _, roleID := range m.MentionRoles {
+				guild, err := s.Guild(m.GuildID)
+				if err != nil {
+					log.Printf("DEBUG: Error getting guild info: %v", err)
+					continue
+				}
+				for _, role := range guild.Roles {
+					if role.ID == roleID && strings.EqualFold(role.Name, s.State.User.Username) {
+						mentioned = true
+						log.Printf("DEBUG: Bot was mentioned via role mention!")
+						break
+					}
+				}
+			}
+		}
 	}
 
 	// Handle commands
@@ -117,12 +146,36 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			content = "hello"
 		}
 		mentioned = true
+		log.Printf("DEBUG: Command detected, content: %s", content)
 	}
 
 	// Only respond if mentioned, command used, or in DM
 	if !mentioned && !isDM {
+		log.Printf("DEBUG: Message ignored - not mentioned and not DM")
 		return
 	}
+
+	// Clean up the content by removing mentions
+	if mentioned {
+		// Remove user mentions
+		content = strings.ReplaceAll(content, fmt.Sprintf("<@%s>", s.State.User.ID), "")
+		content = strings.ReplaceAll(content, fmt.Sprintf("<@!%s>", s.State.User.ID), "")
+		// Remove role mentions that match the bot's name
+		if m.GuildID != "" {
+			guild, err := s.Guild(m.GuildID)
+			if err == nil {
+				for _, role := range guild.Roles {
+					if strings.EqualFold(role.Name, s.State.User.Username) {
+						content = strings.ReplaceAll(content, fmt.Sprintf("<@&%s>", role.ID), "")
+					}
+				}
+			}
+		}
+		content = strings.TrimSpace(content)
+		log.Printf("DEBUG: Content after removing mention: %s", content)
+	}
+
+	log.Printf("DEBUG: Processing message: %s", content)
 
 	// Handle special Discord commands
 	switch strings.ToLower(content) {
