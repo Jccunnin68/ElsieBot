@@ -1,36 +1,32 @@
-# Elsie: AI-Powered Discord Bot
+# Elsie - AI Holographic Bartender
 
 Elsie is a sophisticated, containerized Discord bot designed for the 22nd Mobile Daedalus Fleet community. She functions as a holographic bartender and stellar cartographer, capable of accessing a comprehensive, self-updating fleet database to provide information on mission logs, ship specifications, personnel files, and more.
 
-The project integrates a Python-based AI agent with a Go-based Discord client, all orchestrated with Docker for seamless development and deployment.
+## Features
+
+- **In-Character Persona**: Elsie maintains a consistent persona as a sophisticated, alluring, and intelligent holographic bartender with a background in dance and music.
+- **Dynamic Response Strategy**: Elsie analyzes user messages to determine the most appropriate response strategy, switching between simple chat, database lookups, and specialized queries.
+- **Database Integration**: She can access a local database for information about ship logs, characters, and other lore-specific details.
+- **Federation Archives Access**: Elsie can query an external API (Memory Alpha) to retrieve canonical Star Trek information when her local database is insufficient.
+- **Date Conversion**: Automatically converts real-world dates to the appropriate Star Trek stardate era.
+- **OOC (Out-of-Character) Handling**: Recognizes and responds to OOC queries for administrative information like game schedules or handbook rules.
+- **Poetic Short-Circuits**: Occasionally, during casual conversation, Elsie may have an "artistic short-circuit," responding with esoteric poetry to enhance her unique personality.
 
 ## Architecture
 
-The system is composed of four main services that work together within a Docker network:
+The AI agent is designed with a modular architecture to separate concerns and improve maintainability.
 
-```mermaid
-graph TD
-    A[Discord User] -- /command --> B(Discord Bot);
-    B -- HTTP Request --> C(AI Agent);
-    C -- SQL Query --> D(Elsiebrain DB);
-    D --> C;
-    C --> B;
-    B -- Response --> A;
+- **`ai_handler.py`**: The main controller that receives user input, determines the overall response strategy, and coordinates with the other modules. It is the central hub for all AI-related processing.
 
-    subgraph "Data Population (Offline Process)"
-        E(Wiki Crawler) -- Writes --> D;
-        F[Fandom Wiki] -- Reads --> E;
-    end
+- **`ai_logic.py`**: This module contains all the core logic for intent detection, conversation flow management, and guard rails. It is responsible for parsing user messages, identifying query types (e.g., character lookup, log search, continuation), and enforcing response constraints, such as preventing the AI from inventing information.
 
-    style B fill:#7289DA,stroke:#FFF,stroke-width:2px
-    style C fill:#3776AB,stroke:#FFF,stroke-width:2px
-    style E fill:#FFCA28,stroke:#FFF,stroke-width:2px
-```
+- **`ai_emotion.py`**: This module manages Elsie's personality and casual conversation. It handles simple chat, greetings, farewells, and provides the unique "poetic short-circuit" responses that give Elsie her artistic flair. All non-database-driven, character-focused interactions are managed here.
 
-1.  **Discord Bot (`discord_bot`)**: A Go application that connects to the Discord gateway, listens for slash commands, and communicates with the AI Agent via an HTTP API.
-2.  **AI Agent (`ai_agent`)**: A Python FastAPI server powered by Google's Gemma model. It processes natural language queries, retrieves context from the `elsiebrain` database, and generates in-character responses.
-3.  **Elsiebrain DB (`elsiebrain_db`)**: A PostgreSQL database that stores all content crawled from the fleet's Fandom wiki. It is the single source of truth for the AI Agent.
-4.  **Wiki Crawler (`db_populator`)**: A standalone Python script responsible for crawling the wiki, classifying pages, and populating or updating the `elsiebrain` database.
+- **`ai_wisdom.py`**: This module is responsible for all database interactions and context generation. When the `ai_handler` determines that a query requires information from the database, it calls on this module to retrieve the relevant data and format it into a context that the AI can use to generate an informed response.
+
+- **`content_retrieval_db.py`**: Handles the direct queries to the local database, retrieving raw information based on search terms.
+
+- **`config.py`**: Contains configuration variables, API keys, and predefined patterns for message processing.
 
 ## Core Components
 
@@ -42,7 +38,7 @@ graph TD
     -   Serves a `/process` endpoint to receive messages from the Discord bot.
     -   Classifies user intent to determine if the query is about logs, ships, characters, or general information.
     -   Constructs detailed, context-rich prompts for the Gemma model.
-    -   Connects to the `elsiebrain_db` for read-only information retrieval using a unified, full-text search capable `search_pages` function.
+    -   Connects to the `elsiebrain` database for read-only information retrieval using a unified, full-text search capable `search_pages` function.
 
 ### Discord Bot (`discord_bot/`)
 
