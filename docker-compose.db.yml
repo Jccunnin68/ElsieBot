@@ -1,0 +1,28 @@
+services:
+  elsiebrain_db:
+    image: postgres:15
+    container_name: elsiebrain_postgres
+    env_file: .env
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "5433:5432"  # Using 5433 to avoid conflicts with local Postgres
+    volumes:
+      - elsiebrain_data:/var/lib/postgresql/data
+    networks:
+      - elsie_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  elsiebrain_data:
+    driver: local
+
+networks:
+  elsie_network:
+    driver: bridge 

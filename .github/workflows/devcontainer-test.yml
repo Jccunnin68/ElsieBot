@@ -2,13 +2,13 @@ name: Test DevContainer Setup
 
 on:
   push:
-    branches: [ main, develop ]
+    #branches: [ main, develop ]
     paths:
       - '.devcontainer/**'
       - 'ai_agent/**'
       - 'discord_bot/**'
   pull_request:
-    branches: [ main ]
+    #branches: [ main ]
     paths:
       - '.devcontainer/**'
       - 'ai_agent/**'  
