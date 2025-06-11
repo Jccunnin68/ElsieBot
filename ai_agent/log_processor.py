@@ -1,8 +1,36 @@
-"""Log processing and character parsing functionality"""
+"""Log processing and character parsing functionality
+
+Enhanced Character Dialogue Parser:
+
+This module now handles the advanced gamemaster format for character dialogue in mission logs:
+
+1. Format: characterName@AccountName: [Actual Character] content
+   - Extracts the "Actual Character" name from brackets when present
+   - Falls back to characterName before @ when no brackets
+   - Applies character name corrections from CHARACTER_CORRECTIONS
+
+2. Action vs Dialogue Detection:
+   - Lines with * or ** are treated as actions
+   - Lines ending with "> >" are emotes
+   - Common action verbs are automatically detected and wrapped in *asterisks*
+   - Regular speech is treated as dialogue
+
+3. Continuation Lines:
+   - Lines from same character@account without new speaker designation
+   - Indented lines or lines that don't end with punctuation
+   - Short phrases (3 words or less) are treated as continuations
+
+4. Enhanced Processing:
+   - Character name corrections applied throughout
+   - Text corrections for typos and standardization
+   - Proper formatting for actions vs dialogue
+   - Maintains speaker context across continuation lines
+"""
 
 import re
 from config import LOG_INDICATORS, SHIP_NAMES
 from models import CHARACTER_CORRECTIONS
+from typing import List, Tuple, Dict
 
 def is_log_query(query: str) -> bool:
     """Determine if the query is asking about logs"""
@@ -125,9 +153,19 @@ def apply_text_corrections(text: str) -> str:
     return corrected_text
 
 def parse_log_characters(log_content: str) -> str:
-    """Parse log content to identify speaking characters and add context with rank/title corrections"""
+    """Parse log content to identify speaking characters and add context with rank/title corrections
     
-    lines = log_content.split('\n')
+    Enhanced to handle new gamemaster format:
+    - characterName@AccountName: [Actual Character] - Extract actual character from brackets
+    - If no [Actual Character], use characterName before @
+    - Things with * or in ** ** are actions, not dialogue
+    - Lines ending with > > or continuation from same character@account are follow ups with dialogue having \"
+    """
+    
+    # First apply the new enhanced character dialogue parsing
+    enhanced_content = parse_character_dialogue(log_content)
+    
+    lines = enhanced_content.split('\n')
     parsed_lines = []
     current_speaker = None
     
@@ -198,4 +236,160 @@ def parse_log_characters(log_content: str) -> str:
         
         parsed_lines.append(line)
     
-    return '\n'.join(parsed_lines) 
+    return '\n'.join(parsed_lines)
+
+def parse_character_dialogue(log_content: str) -> str:
+    """
+    Parse mission log content to extract proper character names and format dialogue/actions.
+    
+    Rules:
+    - characterName@AccountName: [Actual Character] - Extract actual character from brackets
+    - If no [Actual Character], use characterName before @
+    - Things with * or in ** ** are actions, not dialogue
+    - Lines ending with > > or continuation from same character@account are emotes
+    """
+    if not log_content:
+        return log_content
+    
+    lines = log_content.split('\n')
+    processed_lines = []
+    last_speaker = None
+    last_account = None
+    
+    # Pattern to match characterName@AccountName: format
+    speaker_pattern = r'^([^@\s]+)@([^:\s]+):\s*(.*)$'
+    # Pattern to match [Actual Character] in the content
+    actual_character_pattern = r'^\[([^\]]+)\]\s*(.*)$'
+    
+    for line in lines:
+        # Skip empty lines and preserve them
+        if not line.strip():
+            processed_lines.append(line)
+            continue
+        
+        # Check if this line matches the character@account: format
+        speaker_match = re.match(speaker_pattern, line.strip())
+        
+        if speaker_match:
+            character_name = speaker_match.group(1)
+            account_name = speaker_match.group(2)
+            content = speaker_match.group(3)
+            
+            # Check if content starts with [Actual Character]
+            actual_char_match = re.match(actual_character_pattern, content)
+            
+            if actual_char_match:
+                # Use the actual character name from brackets
+                actual_speaker = correct_character_name(actual_char_match.group(1))
+                remaining_content = actual_char_match.group(2)
+            else:
+                # Use the character name before @
+                actual_speaker = correct_character_name(character_name)
+                remaining_content = content
+            
+            # Apply text corrections to content
+            remaining_content = apply_text_corrections(remaining_content)
+            
+            # Update tracking for continuation lines
+            last_speaker = actual_speaker
+            last_account = account_name
+            
+            # Process the content to identify actions vs dialogue
+            formatted_content = format_content_type(remaining_content)
+            
+            # Create the formatted line
+            if formatted_content:
+                processed_lines.append(f"{actual_speaker}: {formatted_content}")
+            else:
+                processed_lines.append(f"{actual_speaker}:")
+        
+        elif line.strip().endswith('> >'):
+            # This is an emote line, likely a continuation
+            emote_content = line.strip()[:-3].strip()  # Remove > >
+            if last_speaker:
+                formatted_emote = format_content_type(emote_content, is_emote=True)
+                processed_lines.append(f"{last_speaker}: {formatted_emote}")
+            else:
+                processed_lines.append(line)
+        
+        elif last_speaker and last_account and not re.match(speaker_pattern, line.strip()):
+            # This might be a continuation line from the same speaker
+            # Check if it looks like a continuation (starts with space, indented, or doesn't end with period)
+            stripped_line = line.strip()
+            is_continuation = (
+                line.startswith(' ') or 
+                line.startswith('\t') or 
+                not stripped_line.endswith('.') or
+                not stripped_line.endswith('!') or
+                not stripped_line.endswith('?') or
+                len(stripped_line.split()) <= 3  # Short phrases are likely continuations
+            )
+            
+            if is_continuation and stripped_line:
+                # Apply text corrections before formatting
+                corrected_content = apply_text_corrections(stripped_line)
+                formatted_content = format_content_type(corrected_content)
+                if formatted_content:
+                    processed_lines.append(f"{last_speaker}: {formatted_content}")
+                else:
+                    processed_lines.append(line)
+            else:
+                # Not a continuation, reset speaker tracking
+                last_speaker = None
+                last_account = None
+                processed_lines.append(line)
+        
+        else:
+            # Regular line, not matching any patterns
+            processed_lines.append(line)
+    
+    return '\n'.join(processed_lines)
+
+def format_content_type(content: str, is_emote: bool = False) -> str:
+    """
+    Format content to distinguish between actions and dialogue.
+    
+    Rules:
+    - Content starting with * or in ** ** brackets are actions
+    - Everything else is dialogue
+    - Emotes are formatted as actions
+    """
+    if not content.strip():
+        return content
+    
+    content = content.strip()
+    
+    # Check if it's already in action format (starts with * or wrapped in **)
+    if content.startswith('*') or (content.startswith('**') and content.endswith('**')):
+        return f"*{content.strip('*').strip()}*"  # Normalize to single asterisks
+    
+    # Check if it's an emote
+    if is_emote:
+        return f"*{content}*"
+    
+    # Check for common action verbs and patterns
+    action_patterns = [
+        r'^(walks?|runs?|sits?|stands?|looks?|turns?|moves?|enters?|exits?|approaches?)',
+        r'^(nods?|smiles?|frowns?|laughs?|sighs?|shrugs?)',
+        r'^(grabs?|picks? up|puts? down|places?|holds?|drops?)',
+        r'^(points?|gestures?|waves?|raises?|lowers?)',
+        r'^\*.*\*$',  # Already wrapped in asterisks
+        r'^.*\btaps?\b.*',
+        r'^.*\bpresses?\b.*',
+        r'^.*\bactivates?\b.*'
+    ]
+    
+    # Check if content matches action patterns
+    for pattern in action_patterns:
+        if re.match(pattern, content.lower()):
+            # Don't double-wrap if already wrapped
+            if content.startswith('*') and content.endswith('*'):
+                return content
+            return f"*{content}*"
+    
+    # Check for action indicators within the content
+    if any(indicator in content.lower() for indicator in ['*action*', '*emote*', '*does*', '*performs*']):
+        return f"*{content}*"
+    
+    # Otherwise, treat as dialogue
+    return content 
