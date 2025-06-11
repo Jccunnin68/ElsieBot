@@ -76,17 +76,17 @@ class DatabaseOperations:
                 with conn.cursor() as cur:
                     cur.execute("""
                         INSERT INTO page_metadata 
-                        (url, title, content_hash, last_crawled, crawl_count, status, last_error)
+                        (url, title, content_hash, last_crawled, crawl_count, status, error_message)
                         VALUES (%s, %s, %s, NOW(), 1, %s, %s)
-                        ON CONFLICT (url) 
+                        ON CONFLICT (title) 
                         DO UPDATE SET
-                            title = EXCLUDED.title,
+                            url = EXCLUDED.url,
                             content_hash = EXCLUDED.content_hash,
                             last_crawled = NOW(),
                             crawl_count = page_metadata.crawl_count + 1,
                             status = EXCLUDED.status,
-                            last_error = EXCLUDED.last_error,
-                            last_modified = NOW()
+                            error_message = EXCLUDED.error_message,
+                            updated_at = NOW()
                     """, (url, page_title, content_hash, status, error_message))
                     conn.commit()
         except Exception as e:

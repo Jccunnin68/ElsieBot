@@ -78,7 +78,7 @@ def create_schema():
                 CREATE TABLE page_metadata (
                     id SERIAL PRIMARY KEY,
                     title VARCHAR(255) NOT NULL UNIQUE,
-                    url VARCHAR(500) NOT NULL,
+                    url VARCHAR(500) NOT NULL UNIQUE,
                     content_hash VARCHAR(64) NOT NULL,
                     last_crawled TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     crawl_count INTEGER DEFAULT 1,

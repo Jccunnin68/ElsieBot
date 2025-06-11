@@ -56,5 +56,38 @@ else\n\
 fi' > /app/restore_seed.sh \
     && chmod +x /app/restore_seed.sh
 
-# Default command - restore seed backup or populate sample data
-CMD ["/app/restore_seed.sh"] 
+# Create an interactive startup script
+RUN echo '#!/bin/bash\n\
+echo "🚀 DB Populator Interactive Container"\n\
+echo "===================================="\n\
+export PGPASSWORD="${DB_PASSWORD:-elsie123}"\n\
+export DB_HOST="${DB_HOST:-elsiebrain_db}"\n\
+export DB_NAME="${DB_NAME:-elsiebrain}"\n\
+export DB_USER="${DB_USER:-elsie}"\n\
+export DB_PORT="${DB_PORT:-5432}"\n\
+\n\
+echo "🔄 Waiting for database to be ready..."\n\
+while ! pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER"; do\n\
+  echo "   ⏳ Database not ready, waiting..."\n\
+  sleep 2\n\
+done\n\
+echo "✅ Database is ready!"\n\
+echo ""\n\
+echo "📋 Available commands:"\n\
+echo "  python populate_db.py          - Populate with sample data"\n\
+echo "  python wiki_crawler.py --help  - See crawler options"\n\
+echo "  python backup_db.py backup     - Create backup"\n\
+echo "  python backup_db.py restore    - Restore from backup"\n\
+echo "  python backup_db.py seed       - Create seed backup"\n\
+echo "  /app/restore_seed.sh           - Restore seed backup"\n\
+echo ""\n\
+echo "💡 Container will stay running. Use Ctrl+C to exit."\n\
+echo "   Or run: docker exec -it <container_name> /bin/bash"\n\
+echo ""\n\
+\n\
+# Keep container running\n\
+tail -f /dev/null' > /app/interactive_start.sh \
+    && chmod +x /app/interactive_start.sh
+
+# Keep container running for interactive use
+CMD ["/app/interactive_start.sh"] 

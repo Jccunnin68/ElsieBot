@@ -10,7 +10,6 @@ Main orchestrator that coordinates the modular components:
 - content_extractor: High-level extraction strategies  
 - db_operations: Database connections and persistence
 """
-
 import time
 import sys
 import logging
@@ -92,11 +91,9 @@ class WikiCrawlerContainer:
         successful_crawls = 0
         updated_pages = 0
         skipped_pages = 0
-        start_time = time.time()
         
         for i, page_title in enumerate(page_titles, 1):
             logger.info(f"\n[{i}/{len(page_titles)}] Processing: {page_title}")
-            page_start_time = time.time()
             
             # Check if we should update this page
             if not force_update:
@@ -115,32 +112,26 @@ class WikiCrawlerContainer:
                 # Calculate content hash
                 content_hash = self.content_processor.calculate_content_hash(page_data['raw_content'])
                 
-                # Save to database
+                # Update metadata first (before saving pages that might split)
+                self.db_ops.upsert_page_metadata(
+                    page_data['title'],
+                    page_data['url'],
+                    content_hash,
+                    status='active'
+                )
+                
+                # Save to database (may create multiple entries for split content)
                 if self.db_ops.save_page_to_database(page_data, self.content_processor):
                     successful_crawls += 1
-                    
-                    # Update metadata
-                    self.db_ops.upsert_page_metadata(
-                        page_data['title'],
-                        page_data['url'],
-                        content_hash,
-                        status='active'
-                    )
                     updated_pages += 1
-                    
-                    # Performance metrics
-                    page_time = time.time() - page_start_time
-                    print(f"  ⏱️  Processed in {page_time:.2f}s")
             
             # Reduced sleep time for better performance
             time.sleep(1)  # Reduced from 2 seconds
         
-        total_time = time.time() - start_time
-        logger.info(f"\n🌐 Modular wiki crawling complete in {total_time:.2f} seconds!")
+        logger.info(f"\n🌐 Modular wiki crawling complete!")
         logger.info(f"✓ Successfully crawled: {successful_crawls} pages")
         logger.info(f"✓ Updated: {updated_pages} pages")
         logger.info(f"⏭️  Skipped (unchanged): {skipped_pages} pages")
-        logger.info(f"⚡ Average time per page: {total_time/len(page_titles):.2f}s")
         
         return successful_crawls
 
@@ -206,13 +197,14 @@ def main():
             page_data = crawler.extract_page_content(specific_page)
             if page_data:
                 content_hash = crawler.content_processor.calculate_content_hash(page_data['raw_content'])
+                # Update metadata first (before saving pages that might split)
+                crawler.db_ops.upsert_page_metadata(
+                    page_data['title'],
+                    page_data['url'],
+                    content_hash,
+                    status='active'
+                )
                 if crawler.db_ops.save_page_to_database(page_data, crawler.content_processor):
-                    crawler.db_ops.upsert_page_metadata(
-                        page_data['title'],
-                        page_data['url'],
-                        content_hash,
-                        status='active'
-                    )
                     print("✓ Successfully crawled and saved page")
                 else:
                     print("✗ Failed to save page to database")
