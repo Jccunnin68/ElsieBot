@@ -218,7 +218,7 @@ def mock_ai_response(user_message: str) -> str:
             search_query = "general information"
         
         # Search archives and provide response
-        archives_info = search_memory_alpha(search_query, limit=3)
+        archives_info = search_memory_alpha(search_query, limit=3, is_federation_archives=True)
         
         if archives_info:
             converted_archives_info = convert_earth_date_to_star_trek(archives_info)

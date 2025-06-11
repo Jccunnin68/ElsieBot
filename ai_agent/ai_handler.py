@@ -358,12 +358,13 @@ Stay in character as this intelligent, sophisticated, subtly alluring bartender.
                 prompt = essential_prompt
                 print(f"   📦 Using essential prompt: {essential_tokens} tokens")
             else:
-                chunks = chunk_prompt_for_tokens(context, 6000)
-                print(f"   📦 Context chunked into {len(chunks)} parts")
+                # Use larger chunks close to the 7192 token limit to maximize context
+                chunks = chunk_prompt_for_tokens(context, 7192)  # Use 7000 to leave room for prompt structure
+                print(f"   📦 Context chunked into {len(chunks)} parts using large chunks")
                 
                 prompt = f"{chunks[0]}\n\nCustomer: {user_message}\nElsie:"
                 final_tokens = estimate_token_count(prompt)
-                print(f"   📦 Using first chunk: {final_tokens} tokens")
+                print(f"   📦 Using first large chunk: {final_tokens} tokens")
         
         # Generate response
         response = model.generate_content(prompt)

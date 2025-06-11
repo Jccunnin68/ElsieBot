@@ -202,7 +202,7 @@ def _get_federation_archives_context(user_message: str) -> str:
         search_query = "general information"
     
     print(f"🏛️ SEARCHING FEDERATION ARCHIVES: '{search_query}'")
-    archives_info = search_memory_alpha(search_query, limit=3)
+    archives_info = search_memory_alpha(search_query, limit=3, is_federation_archives=True)
     print(f"   - Retrieved archives content length: {len(archives_info)} chars")
     
     converted_archives_info = convert_earth_date_to_star_trek(archives_info) if archives_info else archives_info
