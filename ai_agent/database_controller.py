@@ -63,7 +63,7 @@ class FleetDatabaseController:
                         
                         if detected_ship:
                             ship_query = """
-                                SELECT id, title, content, raw_content, page_type, ship_name, log_date, url
+                                SELECT id, title, raw_content, page_type, ship_name, log_date, url
                                 FROM wiki_pages 
                                 WHERE ship_name = %s
                                 ORDER BY log_date DESC
@@ -77,7 +77,7 @@ class FleetDatabaseController:
                     # STEP 2: Title-based full-text search
                     print(f"   🔍 Title FTS search...")
                     title_query = """
-                        SELECT id, title, content, raw_content, page_type, ship_name, log_date, url,
+                        SELECT id, title, raw_content, page_type, ship_name, log_date, url,
                                ts_rank(to_tsvector('english', title), 
                                       plainto_tsquery('english', %s)) as rank
                         FROM wiki_pages 
@@ -112,7 +112,7 @@ class FleetDatabaseController:
                     if len(all_results) < limit:
                         print(f"   🔍 Content FTS search...")
                         content_query = """
-                            SELECT id, title, content, raw_content, page_type, ship_name, log_date, url,
+                            SELECT id, title, raw_content, page_type, ship_name, log_date, url,
                                    ts_rank(to_tsvector('english', raw_content), 
                                           plainto_tsquery('english', %s)) as rank
                             FROM wiki_pages 
@@ -148,7 +148,7 @@ class FleetDatabaseController:
                     if not all_results:
                         print(f"   🔄 Fallback LIKE search...")
                         like_query = """
-                            SELECT id, title, content, raw_content, page_type, ship_name, log_date, url
+                            SELECT id, title, raw_content, page_type, ship_name, log_date, url
                             FROM wiki_pages 
                             WHERE (LOWER(title) LIKE LOWER(%s) OR LOWER(raw_content) LIKE LOWER(%s))
                         """
@@ -187,6 +187,11 @@ class FleetDatabaseController:
                     for i, result in enumerate(unique_results[:3]):
                         title_preview = result['title'][:50] + "..." if len(result['title']) > 50 else result['title']
                         print(f"      📄 Result {i+1}: '{title_preview}' ({result['ship_name']})")
+                    
+                    # Track content access for all returned results
+                    if unique_results:
+                        page_ids = [result['id'] for result in unique_results]
+                        self.update_content_accessed(page_ids)
                     
                     return unique_results
                     
@@ -236,7 +241,7 @@ class FleetDatabaseController:
         
         for result in results:
             title = result['title']
-            content = result['raw_content'][:10000]  # Limit individual content
+            content = result['raw_content'][:30000]  # Limit individual content
             
             page_text = f"**{title}**\n{content}"
             
@@ -276,12 +281,65 @@ class FleetDatabaseController:
                     params.append(limit)
                     
                     cur.execute(query, params)
-                    return [dict(row) for row in cur.fetchall()]
+                    results = [dict(row) for row in cur.fetchall()]
+                    
+                    # Track content access for returned logs
+                    if results:
+                        page_ids = [result['id'] for result in results]
+                        self.update_content_accessed(page_ids)
+                    
+                    return results
                     
         except Exception as e:
             print(f"✗ Error getting recent logs: {e}")
             return []
     
+    def update_content_accessed(self, page_ids: List[int]) -> bool:
+        """Update content_accessed counter for the given page IDs"""
+        if not page_ids:
+            return True
+            
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Update content_accessed counter for all provided page IDs
+                    cur.execute("""
+                        UPDATE wiki_pages 
+                        SET content_accessed = content_accessed + 1,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ANY(%s)
+                    """, (page_ids,))
+                    
+                    updated_count = cur.rowcount
+                    conn.commit()
+                    
+                    if updated_count > 0:
+                        print(f"   📊 Updated content_accessed for {updated_count} pages")
+                    
+                    return True
+                    
+        except Exception as e:
+            print(f"✗ Error updating content_accessed: {e}")
+            return False
+
+    def get_content_access_stats(self) -> List[Dict]:
+        """Get content access statistics - most accessed pages"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT title, page_type, ship_name, content_accessed, 
+                               LEFT(raw_content, 100) as content_preview
+                        FROM wiki_pages 
+                        WHERE content_accessed > 0
+                        ORDER BY content_accessed DESC, title ASC
+                        LIMIT 20
+                    """)
+                    return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            print(f"✗ Error getting content access stats: {e}")
+            return []
+
     def get_stats(self) -> Dict:
         """Get database statistics"""
         try:
@@ -293,7 +351,9 @@ class FleetDatabaseController:
                             COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
                             COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
                             COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
-                            COUNT(DISTINCT ship_name) as unique_ships
+                            COUNT(DISTINCT ship_name) as unique_ships,
+                            SUM(content_accessed) as total_accesses,
+                            AVG(content_accessed) as avg_accesses_per_page
                         FROM wiki_pages
                     """)
                     return dict(cur.fetchone())

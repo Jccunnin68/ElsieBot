@@ -41,7 +41,6 @@ class ContentExtractor:
                     return {
                         'title': page_title,
                         'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'content': formatted_content,
                         'raw_content': formatted_content,
                         'crawled_at': datetime.now()
                     }
@@ -60,7 +59,6 @@ class ContentExtractor:
                     return {
                         'title': page_title,
                         'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'content': formatted_content,
                         'raw_content': formatted_content,
                         'crawled_at': datetime.now()
                     }
@@ -75,7 +73,6 @@ class ContentExtractor:
                     return {
                         'title': page_title,
                         'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'content': processed_content,
                         'raw_content': processed_content,
                         'crawled_at': datetime.now()
                     }
@@ -115,7 +112,6 @@ class ContentExtractor:
                     page_data = {
                         'title': page_title,
                         'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'content': formatted_content,      # Same content in both fields
                         'raw_content': formatted_content,  # Same content in both fields  
                         'crawled_at': datetime.now()
                     }
@@ -151,7 +147,6 @@ class ContentExtractor:
                     page_data = {
                         'title': page_title,
                         'url': url,
-                        'content': processed_content,
                         'raw_content': processed_content,
                         'crawled_at': datetime.now()
                     }
