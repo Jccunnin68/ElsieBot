@@ -1,55 +1,290 @@
-name: Deploy to AWS EC2
+name: Deploy Elsie to AWS EC2
 
 on:
-  push:
-    #branches: [ main ]
-  pull_request:
-    #branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+env:
+  AWS_REGION: us-east-2
+  PROJECT_NAME: elsie
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
+      image-tag: ${{ steps.meta.outputs.tag }}
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+        aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Build and push Docker images
+    - name: Generate image metadata
+      id: meta
+      run: |
+        SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+        IMAGE_TAG="${{ github.ref_name }}-${SHORT_SHA}-$(date +%s)"
+        echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+        echo "short-sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+    - name: Build and push AI Agent image
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY_AI: elsie-ai-agent
-        ECR_REPOSITORY_BOT: elsie-discord-bot
-        IMAGE_TAG: ${{ github.sha }}
+        ECR_REPOSITORY: ${{ env.PROJECT_NAME }}/ai-agent
+        IMAGE_TAG: ${{ steps.meta.outputs.tag }}
       run: |
-        # Build and push AI Agent
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_AI:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY_AI:latest ./ai_agent
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY_AI:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY_AI:latest
+        echo "Building AI Agent image..."
+        docker build \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+          -f ./ai_agent/Dockerfile \
+          ./ai_agent
+        
+        echo "Pushing AI Agent image..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-        # Build and push Discord Bot
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_BOT:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY_BOT:latest ./discord_bot
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY_BOT:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY_BOT:latest
+    - name: Build and push Discord Bot image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ env.PROJECT_NAME }}/discord-bot
+        IMAGE_TAG: ${{ steps.meta.outputs.tag }}
+      run: |
+        echo "Building Discord Bot image..."
+        docker build \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+          -f ./discord_bot/Dockerfile \
+          ./discord_bot
+        
+        echo "Pushing Discord Bot image..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+    - name: Build and push DB Populator image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ env.PROJECT_NAME }}/db-populator
+        IMAGE_TAG: ${{ steps.meta.outputs.tag }}
+      run: |
+        echo "Building DB Populator image..."
+        docker build \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+          -f ./db_populator/Dockerfile \
+          ./db_populator
+        
+        echo "Pushing DB Populator image..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
+      uses: appleboy/ssh-action@v1.0.3
+      env:
+        ECR_REGISTRY: ${{ needs.build.outputs.registry }}
+        IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        PROJECT_NAME: ${{ env.PROJECT_NAME }}
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
+        timeout: 300s
+        command_timeout: 60s
         script: |
+          set -e
+          
+          echo "Starting deployment to EC2..."
+          
+          # Create project directory if it doesn't exist
+          mkdir -p /home/ec2-user/elsie
           cd /home/ec2-user/elsie
-          echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" > .env
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-          docker-compose pull
-          docker-compose up -d 
+          
+          # Create logs directory
+          mkdir -p logs
+          
+          # Login to ECR
+          echo "Logging into ECR..."
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ needs.build.outputs.registry }}
+          
+          # Create environment file
+          echo "Creating environment file..."
+          cat > .env << EOF
+          # Database Configuration
+          DB_NAME=${{ secrets.DB_NAME || 'elsiebrain' }}
+          DB_USER=${{ secrets.DB_USER || 'elsie' }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=elsiebrain_db
+          DB_PORT=5432
+          
+          # Discord Configuration
+          DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+          
+          # API Keys
+          GEMMA_API_KEY=${{ secrets.GEMMA_API_KEY }}
+          
+          # Application Configuration
+          PORT=8000
+          AI_AGENT_URL=http://ai_agent:8000
+          WIKI_UPDATE_INTERVAL=3600
+          EOF
+          
+          # Create docker-compose.yml for production deployment
+          echo "Creating production docker-compose.yml..."
+          cat > docker-compose.yml << 'COMPOSE_EOF'
+          services:
+            ai_agent:
+              image: ${{ needs.build.outputs.registry }}/${{ env.PROJECT_NAME }}/ai-agent:latest
+              ports:
+                - "8000:8000"
+              env_file:
+                - .env
+              environment:
+                - PORT=8000
+                - DB_HOST=elsiebrain_db
+                - DB_PORT=5432
+              networks:
+                - elsie_network
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+              restart: unless-stopped
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+
+            discord_bot:
+              image: ${{ needs.build.outputs.registry }}/${{ env.PROJECT_NAME }}/discord-bot:latest
+              env_file:
+                - .env
+              environment:
+                - AI_AGENT_URL=http://ai_agent:8000
+              networks:
+                - elsie_network
+              depends_on:
+                ai_agent:
+                  condition: service_healthy
+              restart: unless-stopped
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+
+            db_populator:
+              image: ${{ needs.build.outputs.registry }}/${{ env.PROJECT_NAME }}/db-populator:latest
+              container_name: elsiebrain_populator
+              env_file:
+                - .env
+              environment:
+                - DB_HOST=elsiebrain_db
+                - DB_PORT=5432
+                - WIKI_UPDATE_INTERVAL=3600
+              networks:
+                - elsie_network
+              restart: unless-stopped
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+
+          networks:
+            elsie_network:
+              driver: bridge
+          COMPOSE_EOF
+          
+          # Pull latest images
+          echo "Pulling latest Docker images..."
+          docker compose pull
+          
+          # Stop existing containers gracefully
+          echo "Stopping existing containers..."
+          docker compose down --timeout 30 || true
+          
+          # Remove old images (keep last 3 versions)
+          echo "Cleaning up old Docker images..."
+          docker image prune -f || true
+          
+          # Start services
+          echo "Starting services..."
+          docker compose up -d
+          
+          # Wait for services to be healthy
+          echo "Waiting for services to be healthy..."
+          sleep 30
+          
+          # Check service status
+          echo "Checking service status..."
+          docker compose ps
+          
+          # Check AI Agent health
+          echo "Checking AI Agent health..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/ >/dev/null 2>&1; then
+              echo "AI Agent is healthy!"
+              break
+            fi
+            echo "Waiting for AI Agent... ($i/30)"
+            sleep 10
+          done
+          
+          # Show final status
+          echo "Deployment completed successfully!"
+          echo "Services status:"
+          docker compose ps
+          
+          echo "Recent logs:"
+          docker compose logs --tail=20
+
+  notify:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment status
+      if: contains(needs.*.result, 'failure')
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Build status: ${{ needs.build.result }}"
+        echo "Deploy status: ${{ needs.deploy.result }}"
+        exit 1
+        
+    - name: Notify deployment success
+      if: needs.deploy.result == 'success'
+      run: |
+        echo "✅ Deployment successful!"
+        echo "Image tag: ${{ needs.build.outputs.image-tag }}"
+        echo "Environment: ${{ github.event.inputs.environment || 'production' }}" 

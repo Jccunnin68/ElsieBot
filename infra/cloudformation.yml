@@ -1,0 +1,340 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Elsie Discord Bot Infrastructure'
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  
+  ProjectName:
+    Description: Name of the project for resource naming
+    Type: String
+    Default: elsie
+    AllowedPattern: ^[a-z][a-z0-9-]*$
+    ConstraintDescription: must start with a letter and contain only lowercase letters, numbers, and hyphens.
+
+Resources:
+  # ECR Repositories for each service
+  ElsieAIAgentRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}/ai-agent"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  ElsieDiscordBotRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}/discord-bot"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  ElsieDbPopulatorRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}/db-populator"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  # CloudWatch Log Group for Elsie
+  ElsieLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/ec2/${ProjectName}"
+      RetentionInDays: 30
+
+  # Security Group
+  ElsieSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-security-group"
+      GroupDescription: Security group for Elsie Discord Bot
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: replace_with_your_ip
+          Description: SSH access
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+          Description: AI Agent API port
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-security-group"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # IAM Role with minimal permissions
+  ElsieInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-instance-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-ecr-policy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                Resource:
+                  - !GetAtt ElsieAIAgentRepository.Arn
+                  - !GetAtt ElsieDiscordBotRepository.Arn
+                  - !GetAtt ElsieDbPopulatorRepository.Arn
+        - PolicyName: !Sub "${ProjectName}-cloudwatch-policy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt ElsieLogGroup.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-instance-role"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ElsieInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${ProjectName}-instance-profile"
+      Path: "/"
+      Roles:
+        - !Ref ElsieInstanceRole
+
+  # EC2 Instance
+  ElsieEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c7217cdde317cfec  # Amazon Linux 2023 AMI (update as needed)
+      InstanceType: t3.micro  # Updated to t3.micro for better performance
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref ElsieSecurityGroup
+      IamInstanceProfile: !Ref ElsieInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          
+          # Install Docker
+          yum install -y docker
+          systemctl start docker
+          systemctl enable docker
+          usermod -a -G docker ec2-user
+          
+          # Install Docker Compose
+          curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+          
+          # Install AWS CLI v2
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+          rm -rf aws awscliv2.zip
+          
+          # Install CloudWatch agent
+          yum install -y amazon-cloudwatch-agent
+          
+          # Configure CloudWatch agent
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << EOF
+          {
+            "logs": {
+              "logs_collected": {
+                "files": {
+                  "collect_list": [
+                    {
+                      "file_path": "/var/log/messages",
+                      "log_group_name": "${ElsieLogGroup}",
+                      "log_stream_name": "{instance_id}/system",
+                      "timezone": "UTC"
+                    },
+                    {
+                      "file_path": "/home/ec2-user/elsie/logs/*.log",
+                      "log_group_name": "${ElsieLogGroup}",
+                      "log_stream_name": "{instance_id}/elsie",
+                      "timezone": "UTC"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+          EOF
+          
+          # Start CloudWatch agent
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+          
+          # Create project directory
+          mkdir -p /home/ec2-user/elsie/logs
+          chown -R ec2-user:ec2-user /home/ec2-user/elsie
+          
+          # Create environment file template
+          cat > /home/ec2-user/elsie/.env.template << EOF
+          # Database Configuration
+          DB_NAME=elsiebrain
+          DB_USER=elsie
+          DB_PASSWORD=your_password_here
+          
+          # Discord Configuration
+          DISCORD_TOKEN=your_discord_token_here
+          
+          # API Keys
+          GEMMA_API_KEY=your_gemma_key_here
+          EOF
+          
+          chown ec2-user:ec2-user /home/ec2-user/elsie/.env.template
+          
+          # Create deployment script
+          cat > /home/ec2-user/elsie/deploy-from-ecr.sh << 'EOF'
+          #!/bin/bash
+          
+          # Get AWS region and account ID
+          REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
+          # Login to ECR
+          aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+          
+          # Pull and run containers from ECR
+          echo "Pulling images from ECR..."
+          docker pull $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/${ProjectName}/ai-agent:latest
+          docker pull $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/${ProjectName}/discord-bot:latest
+          docker pull $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/${ProjectName}/db-populator:latest
+          
+          echo "Deployment from ECR complete!"
+          EOF
+          
+          chmod +x /home/ec2-user/elsie/deploy-from-ecr.sh
+          chown ec2-user:ec2-user /home/ec2-user/elsie/deploy-from-ecr.sh
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-instance"
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  InstanceId:
+    Description: Instance ID of the EC2 instance
+    Value: !Ref ElsieEC2Instance
+    Export:
+      Name: !Sub "${AWS::StackName}-InstanceId"
+      
+  InstancePublicDNS:
+    Description: Public DNS name of the instance
+    Value: !GetAtt ElsieEC2Instance.PublicDnsName
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicDNS"
+      
+  InstancePublicIP:
+    Description: Public IP address of the instance
+    Value: !GetAtt ElsieEC2Instance.PublicIp
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicIP"
+  
+  AIAgentECRRepository:
+    Description: ECR Repository URI for AI Agent
+    Value: !GetAtt ElsieAIAgentRepository.RepositoryUri
+    Export:
+      Name: !Sub "${AWS::StackName}-AIAgentECR"
+      
+  DiscordBotECRRepository:
+    Description: ECR Repository URI for Discord Bot
+    Value: !GetAtt ElsieDiscordBotRepository.RepositoryUri
+    Export:
+      Name: !Sub "${AWS::StackName}-DiscordBotECR"
+      
+  DbPopulatorECRRepository:
+    Description: ECR Repository URI for DB Populator
+    Value: !GetAtt ElsieDbPopulatorRepository.RepositoryUri
+    Export:
+      Name: !Sub "${AWS::StackName}-DbPopulatorECR"
+      
+  CloudWatchLogGroup:
+    Description: CloudWatch Log Group for Elsie
+    Value: !Ref ElsieLogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-LogGroup"
+      
+  SecurityGroupId:
+    Description: Security Group ID for Elsie
+    Value: !Ref ElsieSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-SecurityGroup" 

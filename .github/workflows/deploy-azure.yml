@@ -1,0 +1,252 @@
+name: Deploy Elsie to Azure (Terraform)
+
+# This workflow is INACTIVE by default
+# To activate: Set ENABLE_AZURE_DEPLOYMENT=true in repository secrets
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      terraform_action:
+        description: 'Terraform action to perform'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+        - plan
+        - apply
+        - destroy
+
+env:
+  AZURE_LOCATION: "East US 2"
+  PROJECT_NAME: elsie
+  TF_VAR_project_name: elsie
+  TF_VAR_azure_location: "East US 2"
+  TF_VAR_environment: ${{ github.event.inputs.environment }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    # SAFETY: This prevents accidental runs - remove this condition to activate
+    if: vars.ENABLE_AZURE_DEPLOYMENT == 'true'
+    environment: 
+      name: azure-${{ github.event.inputs.environment }}
+    
+    defaults:
+      run:
+        working-directory: infra
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "~1.0"
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="resource_group_name=${{ secrets.AZURE_TERRAFORM_RG }}" \
+          -backend-config="storage_account_name=${{ secrets.AZURE_TERRAFORM_STORAGE }}" \
+          -backend-config="container_name=tfstate" \
+          -backend-config="key=elsie/${{ github.event.inputs.environment }}/terraform.tfstate"
+      working-directory: infra
+
+    - name: Terraform Validate
+      run: terraform validate terraform-azure.tf
+
+    - name: Terraform Plan
+      id: plan
+      run: |
+        terraform plan \
+          -target="terraform-azure.tf" \
+          -var="discord_token=${{ secrets.DISCORD_TOKEN }}" \
+          -var="gemma_api_key=${{ secrets.GEMMA_API_KEY }}" \
+          -var="db_password=${{ secrets.DB_PASSWORD }}" \
+          -out=tfplan-azure
+      env:
+        TF_VAR_discord_token: ${{ secrets.DISCORD_TOKEN }}
+        TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+    - name: Comment Plan on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const output = `#### Terraform Azure Plan 📖
+          
+          <details><summary>Show Plan</summary>
+          
+          \`\`\`terraform
+          ${{ steps.plan.outputs.stdout }}
+          \`\`\`
+          
+          </details>
+          
+          *Environment:* \`${{ github.event.inputs.environment }}\`
+          *Location:* \`${{ env.AZURE_LOCATION }}\`
+          *Pusher:* @${{ github.actor }}
+          *Action:* \`${{ github.event.inputs.terraform_action }}\``;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+    - name: Terraform Apply
+      if: github.event.inputs.terraform_action == 'apply'
+      run: terraform apply tfplan-azure
+
+    - name: Terraform Destroy
+      if: github.event.inputs.terraform_action == 'destroy'
+      run: |
+        terraform destroy \
+          -var="discord_token=${{ secrets.DISCORD_TOKEN }}" \
+          -var="gemma_api_key=${{ secrets.GEMMA_API_KEY }}" \
+          -var="db_password=${{ secrets.DB_PASSWORD }}" \
+          -auto-approve
+      env:
+        TF_VAR_discord_token: ${{ secrets.DISCORD_TOKEN }}
+        TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+    - name: Output Infrastructure Info
+      if: github.event.inputs.terraform_action == 'apply'
+      run: |
+        echo "## Azure Infrastructure Deployed 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Location:** ${{ env.AZURE_LOCATION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Outputs" >> $GITHUB_STEP_SUMMARY
+        terraform output -json | jq -r 'to_entries[] | "- **\(.key):** \(.value.value)"' >> $GITHUB_STEP_SUMMARY
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: terraform
+    if: github.event.inputs.terraform_action == 'apply' && vars.ENABLE_AZURE_DEPLOYMENT == 'true'
+    environment: 
+      name: azure-${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get Container Registry credentials
+      id: acr-creds
+      run: |
+        cd infra
+        ACR_LOGIN_SERVER=$(terraform output -raw container_registry_login_server)
+        ACR_USERNAME=$(terraform output -raw container_registry_admin_username)
+        ACR_PASSWORD=$(terraform output -raw container_registry_admin_password)
+        
+        echo "login-server=$ACR_LOGIN_SERVER" >> $GITHUB_OUTPUT
+        echo "username=$ACR_USERNAME" >> $GITHUB_OUTPUT
+        echo "password=$ACR_PASSWORD" >> $GITHUB_OUTPUT
+
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ steps.acr-creds.outputs.login-server }}
+        username: ${{ steps.acr-creds.outputs.username }}
+        password: ${{ steps.acr-creds.outputs.password }}
+
+    - name: Get Container Registry URLs
+      id: registry-urls
+      run: |
+        cd infra
+        AI_AGENT_URL=$(terraform output -json container_registry_urls | jq -r '.ai_agent')
+        DISCORD_BOT_URL=$(terraform output -json container_registry_urls | jq -r '.discord_bot')
+        DB_POPULATOR_URL=$(terraform output -json container_registry_urls | jq -r '.db_populator')
+        
+        echo "ai-agent-url=$AI_AGENT_URL" >> $GITHUB_OUTPUT
+        echo "discord-bot-url=$DISCORD_BOT_URL" >> $GITHUB_OUTPUT
+        echo "db-populator-url=$DB_POPULATOR_URL" >> $GITHUB_OUTPUT
+
+    - name: Build and push AI Agent
+      run: |
+        docker build -t ${{ steps.registry-urls.outputs.ai-agent-url }}:${{ github.sha }} \
+                     -t ${{ steps.registry-urls.outputs.ai-agent-url }}:latest \
+                     -f ai_agent/Dockerfile ai_agent/
+        docker push ${{ steps.registry-urls.outputs.ai-agent-url }}:${{ github.sha }}
+        docker push ${{ steps.registry-urls.outputs.ai-agent-url }}:latest
+
+    - name: Build and push Discord Bot
+      run: |
+        docker build -t ${{ steps.registry-urls.outputs.discord-bot-url }}:${{ github.sha }} \
+                     -t ${{ steps.registry-urls.outputs.discord-bot-url }}:latest \
+                     -f discord_bot/Dockerfile discord_bot/
+        docker push ${{ steps.registry-urls.outputs.discord-bot-url }}:${{ github.sha }}
+        docker push ${{ steps.registry-urls.outputs.discord-bot-url }}:latest
+
+    - name: Build and push DB Populator
+      run: |
+        docker build -t ${{ steps.registry-urls.outputs.db-populator-url }}:${{ github.sha }} \
+                     -t ${{ steps.registry-urls.outputs.db-populator-url }}:latest \
+                     -f db_populator/Dockerfile db_populator/
+        docker push ${{ steps.registry-urls.outputs.db-populator-url }}:${{ github.sha }}
+        docker push ${{ steps.registry-urls.outputs.db-populator-url }}:latest
+
+    - name: Restart Container Groups
+      run: |
+        # Restart container groups to use new images
+        az container restart --resource-group ${{ env.PROJECT_NAME }}-rg --name ${{ env.PROJECT_NAME }}-ai-agent
+        az container restart --resource-group ${{ env.PROJECT_NAME }}-rg --name ${{ env.PROJECT_NAME }}-discord-bot
+        az container restart --resource-group ${{ env.PROJECT_NAME }}-rg --name ${{ env.PROJECT_NAME }}-db-populator
+
+    - name: Wait for containers to be ready
+      run: |
+        # Wait for container groups to be in running state
+        while [[ $(az container show --resource-group ${{ env.PROJECT_NAME }}-rg --name ${{ env.PROJECT_NAME }}-ai-agent --query "containers[0].instanceView.currentState.state" -o tsv) != "Running" ]]; do
+          echo "Waiting for AI Agent to be ready..."
+          sleep 10
+        done
+        
+        while [[ $(az container show --resource-group ${{ env.PROJECT_NAME }}-rg --name ${{ env.PROJECT_NAME }}-discord-bot --query "containers[0].instanceView.currentState.state" -o tsv) != "Running" ]]; do
+          echo "Waiting for Discord Bot to be ready..."
+          sleep 10
+        done
+        
+        while [[ $(az container show --resource-group ${{ env.PROJECT_NAME }}-rg --name ${{ env.PROJECT_NAME }}-db-populator --query "containers[0].instanceView.currentState.state" -o tsv) != "Running" ]]; do
+          echo "Waiting for DB Populator to be ready..."
+          sleep 10
+        done
+
+    - name: Get deployment info
+      id: deployment-info
+      run: |
+        cd infra
+        AI_AGENT_FQDN=$(terraform output -raw ai_agent_fqdn)
+        AI_AGENT_IP=$(terraform output -raw ai_agent_ip_address)
+        echo "ai-agent-fqdn=$AI_AGENT_FQDN" >> $GITHUB_OUTPUT
+        echo "ai-agent-ip=$AI_AGENT_IP" >> $GITHUB_OUTPUT
+
+    - name: Deployment Success
+      run: |
+        echo "## Azure Deployment Complete! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**AI Agent FQDN:** ${{ steps.deployment-info.outputs.ai-agent-fqdn }}" >> $GITHUB_STEP_SUMMARY
+        echo "**AI Agent IP:** ${{ steps.deployment-info.outputs.ai-agent-ip }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All container groups have been updated and are running." >> $GITHUB_STEP_SUMMARY 

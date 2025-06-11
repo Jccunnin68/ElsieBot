@@ -1,0 +1,254 @@
+name: Deploy Elsie to GCP (Terraform)
+
+# This workflow is INACTIVE by default
+# To activate: Set ENABLE_GCP_DEPLOYMENT=true in repository secrets
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      terraform_action:
+        description: 'Terraform action to perform'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+        - plan
+        - apply
+        - destroy
+      gcp_project_id:
+        description: 'GCP Project ID'
+        required: true
+        type: string
+
+env:
+  GCP_REGION: us-central1
+  PROJECT_NAME: elsie
+  TF_VAR_project_name: elsie
+  TF_VAR_gcp_region: us-central1
+  TF_VAR_gcp_project_id: ${{ github.event.inputs.gcp_project_id }}
+  TF_VAR_environment: ${{ github.event.inputs.environment }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    # SAFETY: This prevents accidental runs - remove this condition to activate
+    if: vars.ENABLE_GCP_DEPLOYMENT == 'true'
+    environment: 
+      name: gcp-${{ github.event.inputs.environment }}
+    
+    defaults:
+      run:
+        working-directory: infra
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "~1.0"
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ github.event.inputs.gcp_project_id }}
+
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker gcr.io
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="bucket=${{ secrets.GCP_TERRAFORM_BUCKET }}" \
+          -backend-config="prefix=elsie/${{ github.event.inputs.environment }}"
+      working-directory: infra
+
+    - name: Terraform Validate
+      run: terraform validate terraform-gcp.tf
+
+    - name: Terraform Plan
+      id: plan
+      run: |
+        terraform plan \
+          -target="terraform-gcp.tf" \
+          -var="gcp_project_id=${{ github.event.inputs.gcp_project_id }}" \
+          -var="discord_token=${{ secrets.DISCORD_TOKEN }}" \
+          -var="gemma_api_key=${{ secrets.GEMMA_API_KEY }}" \
+          -var="db_password=${{ secrets.DB_PASSWORD }}" \
+          -out=tfplan-gcp
+      env:
+        TF_VAR_discord_token: ${{ secrets.DISCORD_TOKEN }}
+        TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+    - name: Comment Plan on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const output = `#### Terraform GCP Plan 📖
+          
+          <details><summary>Show Plan</summary>
+          
+          \`\`\`terraform
+          ${{ steps.plan.outputs.stdout }}
+          \`\`\`
+          
+          </details>
+          
+          *Environment:* \`${{ github.event.inputs.environment }}\`
+          *Project:* \`${{ github.event.inputs.gcp_project_id }}\`
+          *Pusher:* @${{ github.actor }}
+          *Action:* \`${{ github.event.inputs.terraform_action }}\``;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+    - name: Terraform Apply
+      if: github.event.inputs.terraform_action == 'apply'
+      run: terraform apply tfplan-gcp
+
+    - name: Terraform Destroy
+      if: github.event.inputs.terraform_action == 'destroy'
+      run: |
+        terraform destroy \
+          -var="gcp_project_id=${{ github.event.inputs.gcp_project_id }}" \
+          -var="discord_token=${{ secrets.DISCORD_TOKEN }}" \
+          -var="gemma_api_key=${{ secrets.GEMMA_API_KEY }}" \
+          -var="db_password=${{ secrets.DB_PASSWORD }}" \
+          -auto-approve
+      env:
+        TF_VAR_discord_token: ${{ secrets.DISCORD_TOKEN }}
+        TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+    - name: Output Infrastructure Info
+      if: github.event.inputs.terraform_action == 'apply'
+      run: |
+        echo "## GCP Infrastructure Deployed 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Project:** ${{ github.event.inputs.gcp_project_id }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Region:** ${{ env.GCP_REGION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Outputs" >> $GITHUB_STEP_SUMMARY
+        terraform output -json | jq -r 'to_entries[] | "- **\(.key):** \(.value.value)"' >> $GITHUB_STEP_SUMMARY
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: terraform
+    if: github.event.inputs.terraform_action == 'apply' && vars.ENABLE_GCP_DEPLOYMENT == 'true'
+    environment: 
+      name: gcp-${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ github.event.inputs.gcp_project_id }}
+
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker gcr.io
+
+    - name: Get Container Registry URLs
+      id: registry-urls
+      run: |
+        cd infra
+        AI_AGENT_URL=$(terraform output -json container_registry_urls | jq -r '.ai_agent')
+        DISCORD_BOT_URL=$(terraform output -json container_registry_urls | jq -r '.discord_bot')
+        DB_POPULATOR_URL=$(terraform output -json container_registry_urls | jq -r '.db_populator')
+        
+        echo "ai-agent-url=$AI_AGENT_URL" >> $GITHUB_OUTPUT
+        echo "discord-bot-url=$DISCORD_BOT_URL" >> $GITHUB_OUTPUT
+        echo "db-populator-url=$DB_POPULATOR_URL" >> $GITHUB_OUTPUT
+
+    - name: Build and push AI Agent
+      run: |
+        docker build -t ${{ steps.registry-urls.outputs.ai-agent-url }}:${{ github.sha }} \
+                     -t ${{ steps.registry-urls.outputs.ai-agent-url }}:latest \
+                     -f ai_agent/Dockerfile ai_agent/
+        docker push ${{ steps.registry-urls.outputs.ai-agent-url }}:${{ github.sha }}
+        docker push ${{ steps.registry-urls.outputs.ai-agent-url }}:latest
+
+    - name: Build and push Discord Bot
+      run: |
+        docker build -t ${{ steps.registry-urls.outputs.discord-bot-url }}:${{ github.sha }} \
+                     -t ${{ steps.registry-urls.outputs.discord-bot-url }}:latest \
+                     -f discord_bot/Dockerfile discord_bot/
+        docker push ${{ steps.registry-urls.outputs.discord-bot-url }}:${{ github.sha }}
+        docker push ${{ steps.registry-urls.outputs.discord-bot-url }}:latest
+
+    - name: Build and push DB Populator
+      run: |
+        docker build -t ${{ steps.registry-urls.outputs.db-populator-url }}:${{ github.sha }} \
+                     -t ${{ steps.registry-urls.outputs.db-populator-url }}:latest \
+                     -f db_populator/Dockerfile db_populator/
+        docker push ${{ steps.registry-urls.outputs.db-populator-url }}:${{ github.sha }}
+        docker push ${{ steps.registry-urls.outputs.db-populator-url }}:latest
+
+    - name: Deploy new revisions to Cloud Run
+      run: |
+        # Update AI Agent
+        gcloud run services update ${{ env.PROJECT_NAME }}-ai-agent \
+          --image=${{ steps.registry-urls.outputs.ai-agent-url }}:${{ github.sha }} \
+          --region=${{ env.GCP_REGION }} \
+          --quiet
+        
+        # Update Discord Bot
+        gcloud run services update ${{ env.PROJECT_NAME }}-discord-bot \
+          --image=${{ steps.registry-urls.outputs.discord-bot-url }}:${{ github.sha }} \
+          --region=${{ env.GCP_REGION }} \
+          --quiet
+        
+        # Update DB Populator
+        gcloud run services update ${{ env.PROJECT_NAME }}-db-populator \
+          --image=${{ steps.registry-urls.outputs.db-populator-url }}:${{ github.sha }} \
+          --region=${{ env.GCP_REGION }} \
+          --quiet
+
+    - name: Wait for deployment
+      run: |
+        # Wait for services to be ready
+        gcloud run services describe ${{ env.PROJECT_NAME }}-ai-agent --region=${{ env.GCP_REGION }} --format="value(status.conditions[0].status)" | grep -q "True"
+        gcloud run services describe ${{ env.PROJECT_NAME }}-discord-bot --region=${{ env.GCP_REGION }} --format="value(status.conditions[0].status)" | grep -q "True"
+        gcloud run services describe ${{ env.PROJECT_NAME }}-db-populator --region=${{ env.GCP_REGION }} --format="value(status.conditions[0].status)" | grep -q "True"
+
+    - name: Get service URLs
+      id: service-urls
+      run: |
+        cd infra
+        AI_AGENT_URL=$(terraform output -raw ai_agent_url)
+        echo "ai-agent-url=$AI_AGENT_URL" >> $GITHUB_OUTPUT
+
+    - name: Deployment Success
+      run: |
+        echo "## GCP Deployment Complete! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**AI Agent URL:** ${{ steps.service-urls.outputs.ai-agent-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All Cloud Run services have been updated and are running." >> $GITHUB_STEP_SUMMARY 
