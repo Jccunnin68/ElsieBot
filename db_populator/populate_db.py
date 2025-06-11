@@ -67,6 +67,7 @@ def create_schema():
                     page_type VARCHAR(50),
                     ship_name VARCHAR(100),
                     log_date DATE,
+                    content_accessed INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
@@ -231,8 +232,8 @@ def populate_sample_data():
                     
                     # Insert into wiki_pages
                     cur.execute("""
-                        INSERT INTO wiki_pages (title, content, raw_content, url, page_type, ship_name)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        INSERT INTO wiki_pages (title, raw_content, url, page_type, ship_name)
+                        VALUES (%s, %s, %s, %s, %s)
                     """, (title, content, raw_content, url, page_type, ship_name))
                     
                     # Insert into page_metadata
