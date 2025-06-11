@@ -681,6 +681,11 @@ def detect_topic_change(user_message: str, conversation_history: list) -> bool:
         print("🔄 New topic starter with low similarity - breaking context")
         return True
     
+    # For very short messages like "hello", "hi", "how are you", maintain context unless it's the first message
+    if len(current_message.split()) <= 3 and not any(current_message.startswith(indicator) for indicator in potential_new_topic_indicators):
+        print("🔗 Short casual message - maintaining context for natural conversation flow")
+        return False
+    
     # Default to maintaining context for ambiguous cases
     print("🔗 Ambiguous case - maintaining context")
     return False

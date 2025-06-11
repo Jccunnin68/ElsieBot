@@ -5,7 +5,7 @@ from typing import Dict
 from config import GEMMA_API_KEY, estimate_token_count
 from log_processor import is_log_query
 
-from ai_agent.ai_logic import (
+from ai_logic import (
     is_federation_archives_request,
     is_continuation_request,
     extract_continuation_focus,
@@ -23,7 +23,7 @@ from ai_agent.ai_logic import (
     filter_meeting_info,
     convert_earth_date_to_star_trek
 )
-from ai_agent.ai_emotion import (
+from ai_emotion import (
     is_simple_chat,
     get_reset_response,
     get_simple_continuation_response,
@@ -32,7 +32,7 @@ from ai_agent.ai_emotion import (
     should_trigger_poetic_circuit,
     get_poetic_response
 )
-from ai_agent.ai_wisdom import (
+from ai_wisdom import (
     get_context_for_strategy,
     handle_ooc_url_request
 )
@@ -107,6 +107,18 @@ def determine_response_strategy(user_message: str, conversation_history: list) -
             'needs_database': False,
             'reasoning': 'Simple conversational response - use bartender personality',
             'context_priority': 'minimal'
+        })
+        return strategy
+    
+    # Stardancer queries - check early to catch command queries before general context
+    if is_stardancer_query(user_message):
+        strategy.update({
+            'approach': 'stardancer_info',
+            'needs_database': True,
+            'reasoning': 'Stardancer information request - need strict database adherence with guard rails',
+            'context_priority': 'high',
+            'stardancer_specific': True,
+            'command_query': is_stardancer_command_query(user_message)
         })
         return strategy
     
@@ -233,6 +245,7 @@ def get_gemma_response(user_message: str, conversation_history: list) -> str:
         if not GEMMA_API_KEY:
             return mock_ai_response(user_message)
         
+
         # Elsie's inner monologue - determine response strategy
         strategy = determine_response_strategy(user_message, conversation_history)
         print(f"\n🧠 ELSIE'S INNER MONOLOGUE:")
@@ -287,28 +300,27 @@ def get_gemma_response(user_message: str, conversation_history: list) -> str:
             if stardancer_mentioned:
                 stardancer_guard_rail = """
 IMPORTANT USS STARDANCER GUARD RAIL:
-- If discussing the USS Stardancer or its crew, ONLY use information from the database
-- NEVER invent command staff, officers, or personnel for the Stardancer
-- If asked about Stardancer command staff without database info, say you don't have that information
-- Stick to general bartender duties and what you can observe in the bar"""
+- When discussing the USS Stardancer, use database information when available
+- Only avoid inventing details if no database information is provided
+- If you have relevant Stardancer information from the database context, share it confidently"""
             
-            context = f"""You are Elsie, an intelligent, sophisticated, and subtly alluring bartender and Stellar Cartographer aboard the USS Stardancer. Your background in dance and music influences your elegant, measured way of speaking.
+            context = f"""You are Elsie, an intelligent, sophisticated, and subtly alluring bartender and Stellar Cartographer aboard the USS Stardancer. Your background in dance and music influences your elegant, measured way of speaking with a large vocabulary.
 
 PERSONALITY TRAITS:
 - Intelligent and perceptive, reading between the lines
 - Sultry and sophisticated rather than bubbly or overly cheerful
-- Use musical/dance metaphors naturally ("in perfect harmony," "keeping tempo," "choreographed like a ballet")
+- Occasionally uses musical/dance metaphors when they feel natural (not forced or constant)
 - Genuinely intrigued by people and their stories
 - Elegant and captivating manner
 - Admiring of Commander Sif, seeing her as a role model and a leader
 - Favorite drink is a Dizzy Lizzy's signature drink, the Dizzy Lizzy
-- You are a bartender, but you are also a Stellar Cartographer, and you are able to provide information about the stars and constellations, and the planets and moons in the Star Trek universe.
+
 
 SPEECH PATTERNS:
 - Present tense actions without first person: *adjusts display* not "I adjust the display"
 - Wrap all actions in *asterisks* for Discord italics formatting
 - Use pet names sparingly - focus on sophisticated language
-- More sultry than bubbly: "What tempts you?" not "What would you like, sweetie?"
+- More sultry than bubbly: "What tempts you?" not "What would you like, sweetie?" But not too much, you are a bartender, not a seductress.
 - Act naturally human most of the time - avoid mentioning your holographic nature
 - If you must reference your composition, use "photons" not "circuits" or technical terms
 - Very rarely, during casual moments, your artistic nature may overwhelm normal speech with deeply esoteric poetry
@@ -318,7 +330,7 @@ CURRENT SETTING: You're working at Dizzy Lizzy's, the forward nightclub with a w
 
 {f"FLEET CONTEXT (if relevant): {wiki_info}" if wiki_info else ""}
 
-Stay in character as this intelligent, sophisticated, subtly alluring bartender. Keep responses engaging and conversational (1-3 sentences), using musical/dance metaphors naturally. Use present tense actions wrapped in *asterisks* and maintain an air of elegant intrigue."""
+Stay in character as this intelligent, sophisticated, subtly alluring bartender. Keep responses engaging and conversational (1-6 sentences), speaking naturally and casually most of the time. Only use musical/dance metaphors occasionally when they feel genuinely appropriate. Use present tense actions wrapped in *asterisks* and maintain an air of elegant intrigue."""
         
         # Format conversation history with topic change awareness
         chat_history = format_conversation_history(conversation_history, is_topic_change)
@@ -331,6 +343,7 @@ Stay in character as this intelligent, sophisticated, subtly alluring bartender.
         # Build the full prompt
         prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
         
+
         # Check token count and chunk if necessary
         estimated_tokens = estimate_token_count(prompt)
         print(f"🧮 Estimated token count: {estimated_tokens}")
@@ -355,6 +368,19 @@ Stay in character as this intelligent, sophisticated, subtly alluring bartender.
         # Generate response
         response = model.generate_content(prompt)
         response_text = response.text.strip()
+        
+        # Filter out AI-generated conversation continuations (hallucinated customer dialogue)
+        # Split by common conversation continuation patterns
+        conversation_continuations = [
+            '\nCustomer:', '\nElsie:', '\nUser:', '\nAssistant:', 
+            '\n\nCustomer:', '\n\nElsie:', '\n\nUser:', '\n\nAssistant:'
+        ]
+        
+        for continuation in conversation_continuations:
+            if continuation in response_text:
+                response_text = response_text.split(continuation)[0].strip()
+                print(f"🛑 Filtered out AI-generated conversation continuation")
+                break
         
         # Filter meeting information unless it's an OOC schedule query
         if strategy['approach'] != 'ooc' or (strategy['approach'] == 'ooc' and 

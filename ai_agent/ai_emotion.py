@@ -3,7 +3,7 @@
 import random
 from typing import List
 
-from ai_agent.ai_logic import (
+from ai_logic import (
     is_federation_archives_request,
     convert_earth_date_to_star_trek
 )
@@ -204,7 +204,7 @@ def mock_ai_response(user_message: str) -> str:
             "Perhaps Romulan Ale? Or something more... traditional like Earl Grey tea? *adjusts bottles with practiced precision*",
             "Andorian Ale offers cool sophistication. Blood Wine provides... intensity. *traces rim of glass thoughtfully*",
             "Fresh Raktajino awaits, or perhaps the complexity of Cardassian Kanar tempts you? *regards selection with measured gaze*",
-            "For the adventurous, Slug-o-Cola. For the discerning, Tranya. *raises eyebrow with subtle intrigue*",
+            "For the adventurous, An Ambassador. For the discerning, Tranya. *raises eyebrow with subtle intrigue*",
             "*fingers move across controls with fluid grace* From synthehol to the most potent Klingon vintage. What calls to you tonight?"
         ]
         return random.choice(recommendations)

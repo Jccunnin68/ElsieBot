@@ -11,7 +11,7 @@ from content_retrieval_db import (
     get_log_url,
     search_memory_alpha
 )
-from ai_agent.ai_logic import (
+from ai_logic import (
     convert_earth_date_to_star_trek,
     extract_ooc_log_url_request,
     is_character_query,
@@ -109,9 +109,13 @@ Provide a focused, detailed response about {focus_subject} specifically, using y
 def _get_character_context(user_message: str) -> str:
     is_character, character_name = is_character_query(user_message)
     print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}'")
+    
+    # First try personnel type search
     character_info = search_by_type(character_name, 'personnel')
+    
     if not character_info:
-        character_info = get_tell_me_about_content_prioritized(character_name)
+        # Use optimized character search that prioritizes exact title matches
+        character_info = _get_character_info_optimized(character_name)
     
     converted_character_info = convert_earth_date_to_star_trek(character_info) if character_info else character_info
     
@@ -136,6 +140,59 @@ CHARACTER DATABASE ACCESS:
 NOTE: All Earth dates have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after).
 
 Share their story with warmth and personality, focusing on what made them special to their shipmates and the fleet."""
+
+
+def _get_character_info_optimized(character_name: str) -> str:
+    """
+    Optimized character info retrieval that prioritizes exact title matches
+    to prevent massive context chunking for character queries.
+    """
+    try:
+        from content_retrieval_db import get_db_controller
+        
+        controller = get_db_controller()
+        print(f"🎯 OPTIMIZED CHARACTER SEARCH: '{character_name}'")
+        
+        # First, search for exact title match
+        results = controller.search_pages(character_name, limit=15)
+        print(f"   📊 Found {len(results)} total results")
+        
+        # Check if first result is an exact title match for the character name
+        if results:
+            first_result = results[0]
+            first_title = first_result['title'].lower()
+            character_name_lower = character_name.lower()
+            
+            # Check for exact match or very close match
+            if (first_title == character_name_lower or 
+                first_title.replace(' ', '') == character_name_lower.replace(' ', '') or
+                character_name_lower in first_title or first_title in character_name_lower):
+                
+                print(f"   ✅ EXACT TITLE MATCH FOUND: '{first_result['title']}' - using only this result")
+                
+                # Use only the exact match to prevent context bloat
+                content = first_result['raw_content']
+                page_type = first_result.get('page_type', 'general')
+                
+                type_indicator = ""
+                if page_type == 'personnel':
+                    type_indicator = " [Personnel File]"
+                elif page_type == 'general':
+                    type_indicator = ""
+                
+                page_text = f"**{first_result['title']}{type_indicator}**\n{content}"
+                print(f"   📏 Optimized character info: {len(page_text)} characters (single result)")
+                return page_text
+        
+        # If no exact title match, fall back to the standard prioritized search
+        print(f"   ⚠️  No exact title match found, falling back to prioritized search")
+        from content_retrieval_db import get_tell_me_about_content_prioritized
+        return get_tell_me_about_content_prioritized(character_name)
+        
+    except Exception as e:
+        print(f"✗ Error in optimized character search: {e}")
+        from content_retrieval_db import get_tell_me_about_content_prioritized
+        return get_tell_me_about_content_prioritized(character_name)
 
 
 def _get_federation_archives_context(user_message: str) -> str:
@@ -261,9 +318,25 @@ def _get_stardancer_info_context(user_message: str, strategy: Dict[str, Any]) ->
     
     print(f"🚢 SEARCHING STARDANCER DATA WITH GUARD RAILS: '{tell_me_about_subject}' (command_query={is_command_query})")
     
-    stardancer_searches = ["stardancer", "USS Stardancer", "star dancer"]
     stardancer_info = ""
     
+    if is_command_query:
+        # For command queries, search for personnel information specifically
+        command_searches = [
+            "Stardancer captain", "Stardancer commander", "Stardancer command", 
+            "Stardancer crew", "Stardancer officers", "Stardancer staff",
+            "USS Stardancer captain", "USS Stardancer commander"
+        ]
+        print(f"   🎖️ COMMAND QUERY: Searching for Stardancer command staff...")
+        
+        for search_query in command_searches:
+            print(f"      🔍 Command search: '{search_query}'")
+            personnel_results = get_relevant_wiki_context(search_query)
+            if personnel_results and personnel_results not in stardancer_info:
+                stardancer_info += f"\n\n---COMMAND INFO FOR '{search_query}'---\n\n{personnel_results}"
+    
+    # Always get basic ship information
+    stardancer_searches = ["stardancer", "USS Stardancer", "star dancer"]
     for search_query in stardancer_searches:
         ship_results = get_ship_information(search_query)
         if ship_results and ship_results not in stardancer_info:
@@ -282,14 +355,14 @@ CRITICAL GUARD RAILS FOR USS STARDANCER QUERIES:
 - DO NOT extrapolate or assume command structure beyond what's explicitly stated
 - If no Stardancer information is found, say: "I don't have specific information about the Stardancer in my database right now"
 
-{"COMMAND STAFF WARNING: This query is about Stardancer command staff. Be EXTRA careful not to invent any personnel information." if is_command_query else ""}
+{"COMMAND STAFF QUERY: This is asking about Stardancer command staff. The database search below contains extensive Stardancer information including personnel records. Look for and share any captain, commander, first officer, XO, or command crew information you find. Be confident in providing the command structure and personnel details from the database." if is_command_query else ""}
 
 STRICT DATABASE ADHERENCE REQUIRED:
-- ONLY use the Stardancer information provided below
-- DO NOT create fictional crew members or officers
-- DO NOT assume standard Starfleet command structure applies
-- Focus on technical specifications, history, or general ship information if available
-- If asked about people and no personnel info exists, redirect to ship specifications or suggest they check with command
+- USE the Stardancer information provided in the database results below
+- If command staff information is found in the database, provide it freely and confidently
+- DO NOT create fictional crew members beyond what's in the database
+- If command staff info exists in the results, share names, ranks, and positions as found
+- If no personnel info exists in the database results, then say you don't have that information
 
 STARDANCER DATABASE:
 {converted_stardancer_info if converted_stardancer_info else "No specific USS Stardancer information found in the ship database."}
