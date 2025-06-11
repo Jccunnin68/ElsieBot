@@ -193,11 +193,10 @@ class DatabaseOperations:
                             # Update existing page
                             cur.execute("""
                                 UPDATE wiki_pages 
-                                SET content = %s, raw_content = %s, url = %s, crawl_date = %s,
+                                SET raw_content = %s, url = %s, crawl_date = %s,
                                     page_type = %s, ship_name = %s, log_date = %s, updated_at = NOW()
                                 WHERE title = %s
                             """, (
-                                part_content,
                                 part_content,
                                 page_data['url'],
                                 page_data['crawled_at'],
@@ -211,11 +210,10 @@ class DatabaseOperations:
                             # Insert new page
                             cur.execute("""
                                 INSERT INTO wiki_pages 
-                                (title, content, raw_content, url, crawl_date, page_type, ship_name, log_date)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                (title, raw_content, url, crawl_date, page_type, ship_name, log_date)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
                             """, (
                                 title,
-                                part_content,
                                 part_content,
                                 page_data['url'],
                                 page_data['crawled_at'],

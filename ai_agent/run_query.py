@@ -30,11 +30,11 @@ def print_examples():
     print("\n3. Recent mission logs:")
     print("   SELECT title, ship_name, log_date FROM wiki_pages WHERE page_type = 'mission_log' ORDER BY log_date DESC LIMIT 10;")
     print("\n4. Search content:")
-    print("   SELECT title, page_type, ship_name FROM wiki_pages WHERE content ILIKE '%combat%' LIMIT 5;")
+    print("   SELECT title, page_type, ship_name FROM wiki_pages WHERE raw_content ILIKE '%combat%' LIMIT 5;")
     print("\n5. Database statistics:")
     print("   SELECT page_type, COUNT(*) as count FROM wiki_pages GROUP BY page_type ORDER BY count DESC;")
     print("\n6. Find specific character mentions:")
-    print("   SELECT title, ship_name FROM wiki_pages WHERE content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;")
+    print("   SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;")
 
 def print_tables():
     """Show available tables and their structure"""
@@ -161,7 +161,7 @@ def run_predefined_query(query_name: str, show_full: bool = False) -> bool:
         "stats": "SELECT page_type, COUNT(*) as count FROM wiki_pages GROUP BY page_type ORDER BY count DESC;",
         "recent": "SELECT title, ship_name, log_date FROM wiki_pages WHERE page_type = 'mission_log' ORDER BY log_date DESC LIMIT 10;",
         "ship_counts": "SELECT ship_name, COUNT(*) as log_count FROM wiki_pages WHERE page_type = 'mission_log' GROUP BY ship_name ORDER BY log_count DESC;",
-        "characters": "SELECT title, ship_name FROM wiki_pages WHERE content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;"
+        "characters": "SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;"
     }
     
     if query_name not in predefined_queries:

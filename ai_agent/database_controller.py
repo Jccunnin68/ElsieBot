@@ -63,7 +63,7 @@ class FleetDatabaseController:
                         
                         if detected_ship:
                             ship_query = """
-                                SELECT id, title, content, raw_content, page_type, ship_name, log_date, url
+                                SELECT id, title, raw_content, page_type, ship_name, log_date, url
                                 FROM wiki_pages 
                                 WHERE ship_name = %s
                                 ORDER BY log_date DESC
@@ -77,7 +77,7 @@ class FleetDatabaseController:
                     # STEP 2: Title-based full-text search
                     print(f"   🔍 Title FTS search...")
                     title_query = """
-                        SELECT id, title, content, raw_content, page_type, ship_name, log_date, url,
+                        SELECT id, title, raw_content, page_type, ship_name, log_date, url,
                                ts_rank(to_tsvector('english', title), 
                                       plainto_tsquery('english', %s)) as rank
                         FROM wiki_pages 
@@ -112,7 +112,7 @@ class FleetDatabaseController:
                     if len(all_results) < limit:
                         print(f"   🔍 Content FTS search...")
                         content_query = """
-                            SELECT id, title, content, raw_content, page_type, ship_name, log_date, url,
+                            SELECT id, title, raw_content, page_type, ship_name, log_date, url,
                                    ts_rank(to_tsvector('english', raw_content), 
                                           plainto_tsquery('english', %s)) as rank
                             FROM wiki_pages 
@@ -148,7 +148,7 @@ class FleetDatabaseController:
                     if not all_results:
                         print(f"   🔄 Fallback LIKE search...")
                         like_query = """
-                            SELECT id, title, content, raw_content, page_type, ship_name, log_date, url
+                            SELECT id, title, raw_content, page_type, ship_name, log_date, url
                             FROM wiki_pages 
                             WHERE (LOWER(title) LIKE LOWER(%s) OR LOWER(raw_content) LIKE LOWER(%s))
                         """
@@ -236,7 +236,7 @@ class FleetDatabaseController:
         
         for result in results:
             title = result['title']
-            content = result['raw_content'][:10000]  # Limit individual content
+            content = result['raw_content'][:30000]  # Limit individual content
             
             page_text = f"**{title}**\n{content}"
             

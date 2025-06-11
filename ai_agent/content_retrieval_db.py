@@ -236,7 +236,7 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 5) -> str:
 
         for result in results:
             title = result['title']
-            content = result['raw_content'][:5000]  # Limit individual log content
+            content = result['raw_content'][:50000]  # Limit individual log content
             log_date = result['log_date']
 
             log_entry = f"**{title}** ({log_date})\n{content}"
