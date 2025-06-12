@@ -1337,9 +1337,11 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     # This should work in both DGM and regular sessions AND multi-character scenes
     # It's natural conversation flow and is targeted to the specific character Elsie addressed
     # PRIORITY: This happens BEFORE multi-character guardrail since it's targeted conversation
+    # RETURN IMMEDIATELY: If detected, don't let other logic override this response reason
     if rp_state.is_simple_implicit_response(current_turn, user_message):
         print(f"   💬 Simple implicit response detected - natural conversation flow")
         print(f"   🎯 Multi-character scene: {len(participants) > 1} - implicit response still allowed")
+        print(f"   🚀 RETURNING IMMEDIATELY - implicit response takes priority over other checks")
         return True, "simple_implicit_response"
     
     # SPECIAL DGM GUARDRAIL: In DGM-initiated sessions, be EXTREMELY passive
@@ -2002,19 +2004,22 @@ class RoleplayStateManager:
         """
         SIMPLE implicit response logic:
         - If the response comes from the last character Elsie addressed
-        - AND no other characters have spoken between Elsie and this character
+        - AND Elsie spoke on the previous turn (not necessarily the last in history)
         - UNLESS the message contains other character names (redirecting conversation)
         """
-        # Check if we have turn history
-        if len(self.turn_history) < 2:
+        # Check if we have any turn history
+        if not self.turn_history:
             return False
         
-        # Get the last two turns
-        last_turn = self.turn_history[-1]
-        second_last_turn = self.turn_history[-2] if len(self.turn_history) >= 2 else None
+        # Find the most recent turn where Elsie spoke
+        elsie_last_turn = None
+        for turn_num, speaker in reversed(self.turn_history):
+            if speaker == "Elsie":
+                elsie_last_turn = turn_num
+                break
         
-        # Check if Elsie spoke last
-        if last_turn[1] != "Elsie":
+        # Check if Elsie spoke recently (within 2 turns of current)
+        if not elsie_last_turn or current_turn - elsie_last_turn > 2:
             return False
         
         # Extract character name from current message

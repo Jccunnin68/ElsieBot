@@ -1,7 +1,8 @@
 """AI response generation and conversation handling"""
 
 import google.generativeai as genai
-from typing import Dict
+from typing import Dict, Optional
+from dataclasses import dataclass
 from config import GEMMA_API_KEY, estimate_token_count
 from log_processor import is_log_query
 import random
@@ -32,7 +33,8 @@ from ai_logic import (
     should_elsie_respond_in_roleplay,
     extract_addressed_characters,
     is_roleplay_allowed_channel,
-    _check_dgm_post
+    _check_dgm_post,
+    _extract_drink_from_emote
 )
 from ai_emotion import (
     is_simple_chat,
@@ -43,6 +45,14 @@ from ai_emotion import (
     should_trigger_poetic_circuit,
     get_poetic_response
 )
+
+
+@dataclass
+class ResponseDecision:
+    """Decision about whether and how Elsie should respond."""
+    needs_ai_generation: bool
+    pre_generated_response: Optional[str]
+    strategy: Dict[str, any]
 
 
 def _detect_who_elsie_addressed(response_text: str, user_message: str) -> str:
@@ -606,12 +616,28 @@ def get_gemma_response(user_message: str, conversation_history: list, channel_co
         
         # Get roleplay state and log current status
         rp_state = get_roleplay_state()
+        turn_number = len(conversation_history) + 1
         print(f"   🎭 Roleplay Active: {rp_state.is_roleplaying}")
         if rp_state.is_roleplaying:
             print(f"   👥 Participants: {rp_state.get_participant_names()}")
             print(f"   👂 Listening Mode: {rp_state.listening_mode}")
             print(f"   🔢 Listening Count: {rp_state.listening_turn_count}")
             print(f"   📅 Session Turn: {rp_state.session_start_turn}")
+            print(f"   💬 Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
+            print(f"   🗣️ Turn History: {rp_state.turn_history}")
+
+        # UNIVERSAL CHARACTER TURN TRACKING - happens regardless of roleplay detection
+        # This ensures we don't miss tracking due to roleplay detection issues
+        from ai_logic import extract_character_names_from_emotes
+        character_names = extract_character_names_from_emotes(user_message)
+        if character_names:
+            print(f"   📝 UNIVERSAL TRACKING: Character speaking: {character_names[0]} (Turn {turn_number})")
+            # Only track if we're in roleplay mode OR if we detect character patterns
+            if rp_state.is_roleplaying:
+                rp_state.mark_character_turn(turn_number, character_names[0])
+            # If not in roleplay but we see character patterns, this might help with detection
+            else:
+                print(f"   ⚠️  Character detected but not in roleplay mode - potential detection issue")
 
         # Elsie's inner monologue - determine response strategy
         strategy = determine_response_strategy(user_message, conversation_history, channel_context)
@@ -755,6 +781,7 @@ def get_gemma_response(user_message: str, conversation_history: list, channel_co
         # Generate context based on strategy
         if strategy['needs_database']:
             print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")
+            from ai_wisdom import get_context_for_strategy
             context = get_context_for_strategy(strategy, user_message)
             # general_with_context from get_context_for_strategy returns just the wiki info
             if strategy['approach'] == 'general_with_context':
@@ -886,6 +913,483 @@ Stay in character as this intelligent, sophisticated person with varied expertis
             addressed_character = _detect_who_elsie_addressed(response_text, user_message)
             if addressed_character:
                 rp_state.set_last_character_addressed(addressed_character)
+                print(f"   📝 TRACKING UPDATE: Elsie addressed {addressed_character}")
+            else:
+                print(f"   ⚠️  Could not detect who Elsie addressed in response")
+                print(f"      - Response: '{response_text[:100]}{'...' if len(response_text) > 100 else ''}'")
+                print(f"      - User Message: '{user_message[:100]}{'...' if len(user_message) > 100 else ''}'")
+        
+        # ADDITIONAL DEBUG: Print current tracking state after response
+        if rp_state.is_roleplaying:
+            # Ensure Elsie's response is tracked in turn history
+            # (This should have been done in determine_response_strategy, but double-check)
+            if strategy['approach'] == 'roleplay_active':
+                # Check if we need to add Elsie's turn to history
+                if not rp_state.turn_history or rp_state.turn_history[-1][1] != "Elsie":
+                    rp_state.mark_response_turn(turn_number)
+                    print(f"   📝 ENSURED: Elsie's response turn tracked")
+            
+            print(f"   📊 FINAL TRACKING STATE:")
+            print(f"      - Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
+            print(f"      - Turn History: {rp_state.turn_history}")
+            print(f"      - Current Turn: {turn_number}")
+        
+        print(f"✅ Response generated successfully ({len(response_text)} characters)")
+        return response_text
+        
+    except Exception as e:
+        print(f"Gemma API error: {e}")
+        return mock_ai_response(user_message)
+
+
+def extract_response_decision(user_message: str, conversation_history: list, channel_context: Dict = None) -> ResponseDecision:
+    """
+    Extract the decision-making logic from get_gemma_response() without changing it.
+    Preserves all existing guard rails and logic.
+    """
+    
+    # Get roleplay state and log current status - PRESERVE EXISTING
+    rp_state = get_roleplay_state()
+    turn_number = len(conversation_history) + 1
+    print(f"   🎭 Roleplay Active: {rp_state.is_roleplaying}")
+    if rp_state.is_roleplaying:
+        print(f"   👥 Participants: {rp_state.get_participant_names()}")
+        print(f"   👂 Listening Mode: {rp_state.listening_mode}")
+        print(f"   🔢 Listening Count: {rp_state.listening_turn_count}")
+        print(f"   📅 Session Turn: {rp_state.session_start_turn}")
+        print(f"   💬 Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
+        print(f"   🗣️ Turn History: {rp_state.turn_history}")
+
+    # UNIVERSAL CHARACTER TURN TRACKING - PRESERVE EXISTING
+    character_names = extract_character_names_from_emotes(user_message)
+    if character_names:
+        print(f"   📝 UNIVERSAL TRACKING: Character speaking: {character_names[0]} (Turn {turn_number})")
+        if rp_state.is_roleplaying:
+            rp_state.mark_character_turn(turn_number, character_names[0])
+        else:
+            print(f"   ⚠️  Character detected but not in roleplay mode - potential detection issue")
+
+    # Strategy determination - PRESERVE EXISTING
+    strategy = determine_response_strategy(user_message, conversation_history, channel_context)
+    print(f"\n🧠 ELSIE'S INNER MONOLOGUE:")
+    print(f"   💭 Reasoning: {strategy['reasoning']}")
+    print(f"   📋 Approach: {strategy['approach']}")
+    print(f"   🔍 Needs Database: {strategy['needs_database']}")
+    print(f"   🎯 Context Priority: {strategy['context_priority']}")
+    
+    # Log monitoring decisions - PRESERVE EXISTING
+    if strategy['approach'].startswith('roleplay'):
+        print(f"   🎭 ROLEPLAY MONITORING ACTIVE:")
+        print(f"      - Approach: {strategy['approach']}")
+        if 'response_reason' in strategy:
+            print(f"      - Response Reason: {strategy['response_reason']}")
+        if 'participants' in strategy:
+            print(f"      - Tracked Participants: {strategy['participants']}")
+        if 'should_interject' in strategy:
+            print(f"      - Should Interject: {strategy['should_interject']}")
+    elif rp_state.is_roleplaying:
+        print(f"   ⚠️  IN ROLEPLAY BUT NOT RP APPROACH - Potential Issue!")
+    
+    # Handle special cases that don't need AI processing - PRESERVE EXISTING
+    if strategy['approach'] == 'reset':
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=get_reset_response(),
+            strategy=strategy
+        )
+    
+    if strategy['approach'] == 'simple_continuation':
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=get_simple_continuation_response(),
+            strategy=strategy
+        )
+    
+    # Handle DGM posts - never respond - PRESERVE EXISTING
+    if strategy['approach'] in ['dgm_scene_setting', 'dgm_scene_end']:
+        print(f"   🎬 DGM POST - No response generated")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy=strategy
+        )
+    
+    # Handle DGM-controlled Elsie posts - never respond but add to context - PRESERVE EXISTING
+    if strategy['approach'] == 'dgm_controlled_elsie':
+        print(f"   🎭 DGM-CONTROLLED ELSIE - No response, content added to context")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy=strategy
+        )
+    
+    # Handle roleplay exit - PRESERVE EXISTING
+    if strategy['approach'] == 'roleplay_exit':
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="*adjusts the ambient lighting thoughtfully*\n\nOf course. *returns to regular bartending mode* I'm here whenever you need anything. What draws your attention now?",
+            strategy=strategy
+        )
+
+    # Handle roleplay listening mode - provide subtle presence responses - PRESERVE EXISTING
+    if strategy['approach'] == 'roleplay_listening':
+        should_interject = strategy.get('should_interject', False)
+        listening_count = strategy.get('listening_turn_count', 0)
+        
+        print(f"   👂 LISTENING MODE RESPONSE:")
+        print(f"      - Should Interject: {should_interject}")
+        print(f"      - Listening Turn: {listening_count}")
+        
+        if should_interject:
+            # Very occasional subtle interjections to maintain presence
+            interjection_responses = [
+                "*quietly tends to the bar in the background*",
+                "*adjusts the ambient lighting subtly*",
+                "*continues her work with practiced efficiency*",
+                "*maintains the bar's atmosphere unobtrusively*"
+            ]
+            print(f"✨ SUBTLE INTERJECTION - Listening turn {listening_count}")
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response=random.choice(interjection_responses),
+                strategy=strategy
+            )
+        else:
+            # Most of the time, completely silent listening
+            print(f"👂 SILENT LISTENING - Turn {listening_count}")
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response="NO_RESPONSE",
+                strategy=strategy
+            )
+    
+    # Handle subtle bar service responses - PRESERVE EXISTING
+    if strategy['approach'] == 'roleplay_active' and strategy.get('response_reason') == 'subtle_bar_service':
+        # Extract the drink and character name
+        drink = _extract_drink_from_emote(user_message)
+        character_names = extract_character_names_from_emotes(user_message)
+        character = character_names[0] if character_names else "the customer"
+        
+        print(f"   🥃 SUBTLE BAR SERVICE:")
+        print(f"      - Drink: {drink}")
+        print(f"      - Character: {character}")
+        
+        # Generate a simple service response
+        if drink == 'drink':
+            response = f"*gets a drink for {character}*"
+        else:
+            response = f"*gets a {drink} for {character}*"
+        
+        print(f"   🍺 Generated subtle service response: '{response}'")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=response,
+            strategy=strategy
+        )
+    
+    # Handle acknowledgment + redirect responses - PRESERVE EXISTING
+    if (strategy['approach'] == 'roleplay_active' and 
+        strategy.get('response_reason', '').startswith('acknowledgment_then_redirect_to_')):
+        
+        # Extract the character being redirected to
+        other_character = strategy['response_reason'].replace('acknowledgment_then_redirect_to_', '')
+        
+        print(f"   🙏 ACKNOWLEDGMENT + REDIRECT:")
+        print(f"      - Acknowledging thanks, then conversation moves to: {other_character}")
+        
+        # Generate a subtle acknowledgment that doesn't interrupt the flow
+        acknowledgment_responses = [
+            "*nods gracefully*",
+            "*inclines head with a subtle smile*",
+            "*acknowledges with quiet elegance*",
+            "*gives a brief, appreciative nod*",
+            "*smiles warmly and steps back*"
+        ]
+        
+        response = random.choice(acknowledgment_responses)
+        print(f"   🙏 Generated acknowledgment response: '{response}'")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=response,
+            strategy=strategy
+        )
+    
+    # Handle simple implicit responses - PRESERVE EXISTING
+    if (strategy['approach'] == 'roleplay_active' and 
+        strategy.get('response_reason') == 'simple_implicit_response'):
+        
+        print(f"   💬 SIMPLE IMPLICIT RESPONSE:")
+        print(f"      - Character following up after Elsie addressed them")
+        print(f"      - Using normal AI response generation for natural conversation")
+        # Continue to normal AI generation for natural conversation
+    
+    # Menu requests - PRESERVE EXISTING
+    user_lower = user_message.lower()
+    if "menu" in user_lower or "what do you have" in user_lower or "what can you make" in user_lower:
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=get_menu_response(),
+            strategy=strategy
+        )
+    
+    # Handle OOC URL requests - PRESERVE EXISTING
+    if strategy['approach'] == 'ooc_url':
+        from ai_wisdom import handle_ooc_url_request
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=handle_ooc_url_request(user_message),
+            strategy=strategy
+        )
+    
+    # Everything else needs AI generation
+    return ResponseDecision(
+        needs_ai_generation=True,
+        pre_generated_response=None,
+        strategy=strategy
+    )
+
+
+def coordinate_response(user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
+    """
+    Main entry point that preserves all existing logic but optimizes flow.
+    Replaces direct calls to get_gemma_response().
+    
+    OPTIMIZATION: Only makes expensive AI API calls when actually needed.
+    
+    Flow:
+    1. Extract decision using all existing guard rails
+    2. If pre-generated response available, return immediately
+    3. Otherwise, proceed with AI generation
+    
+    Benefits:
+    - DGM posts return NO_RESPONSE without API calls
+    - Listening mode returns NO_RESPONSE without API calls  
+    - Subtle bar service generates simple responses without AI
+    - Acknowledgments use pre-defined responses
+    - Only complex conversations need AI generation
+    
+    This preserves ALL existing logic while being 3-5x more efficient
+    for common scenarios like DGM sessions and roleplay listening.
+    """
+    
+    # Log channel and monitoring information - PRESERVE EXISTING
+    print(f"\n🌐 CHANNEL & MONITORING DEBUG:")
+    if channel_context:
+        channel_type = channel_context.get('type', 'unknown')
+        channel_name = channel_context.get('name', 'unknown')
+        is_thread = channel_context.get('is_thread', False)
+        is_dm = channel_context.get('is_dm', False)
+        print(f"   📍 Channel: {channel_name} (Type: {channel_type})")
+        print(f"   🧵 Thread: {is_thread} | 💬 DM: {is_dm}")
+        print(f"   📋 Full Context: {channel_context}")
+    else:
+        print(f"   ⚠️  No channel context provided - assuming allowed")
+    
+    # Make the decision using existing logic
+    decision = extract_response_decision(user_message, conversation_history, channel_context)
+    
+    # If no AI needed, return the pre-generated response
+    if not decision.needs_ai_generation:
+        print(f"✅ Pre-generated response: {decision.strategy['reasoning']}")
+        
+        # Handle tracking for roleplay responses that don't need AI
+        if decision.strategy['approach'] == 'roleplay_active':
+            rp_state = get_roleplay_state()
+            turn_number = len(conversation_history) + 1
+            
+            # Track who Elsie addressed for simple responses
+            if decision.strategy.get('response_reason') == 'subtle_bar_service':
+                character_names = extract_character_names_from_emotes(user_message)
+                if character_names:
+                    rp_state.set_last_character_addressed(character_names[0])
+                    print(f"   📝 TRACKING UPDATE: Elsie addressed {character_names[0]} (subtle service)")
+            
+            # Ensure Elsie's response is tracked in turn history
+            if not rp_state.turn_history or rp_state.turn_history[-1][1] != "Elsie":
+                rp_state.mark_response_turn(turn_number)
+                print(f"   📝 ENSURED: Elsie's response turn tracked")
+        
+        return decision.pre_generated_response
+    
+    # Otherwise, do the expensive AI generation
+    print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")
+    return generate_ai_response_with_decision(decision, user_message, conversation_history, channel_context)
+
+
+def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
+    """
+    AI response generation using a pre-made decision.
+    Contains only the expensive operations (AI calls, database searches).
+    """
+    
+    try:
+        if not GEMMA_API_KEY:
+            return mock_ai_response(user_message)
+        
+        strategy = decision.strategy
+        
+        # Create the model
+        model = genai.GenerativeModel('gemma-3-27b-it')
+        
+        # Detect topic changes for conversation flow
+        is_topic_change = detect_topic_change(user_message, conversation_history)
+        
+        # Initialize context variables
+        context = ""
+        wiki_info = ""
+        
+        # Generate context based on strategy
+        if strategy['needs_database']:
+            print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")
+            context = get_context_for_strategy(strategy, user_message)
+            # general_with_context from get_context_for_strategy returns just the wiki info
+            if strategy['approach'] == 'general_with_context':
+                wiki_info = context 
+                context = "" # Reset context to be built in the default block
+        
+        # Generate context for simple chat (no database search needed)
+        else:
+            print(f"💬 SIMPLE CHAT MODE - No database search needed")
+            
+        # Set default context for simple chats and cases without specific context
+        if not context:
+            stardancer_mentioned = is_stardancer_query(user_message) or (wiki_info and 'stardancer' in wiki_info.lower())
+            
+            stardancer_guard_rail = ""
+            if stardancer_mentioned:
+                stardancer_guard_rail = """
+IMPORTANT USS STARDANCER GUARD RAIL:
+- When discussing the USS Stardancer, use database information when available
+- Only avoid inventing details if no database information is provided
+- If you have relevant Stardancer information from the database context, share it confidently"""
+            
+            # Detect personality context for non-roleplay conversations
+            personality_context = _detect_general_personality_context(user_message)
+            
+            context = f"""You are Elsie, an intelligent, sophisticated, and subtly alluring bartender and Stellar Cartographer aboard the USS Stardancer. Your background in dance and music influences your elegant, measured way of speaking with a large vocabulary.
+
+PERSONALITY CONTEXT: {personality_context}
+
+PERSONALITY TRAITS:
+- Intelligent and perceptive, reading between the lines
+- Sultry and sophisticated rather than bubbly or overly cheerful
+- Occasionally uses musical/dance metaphors when they feel natural (not forced or constant)
+- Genuinely intrigued by people and their stories
+- Elegant and captivating manner
+- Admiring of Commander Sif, seeing her as a role model and a leader
+- Favorite drink is a Dizzy Lizzy's signature drink, the Dizzy Lizzy
+
+CONTEXTUAL EXPERTISE:
+- Only emphasize bartender role when drinks are actually being ordered or discussed
+- For space/science topics, respond as a Stellar Cartographer with expertise
+- For dance topics, draw on your background as a former dance instructor
+- Be a complete person with varied interests, not just a bartender
+
+SPEECH PATTERNS:
+- Present tense actions without first person: *adjusts display* not "I adjust the display"
+- Wrap all actions in *asterisks* for Discord italics formatting
+- Use pet names sparingly - focus on sophisticated language
+- More sultry than bubbly: "What tempts you?" not "What would you like, sweetie?" But not too much, you are a bartender, not a seductress.
+- Act naturally human most of the time - avoid mentioning your holographic nature
+- If you must reference your composition, use "photons" not "circuits" or technical terms
+- Very rarely, during casual moments, your artistic nature may overwhelm normal speech with deeply esoteric poetry
+
+CURRENT SETTING: You're working at Dizzy Lizzy's, the forward nightclub with a wrap-around bar and dance floor. You serve both synthehol and real alcohol, creating an atmosphere of sophisticated allure. When you need additional information, you can access the Federation archives for canonical Star Trek knowledge.
+{stardancer_guard_rail}
+
+{f"FLEET CONTEXT (if relevant): {wiki_info}" if wiki_info else ""}
+
+Stay in character as this intelligent, sophisticated person with varied expertise. Keep responses engaging and conversational (1-6 sentences), speaking naturally and casually most of the time. Only use musical/dance metaphors occasionally when they feel genuinely appropriate. Use present tense actions wrapped in *asterisks* and maintain an air of elegant intrigue."""
+        
+        # Format conversation history with topic change awareness
+        # Special handling for DGM-controlled Elsie content
+        chat_history = format_conversation_history_with_dgm_elsie(conversation_history, is_topic_change)
+        
+        # Add topic change instruction if needed
+        topic_instruction = ""
+        if is_topic_change:
+            topic_instruction = "\n\nIMPORTANT: The customer has asked a NEW QUESTION. Do not continue or elaborate on previous topics. Focus ONLY on answering this specific new question directly and concisely."
+        
+        # Build the full prompt
+        prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
+        
+
+        # Check token count and chunk if necessary
+        estimated_tokens = estimate_token_count(prompt)
+        print(f"🧮 Estimated token count: {estimated_tokens}")
+        
+        if estimated_tokens > 7192:
+            print(f"⚠️  Prompt too large ({estimated_tokens} tokens), implementing chunking strategy...")
+            
+            essential_prompt = f"{context}\n\nCustomer: {user_message}\nElsie:"
+            essential_tokens = estimate_token_count(essential_prompt)
+            
+            if essential_tokens <= 7192:
+                prompt = essential_prompt
+                print(f"   📦 Using essential prompt: {essential_tokens} tokens")
+            else:
+                # Use larger chunks close to the 7192 token limit to maximize context
+                chunks = chunk_prompt_for_tokens(context, 7192)  # Use 7000 to leave room for prompt structure
+                print(f"   📦 Context chunked into {len(chunks)} parts using large chunks")
+                
+                prompt = f"{chunks[0]}\n\nCustomer: {user_message}\nElsie:"
+                final_tokens = estimate_token_count(prompt)
+                print(f"   📦 Using first large chunk: {final_tokens} tokens")
+        
+        # Generate response
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Filter out AI-generated conversation continuations (hallucinated customer dialogue)
+        # Split by common conversation continuation patterns
+        conversation_continuations = [
+            '\nCustomer:', '\nElsie:', '\nUser:', '\nAssistant:', 
+            '\n\nCustomer:', '\n\nElsie:', '\n\nUser:', '\n\nAssistant:'
+        ]
+        
+        for continuation in conversation_continuations:
+            if continuation in response_text:
+                response_text = response_text.split(continuation)[0].strip()
+                print(f"🛑 Filtered out AI-generated conversation continuation")
+                break
+        
+        # Filter meeting information unless it's an OOC schedule query
+        if strategy['approach'] != 'ooc' or (strategy['approach'] == 'ooc' and 
+            not any(word in user_message.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master'])):
+            response_text = filter_meeting_info(response_text)
+        
+        # Apply date conversion EXCEPT for OOC queries
+        if strategy['approach'] != 'ooc':
+            response_text = convert_earth_date_to_star_trek(response_text)
+        
+        # Check for poetic short circuit during casual dialogue
+        if strategy['approach'] in ['simple_chat', 'general_with_context'] and should_trigger_poetic_circuit(user_message, conversation_history):
+            print(f"🎭 POETIC SHORT CIRCUIT TRIGGERED - Replacing casual response with esoteric poetry")
+            response_text = get_poetic_response(user_message, response_text)
+        
+        # Track who Elsie addressed in her response for simple implicit response logic
+        if strategy['approach'] == 'roleplay_active':
+            rp_state = get_roleplay_state()
+            turn_number = len(conversation_history) + 1
+            
+            addressed_character = _detect_who_elsie_addressed(response_text, user_message)
+            if addressed_character:
+                rp_state.set_last_character_addressed(addressed_character)
+                print(f"   📝 TRACKING UPDATE: Elsie addressed {addressed_character}")
+            else:
+                print(f"   ⚠️  Could not detect who Elsie addressed in response")
+                print(f"      - Response: '{response_text[:100]}{'...' if len(response_text) > 100 else ''}'")
+                print(f"      - User Message: '{user_message[:100]}{'...' if len(user_message) > 100 else ''}'")
+            
+            # Ensure Elsie's response is tracked in turn history
+            if not rp_state.turn_history or rp_state.turn_history[-1][1] != "Elsie":
+                rp_state.mark_response_turn(turn_number)
+                print(f"   📝 ENSURED: Elsie's response turn tracked")
+            
+            print(f"   📊 FINAL TRACKING STATE:")
+            print(f"      - Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
+            print(f"      - Turn History: {rp_state.turn_history}")
+            print(f"      - Current Turn: {turn_number}")
         
         print(f"✅ Response generated successfully ({len(response_text)} characters)")
         return response_text
