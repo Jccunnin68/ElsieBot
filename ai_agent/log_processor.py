@@ -28,14 +28,14 @@ This module now handles the advanced gamemaster format for character dialogue in
 """
 
 import re
-from config import LOG_INDICATORS, SHIP_NAMES
 from models import CHARACTER_CORRECTIONS
 from typing import List, Tuple, Dict
+from handlers.ai_logic.log_patterns import is_log_query, LOG_INDICATORS
 
-def is_log_query(query: str) -> bool:
-    """Determine if the query is asking about logs"""
-    query_lower = query.lower()
-    return any(indicator in query_lower for indicator in LOG_INDICATORS)
+SHIP_NAMES = [
+    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
+    'caelian', 'gigantes', 'banshee'
+]
 
 def is_ship_log_title(title: str) -> bool:
     """Enhanced ship log title detection supporting multiple formats:

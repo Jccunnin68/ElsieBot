@@ -84,6 +84,16 @@ def validate_total_prompt_size(prompt: str) -> str:
     
     return truncated_prompt
 
+
+
+
+
+
+
+
+
+
+# Port 
 # Legacy constants - use the new token-aware limits above instead
 # MAX_CHARS_LOG = 8000
 # MAX_CHARS_CONTEXT = 30000  
@@ -111,7 +121,7 @@ LOG_INDICATORS = [
     'adagio log', 'pilgrim', 'stardancer log', 'protector log',
     'manta ', 'sentinel', 'caelian', 'enterprise log',
     'montagnier log', 'faraday log', 'cook log', 'mjolnir log',
-    'rendino log', 'gigantes', 'banshee','adagio'
+    'rendino log', 'gigantes', 'banshee','adagio',
     # Date-based patterns
     'retrieve', 'show me', 'get the log', 'find the log',
     # Named incidents
@@ -158,7 +168,6 @@ COMMON_CHARACTER_NAMES = [
     'sisko', 'kira', 'odo', 'dax', 'bashir', 'obrien', 'nog',
     'archer', 'trip', 'reed', 'hoshi', 'travis', 'phlox'
 ]
-
 # Activity keywords for ship activity detection
 ACTIVITY_KEYWORDS = ['what happened', 'recent', 'latest', 'activities', 'missions', 'events']
 
@@ -178,9 +187,7 @@ OOC_KEYWORDS = [
     'get me',
     'show me',
     'find'
-]
-
-# Meeting information to filter out
+]# Meeting information to filter out
 MEETING_INFO_PATTERNS = [
     r"meets.*[0-9].*[AP]M.*[A-Z]ST",
     r"GMed by.*",
@@ -188,20 +195,14 @@ MEETING_INFO_PATTERNS = [
     r"Game Master.*schedule",
     r"session.*schedule"
 ]
-
-# Port configuration
-PORT = int(os.getenv("PORT", 8000))
-
-# Roleplay detection patterns and constants
+PORT = int(os.getenv("PORT", 8000))# Roleplay detection patterns and constants
 ROLEPLAY_CONFIDENCE_THRESHOLD = 0.4  # Minimum confidence score to enter roleplay mode
 ROLEPLAY_EXIT_THRESHOLD = 0.3        # Below this for sustained period triggers exit
 ROLEPLAY_SUSTAINED_EXIT_TURNS = 3    # Number of turns below threshold to trigger exit
 
 # Channel restrictions for roleplay mode
 ROLEPLAY_ALLOWED_CHANNEL_TYPES = ['dm', 'thread', 'private']
-ROLEPLAY_RESTRICTED_CHANNELS = ['general', 'public', 'announcements']
-
-# Passive listening behavior
+ROLEPLAY_RESTRICTED_CHANNELS = ['general', 'public', 'announcements']# Passive listening behavior
 ELSIE_NAME_INDICATORS = [
     'elsie', 'bartender', 'hey you', 'excuse me',
     'miss', 'ma\'am', 'server', 'hologram'

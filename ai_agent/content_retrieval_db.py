@@ -86,10 +86,6 @@ def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool
             extract = page_data.get('extract', '')
             
             if extract:
-                # Truncate very long extracts
-                if len(extract) > 1000:
-                    extract = extract[:1000] + "..."
-                
                 # Format for Elsie's response - only add [Federation Archives] tag if explicitly requested
                 page_url = f"https://memory-alpha.fandom.com/wiki/{quote(title.replace(' ', '_'))}"
                 if is_federation_archives:

@@ -6,16 +6,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from ai_handler import get_gemma_response
+from handlers.ai_coordinator import coordinate_response
 from content_retrieval_db import check_elsiebrain_connection, run_database_cleanup
+import traceback
 
 # Check if cleanup flag is set
 CLEANUP_ON_STARTUP = os.getenv("CLEANUP_DATABASE", "false").lower() == "true"
 
 class ChatMessage(BaseModel):
     message: str
-    conversation_history: list = []
     context: dict = {}
+    conversation_history: list = []
 
 from contextlib import asynccontextmanager
 
@@ -54,37 +55,74 @@ async def read_root():
     return FileResponse('static/index.html')
 
 @app.post("/process")
-async def process_message(chat_message: ChatMessage):
-    """Process a chat message and return AI response"""
+async def process_message(message: ChatMessage):
+    """Process a message and return a response."""
     try:
-        # Extract channel context from the request context
-        channel_context = None
-        if chat_message.context:
-            # Build channel context from Discord bot context
-            channel_context = {
-                'session_id': chat_message.context.get('session_id'),
-                'platform': chat_message.context.get('platform', 'unknown'),
-                'type': chat_message.context.get('channel_type', 'unknown'),
-                'name': chat_message.context.get('channel_name', 'unknown'),
-                'is_thread': chat_message.context.get('is_thread', False),
-                'is_dm': chat_message.context.get('is_dm', False),
-                'channel_id': chat_message.context.get('channel_id'),
-                'guild_id': chat_message.context.get('guild_id'),
-                'user_id': chat_message.context.get('user_id'),
-                'username': chat_message.context.get('username'),
-                'raw_context': chat_message.context  # Keep original for debugging
-            }
-            
-            # Log the incoming context for debugging
-            print(f"🌐 RECEIVED CONTEXT FROM DISCORD BOT:")
-            print(f"   📋 Raw Context: {chat_message.context}")
-            print(f"   🔧 Processed Context: {channel_context}")
+        print(f"\n📥 RECEIVED MESSAGE:")
+        print(f"   Message: {message.message}")
+        print(f"   Raw Context: {message.context}")
+        print(f"   Conversation History: {message.conversation_history}")
         
-        response = get_gemma_response(chat_message.message, chat_message.conversation_history, channel_context)
-        return {"response": response}
+        # Process channel context
+        channel_context = {}
+        if message.context:
+            try:
+                channel_context = {
+                    'channel_id': message.context.get('channel_id'),
+                    'channel_name': message.context.get('channel_name'),
+                    'channel_type': message.context.get('channel_type'),
+                    'is_dm': message.context.get('is_dm', False),
+                    'is_thread': message.context.get('is_thread', False),
+                    'guild_id': message.context.get('guild_id'),
+                    'user_id': message.context.get('user_id'),
+                    'username': message.context.get('username')
+                }
+                print(f"   📍 Channel Context: {channel_context}")
+            except Exception as e:
+                print(f"❌ ERROR processing channel context:")
+                print(f"   Error: {str(e)}")
+                print(f"   Traceback: {traceback.format_exc()}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error processing channel context: {str(e)}"
+                )
+        
+        # Process message through strategy engine
+        try:
+            response_text = coordinate_response(
+                message.message,
+                message.conversation_history,
+                channel_context
+            )
+            print(f"   ✅ Response generated: {response_text}")
+
+            # Construct the response in the format Go expects
+            ai_response = {
+                "status": "success",
+                "response": response_text,
+                "session_id": message.context.get("session_id"),
+                "context": message.context,
+                "bartender": "elsie"
+            }
+            return JSONResponse(content=ai_response)
+
+        except Exception as e:
+            print(f"❌ ERROR in coordinate_response:")
+            print(f"   Error: {str(e)}")
+            print(f"   Traceback: {traceback.format_exc()}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error generating response: {str(e)}"
+            )
+            
     except Exception as e:
-        print(f"Error processing message: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ UNHANDLED ERROR in process_message:")
+        print(f"   Error: {str(e)}")
+        print(f"   Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unhandled error: {str(e)}"
+        )
 
 @app.get("/health")
 async def health_check():

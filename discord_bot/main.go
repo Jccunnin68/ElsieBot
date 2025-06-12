@@ -84,6 +84,32 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 	log.Printf("Logged in as: %v#%v\n", s.State.User.Username, s.State.User.Discriminator)
 }
 
+// Helper function to split messages into chunks of 2000 characters
+func splitMessage(message string) []string {
+	if len(message) <= 2000 {
+		return []string{message}
+	}
+
+	var chunks []string
+	for len(message) > 0 {
+		chunk := message
+		if len(chunk) > 2000 {
+			// Find the last space before 2000 characters
+			lastSpace := strings.LastIndex(chunk[:2000], " ")
+			if lastSpace == -1 {
+				// If no space found, just split at 2000
+				lastSpace = 2000
+			}
+			chunk = chunk[:lastSpace]
+			message = message[lastSpace+1:]
+		} else {
+			message = ""
+		}
+		chunks = append(chunks, chunk)
+	}
+	return chunks
+}
+
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Enhanced mention detection
 	mentioned := false
@@ -133,6 +159,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			// If we can't get channel info, log the error but continue
 			log.Printf("DEBUG: Could not get channel info: %v", err)
 		}
+	}
+
+	// Check for DGM posts - they override all channel restrictions
+	if strings.HasPrefix(strings.TrimSpace(content), "[DGM]") {
+		shouldMonitorAll = true
+		log.Printf("DEBUG: DGM post detected - monitoring regardless of channel type")
 	}
 
 	// Simple mention detection - if there are any mentions, process them
@@ -253,7 +285,15 @@ You can also chat with me privately by sending me a direct message! I'll respond
 
 	// Send response
 	if response != "" && response != "NO_RESPONSE" {
-		s.ChannelMessageSend(m.ChannelID, response)
+		// Split response into chunks if needed
+		chunks := splitMessage(response)
+		for _, chunk := range chunks {
+			_, err := s.ChannelMessageSend(m.ChannelID, chunk)
+			if err != nil {
+				log.Printf("Error sending message chunk: %v", err)
+				return
+			}
+		}
 	} else if response == "NO_RESPONSE" {
 		log.Printf("🤐 NO_RESPONSE received - Elsie is staying silent (DGM post or listening mode)")
 		// Don't send any message - Elsie is intentionally staying quiet
@@ -345,35 +385,42 @@ func processWithAIEnhanced(content string, s *discordgo.Session, m *discordgo.Me
 	// Map Discord channel types to our system
 	switch channel.Type {
 	case discordgo.ChannelTypeDM:
-		channelType = "dm"
+		channelType = "DM"
 		isDM = true
 		channelName = "DM"
 		log.Printf("   💬 Detected as: Direct Message")
 	case discordgo.ChannelTypeGuildText:
-		channelType = "text"
+		channelType = "GUILD_TEXT"
 		log.Printf("   📝 Detected as: Text Channel")
 	case discordgo.ChannelTypeGuildVoice:
-		channelType = "voice"
+		channelType = "GUILD_VOICE"
 		log.Printf("   🔊 Detected as: Voice Channel")
 	case discordgo.ChannelTypeGuildPublicThread:
-		channelType = "public_thread"
+		channelType = "GUILD_PUBLIC_THREAD"
 		isThread = true
 		log.Printf("   🧵 Detected as: Public Thread")
 	case discordgo.ChannelTypeGuildPrivateThread:
-		channelType = "private_thread"
+		channelType = "GUILD_PRIVATE_THREAD"
 		isThread = true
 		log.Printf("   🔒 Detected as: Private Thread")
 	case discordgo.ChannelTypeGuildNewsThread:
-		channelType = "news_thread"
+		channelType = "GUILD_NEWS_THREAD"
 		isThread = true
 		log.Printf("   📰 Detected as: News Thread")
 	case discordgo.ChannelTypeGuildNews:
-		channelType = "news"
+		channelType = "GUILD_NEWS"
 		log.Printf("   📰 Detected as: News Channel")
 	case discordgo.ChannelTypeGuildStageVoice:
-		channelType = "stage"
+		channelType = "GUILD_STAGE_VOICE"
 		log.Printf("   🎤 Detected as: Stage Channel")
+	case discordgo.ChannelTypeGuildCategory:
+		channelType = "GUILD_CATEGORY"
+		log.Printf("   📁 Detected as: Category Channel")
+	case discordgo.ChannelTypeGuildForum:
+		channelType = "GUILD_FORUM"
+		log.Printf("   💭 Detected as: Forum Channel")
 	default:
+		channelType = "UNKNOWN"
 		log.Printf("   ❓ Unknown channel type: %v", channel.Type)
 	}
 

@@ -32,7 +32,7 @@ CHARACTER_CORRECTIONS = {
     'marcus blaine': 'Captain Marcus Blaine',
     'eren': 'Captain Sereya Eren',
     'sereya eren': 'Captain Sereya Eren',
-    'tolena': 'Maeve Blaine',
+    'tolena': 'Ensign Blaine',
     'dryellia': 'Cadet Dryellia',
     'zarina dryellia': 'Cadet Zarina Dryellia',
     'snow': 'Cadet Snow',

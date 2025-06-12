@@ -1,187 +1,125 @@
-# Elsie - AI Holographic Bartender
+# Elsie - The Holographic Bartender
 
 Elsie is a sophisticated, containerized Discord bot designed for the 22nd Mobile Daedalus Fleet community. She functions as a holographic bartender and stellar cartographer, capable of accessing a comprehensive, self-updating fleet database to provide information on mission logs, ship specifications, personnel files, and more.
 
-## Features
+## Core Features
 
-- **In-Character Persona**: Elsie maintains a consistent persona as a sophisticated, alluring, and intelligent holographic bartender with a background in dance and music.
-- **Dynamic Response Strategy**: Elsie analyzes user messages to determine the most appropriate response strategy, switching between simple chat, database lookups, and specialized queries.
-- **Database Integration**: She can access a local database for information about ship logs, characters, and other lore-specific details.
-- **Federation Archives Access**: Elsie can query an external API (Memory Alpha) to retrieve canonical Star Trek information when her local database is insufficient.
-- **Date Conversion**: Automatically converts real-world dates to the appropriate Star Trek stardate era.
-- **OOC (Out-of-Character) Handling**: Recognizes and responds to OOC queries for administrative information like game schedules or handbook rules.
-- **Poetic Short-Circuits**: Occasionally, during casual conversation, Elsie may have an "artistic short-circuit," responding with esoteric poetry to enhance her unique personality.
+- **Advanced Roleplay Integration**: Elsie can detect and participate in roleplay, track characters, and understand scene context.
+- **DGM (Daedalus Game Master) Controls**: Special commands for game masters to control scenes, characters, and even Elsie herself.
+- **Dynamic Conversation Handling**: Elsie can engage in both general chat and in-character roleplay, adapting her responses to the context.
+- **Database Integration**: She can access a local PostgreSQL database (`elsiebrain`) for information about mission logs, ship specifications, personnel files, and more.
+- **Stateful Sessions**: Elsie remembers conversation history and roleplay state within a session, allowing for coherent and continuous interactions.
+- **Extensible AI Engine**: The AI agent is built with a modular strategy engine that can be easily extended with new capabilities and response patterns.
+- **Channel-Aware Monitoring**: The bot intelligently monitors specific channels (like threads and "rp" channels) to avoid being intrusive in general-purpose channels.
 
-## Architecture
+## System Architecture
 
-The AI agent is designed with a modular architecture to separate concerns and improve maintainability.
+The Elsie project is composed of three main services that work in tandem:
 
-- **`ai_handler.py`**: The main controller that receives user input, determines the overall response strategy, and coordinates with the other modules. It is the central hub for all AI-related processing.
+### 1. Discord Bot (`discord_bot`)
 
-- **`ai_logic.py`**: This module contains all the core logic for intent detection, conversation flow management, and guard rails. It is responsible for parsing user messages, identifying query types (e.g., character lookup, log search, continuation), and enforcing response constraints, such as preventing the AI from inventing information.
+A Go-based application responsible for connecting to Discord, handling events, managing messages, and communicating with the AI agent. It is the frontline interface for all user interactions.
 
-- **`ai_emotion.py`**: This module manages Elsie's personality and casual conversation. It handles simple chat, greetings, farewells, and provides the unique "poetic short-circuit" responses that give Elsie her artistic flair. All non-database-driven, character-focused interactions are managed here.
+### 2. AI Agent (`ai_agent`)
 
-- **`ai_wisdom.py`**: This module is responsible for all database interactions and context generation. When the `ai_handler` determines that a query requires information from the database, it calls on this module to retrieve the relevant data and format it into a context that the AI can use to generate an informed response.
+A Python-based FastAPI application that houses the core logic for Elsie's intelligence, including natural language processing, roleplay state management, and response generation.
 
-- **`content_retrieval_db.py`**: Handles the direct queries to the local database, retrieving raw information based on search terms.
+### 3. Database & Populator (`db_populator`)
 
-- **`config.py`**: Contains configuration variables, API keys, and predefined patterns for message processing.
+This component is responsible for creating and maintaining the `elsiebrain` knowledge base.
 
-## Core Components
+-   **Elsiebrain Database**:
+    -   **Engine**: PostgreSQL.
+    -   **Key Tables**:
+        -   `wiki_pages`: Stores the content, title, URL, and classified metadata for each wiki page.
+        -   `page_metadata`: Tracks crawl status, content hashes, and timestamps for differential updates.
+    -   **Full-Text Search**: Utilizes `tsvector` and `tsquery` for efficient and intelligent searching across page titles and content.
 
-### AI Agent (`ai_agent/`)
-
--   **Backend**: Python with FastAPI.
--   **AI Model**: Google Gemma.
--   **Functionality**:
-    -   Serves a `/process` endpoint to receive messages from the Discord bot.
-    -   Classifies user intent to determine if the query is about logs, ships, characters, or general information.
-    -   Constructs detailed, context-rich prompts for the Gemma model.
-    -   Connects to the `elsiebrain` database for read-only information retrieval using a unified, full-text search capable `search_pages` function.
-
-### Discord Bot (`discord_bot/`)
-
--   **Language**: Go with the `discordgo` library.
--   **Functionality**:
-    -   Manages the bot's presence and interactions on Discord.
-    -   Registers and handles slash commands.
-    -   Forwards user messages to the AI Agent's API.
-    -   Manages conversation history and context for each user session.
-
-### Database Populator (`db_populator/`)
-
--   **`wiki_crawler.py`**: The primary script for populating the database.
--   **Features**:
+-   **Database Populator (`wiki_crawler.py`)**:
+    -   A Python script that crawls a target wiki (or other data source) and populates the `elsiebrain` database.
     -   **Differential Updates**: Calculates a hash of page content to crawl only pages that have changed, saving time and resources.
     -   **Page Classification**: Automatically determines page types (`mission_log`, `ship_info`, `personnel`, etc.) based on title and content patterns.
-    -   **Metadata Tracking**: Logs crawl history, status, and errors for each page.
     -   **Robust Error Handling**: Gracefully handles network issues or errors during crawling.
 
-### Elsiebrain Database
+## Getting Started
 
--   **Engine**: PostgreSQL.
--   **Key Tables**:
-    -   `wiki_pages`: Stores the content, title, URL, and classified metadata for each wiki page.
-    -   `page_metadata`: Tracks crawl status, content hashes, and timestamps for differential updates.
--   **Full-Text Search**: Utilizes `tsvector` and `tsquery` for efficient and intelligent searching across page titles and content.
+You can run the Elsie project locally for development or deploy it as a containerized application.
 
-## Development & Testing
+### Prerequisites
 
-For detailed setup instructions, see `SETUP.md`.
+- **Go**: For running the Discord bot natively.
+- **Python**: For running the AI agent and DB populator natively.
+- **PostgreSQL**: A running PostgreSQL server. For local development, this can be a native installation or a container running in Docker Desktop. The `docker-compose.yml` file includes a PostgreSQL service for the containerized setup.
+- **Docker & Docker Compose**: For running the project with containers (recommended).
+- **Discord Bot Token**: You will need a Discord bot token to run the bot.
+- **Environment Variables**: A `.env` file is used for configuration.
 
-The recommended development environment is **VS Code with the Dev Containers extension**, which automates the setup of the entire stack.
+### Running Locally (Native)
 
-### Running Tests
+**Note**: For this method, you must have your own PostgreSQL server running and have created the `elsiebrain` database. The connection details should be configured in the `ai_agent/.env` file.
 
-Individual components can be tested within the Dev Container or locally:
-
--   **Check Database Stats**:
+1.  **Clone the repository**:
     ```bash
-    python db_populator/wiki_crawler.py --stats
+    git clone <repository-url>
+    cd Elsie
     ```
--   **Test AI Agent Endpoint**:
+2.  **Populate the database**:
+    - Navigate to the `db_populator` directory.
+    - Configure it to point to your data source and database.
+    - Run the crawler script to populate `elsiebrain`.
+
+3.  **Set up and run the AI Agent**:
+    - Navigate to the `ai_agent` directory.
+    - Install Python dependencies: `pip install -r requirements.txt`
+    - Set up your `.env` file with the necessary database credentials.
+    - Run the agent: `uvicorn main:app --reload`
+
+4.  **Set up and run the Discord Bot**:
+    - Navigate to the `discord_bot` directory.
+    - Set up your `.env` file with your `DISCORD_TOKEN` and the `AI_AGENT_URL`.
+    - Run the bot: `go run main.go`
+
+### Running with Docker (Recommended)
+
+Using Docker and Docker Compose is the recommended method for running the project, as it ensures a consistent environment for all services. The provided `docker-compose.yml` file will automatically set up a PostgreSQL container for you.
+
+## Building the Project
+
+### Building with Docker
+
+You can build the Docker image for each service individually.
+
+-   **Build the AI Agent**:
     ```bash
-    # From within the ai_agent container or local venv
-    curl -X POST -H "Content-Type: application/json" -d '{"message": "Hello"}' http://localhost:8000/process
+    docker build -t elsie-ai-agent -f ai_agent/Dockerfile .
     ```
--   **Manual Database Query**:
-    Use the `debug_manual_query` function in `ai_agent/content_retrieval_db.py` for direct database search tests.
 
-## Project Structure
+-   **Build the Discord Bot**:
+    ```bash
+    docker build -t elsie-discord-bot -f discord_bot/Dockerfile .
+    ```
 
-```
-Elsie/
-├── .devcontainer/      # DevContainer configuration for VS Code
-├── ai_agent/           # Python-based AI agent system
-├── discord_bot/        # Go-based Discord bot implementation
-├── aws/               # AWS deployment configurations
-├── docs/              # Project documentation
-└── .github/           # GitHub Actions workflows
-```
+## Cloud Deployment
 
-## Setup Instructions
+This repository contains templates and configuration files for deploying the Elsie project to major cloud providers. The architecture is designed to be cloud-native and scalable.
 
-### 🚀 Quick Start (DevContainer - Recommended)
+You can find the deployment templates in the following directories:
+- `aws/`: CloudFormation and related scripts for deploying to Amazon Web Services.
+- `azure/`: Bicep or ARM templates for deploying to Microsoft Azure.
+- `gcp/`: Deployment Manager or Terraform scripts for deploying to Google Cloud Platform.
 
-1. **Prerequisites:**
-   - VS Code with Remote-Containers extension
-   - Docker Desktop
+These templates will help you provision the necessary infrastructure (e.g., container orchestration services, databases, networking) to run Elsie in a production environment.
 
-2. **Open in DevContainer:**
-   ```bash
-   git clone [repository-url]
-   cd Elsie
-   code .
-   ```
-   - Press `F1` → "Dev Containers: Reopen in Container"
-   - Wait for setup to complete
+## Documentation
 
-3. **Configure and Start:**
-   ```bash
-   # Edit .env with your Discord token
-   nano .env
-   
-   # Start all services
-   .devcontainer/scripts/start-all.sh
-   ```
+For more detailed information about each component, as well as guides for users and game masters, please refer to the following documentation:
 
-### 🛠️ Manual Setup
+- **[System Architecture](./docs/ARCHITECTURE.md)**: A detailed technical diagram and breakdown of the project's architecture.
+- **[AI Agent README](./ai_agent/README.md)**: Detailed information about the AI agent's architecture, endpoints, and strategy engine.
+- **[Discord Bot README](./discord_bot/README.md)**: Information about the Go-based Discord bot, its handlers, and configuration.
+- **[Elsie Usage Guide](./docs/USAGE_GUIDE.md)**: A guide for regular users on how to interact with Elsie.
+- **[DGM Controls Guide](./docs/DGM_GUIDE.md)**: A comprehensive guide for Daedalus Game Masters on how to control scenes and interact with Elsie's advanced features.
 
-1. Prerequisites:
-   - Python 3.9+
-   - Go 1.21+
-   - Docker
-   - AWS Account (for deployment)
+---
 
-2. Development Setup:
-   ```bash
-   # Clone the repository
-   git clone [repository-url]
-   cd Elsie
-
-   # Set up Python environment
-   cd ai_agent
-   python -m venv venv
-   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
-   pip install -r requirements.txt
-
-   # Set up Go environment
-   cd ../discord_bot
-   go mod download
-   ```
-
-3. Running Locally:
-   ```bash
-   # Start the AI agent
-   cd ai_agent
-   python main.py
-
-   # Start the Discord bot
-   cd ../discord_bot
-   go run main.go
-   ```
-
-4. Docker Deployment:
-   ```bash
-   docker-compose -f docker-compose.local.yml up --build
-   ```
-
-## 🚀 Development
-
-For the best development experience, use the DevContainer setup which provides:
-- ✅ Complete Go and Python environments
-- ✅ Hot reload for both services  
-- ✅ Pre-configured VS Code workspace
-- ✅ Docker-in-Docker support
-- ✅ All development tools ready to go
-
-See `.devcontainer/README.md` for detailed development instructions.
-
-## 🌐 AWS Deployment
-
-The project is configured for AWS free tier deployment using Docker containers. See `aws/` directory for CloudFormation templates and deployment configurations.
-
-## License
-
-MIT License 
+*This project is dedicated to creating immersive and engaging roleplaying experiences. We hope you enjoy interacting with Elsie!*
