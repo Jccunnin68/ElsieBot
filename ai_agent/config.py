@@ -190,4 +190,50 @@ MEETING_INFO_PATTERNS = [
 ]
 
 # Port configuration
-PORT = int(os.getenv("PORT", 8000)) 
+PORT = int(os.getenv("PORT", 8000))
+
+# Roleplay detection patterns and constants
+ROLEPLAY_CONFIDENCE_THRESHOLD = 0.4  # Minimum confidence score to enter roleplay mode
+ROLEPLAY_EXIT_THRESHOLD = 0.3        # Below this for sustained period triggers exit
+ROLEPLAY_SUSTAINED_EXIT_TURNS = 3    # Number of turns below threshold to trigger exit
+
+# Channel restrictions for roleplay mode
+ROLEPLAY_ALLOWED_CHANNEL_TYPES = ['dm', 'thread', 'private']
+ROLEPLAY_RESTRICTED_CHANNELS = ['general', 'public', 'announcements']
+
+# Passive listening behavior
+ELSIE_NAME_INDICATORS = [
+    'elsie', 'bartender', 'hey you', 'excuse me',
+    'miss', 'ma\'am', 'server', 'hologram'
+]
+
+# Bar interaction indicators for roleplay responses
+BAR_INTERACTION_INDICATORS = [
+    'approaches the bar', 'walks to the bar', 'sits at the bar',
+    'looks around', 'enters the', 'walks in', 'arrives',
+    'orders', 'asks for', 'requests', 'signals'
+]
+
+# Addressing patterns for character detection
+CHARACTER_ADDRESSING_PATTERNS = [
+    r'^(?:hey|hi|hello|yo)\s+([A-Z][a-z]+),?\s',  # "Hey John,"
+    r'^([A-Z][a-z]+),\s+',                        # "John, ..."
+    r',\s+([A-Z][a-z]+)[.!?]?\s*$',              # "..., John"
+    r'(?:what do you think|your thoughts|what about you|how about you),?\s+([A-Z][a-z]+)[.!?]?',  # Questions
+    r'\*[^*]*(?:turns? to|looks? at|speaks? to|addresses?|faces?)\s+([A-Z][a-z]+)[^*]*\*'  # Emote addressing
+]
+
+# Emote pattern for roleplay detection
+EMOTE_PATTERN = r'\*([^*]+)\*'
+
+# Common words to exclude from character name detection
+ROLEPLAY_EXCLUDED_WORDS = {
+    'The', 'She', 'He', 'They', 'This', 'That', 'Then', 'Now', 'Here', 'There',
+    'When', 'Where', 'What', 'Who', 'Why', 'How', 'Can', 'Could', 'Would', 'Should',
+    'Will', 'Shall', 'May', 'Might', 'Must', 'Do', 'Does', 'Did', 'Have', 'Has',
+    'Had', 'Is', 'Are', 'Was', 'Were', 'Am', 'Be', 'Been', 'Being',
+    'Walks', 'Runs', 'Sits', 'Stands', 'Looks', 'Sees', 'Hears', 'Says', 'Tells',
+    'Gets', 'Takes', 'Gives', 'Brings', 'Comes', 'Goes', 'Turns', 'Moves',
+    'Smiles', 'Laughs', 'Nods', 'Shrugs', 'Points', 'Waves', 'Reaches',
+    'Enters', 'Exits', 'Approaches', 'Leaves', 'Returns', 'Stops'
+} 
