@@ -13,7 +13,7 @@ Components:
 - poetic_responses.py: Poetic circuit responses
 
 Usage:
-    from handlers.ai_mock import get_mock_response
+    from handlers.ai_emotion import get_mock_response
     
     response = get_mock_response(user_message, context)
 """

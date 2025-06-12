@@ -14,7 +14,7 @@ from content_retrieval_db import (
     get_tell_me_about_content_prioritized,
     get_ship_information
 )
-from ai_logic import (
+from handlers.ai_logic.query_detection import (
     is_stardancer_query,
     is_character_query,
     extract_tell_me_about_subject,

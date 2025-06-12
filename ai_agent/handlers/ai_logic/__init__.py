@@ -1,5 +1,5 @@
 """
-AI Response Decision - Decision Logic Package
+AI Logic - Decision Logic Package
 ============================================
 
 This package handles response decision-making logic, determining when and how
@@ -12,7 +12,7 @@ Components:
 - context_detection.py: Personality and context detection logic
 
 Usage:
-    from handlers.ai_response_decision import extract_response_decision, ResponseDecision
+    from handlers.ai_logic import extract_response_decision, ResponseDecision
     
     decision = extract_response_decision(message, history, channel_context)
     if decision.needs_ai_generation:

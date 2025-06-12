@@ -10,19 +10,21 @@ import google.generativeai as genai
 from typing import Dict
 
 from config import GEMMA_API_KEY, estimate_token_count
-from handlers.ai_response_decision import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
-from ai_logic import (
-    detect_topic_change,
-    format_conversation_history_with_dgm_elsie,
-    is_stardancer_query,
+from handlers.ai_logic import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
+from handlers.handlers_utils import (
+    
     chunk_prompt_for_tokens,
     filter_meeting_info,
     convert_earth_date_to_star_trek,
-    get_roleplay_state
+    
 )
-from ai_emotion import mock_ai_response, should_trigger_poetic_circuit, get_poetic_response
-from ai_wisdom import get_context_for_strategy
-
+from handlers.ai_logic.decision_extractor import get_roleplay_state
+from handlers.ai_logic.query_detection import is_stardancer_query
+from handlers.ai_coordinator.conversation_utils import format_conversation_history_with_dgm_elsie
+from handlers.ai_emotion import get_mock_response
+from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
+from handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
+from handlers.ai_coordinator.conversation_utils import detect_topic_change
 
 def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
     """
@@ -32,7 +34,7 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
     
     try:
         if not GEMMA_API_KEY:
-            return mock_ai_response(user_message)
+            return get_mock_response(user_message)
         
         strategy = decision.strategy
         
@@ -204,4 +206,4 @@ Stay in character as this intelligent, sophisticated person with varied expertis
         
     except Exception as e:
         print(f"Gemma API error: {e}")
-        return mock_ai_response(user_message) 
+        return get_mock_response(user_message) 

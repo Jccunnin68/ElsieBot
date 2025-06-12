@@ -1,5 +1,5 @@
 """
-AI Database - Context Generation and Database Access Package
+AI Wisdom - Context Generation and Database Access Package
 ============================================================
 
 This package handles all database access and context generation logic,

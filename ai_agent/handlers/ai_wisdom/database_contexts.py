@@ -16,12 +16,12 @@ from content_retrieval_db import (
     get_tell_me_about_content_prioritized,
     search_memory_alpha
 )
-from ai_logic import (
-    convert_earth_date_to_star_trek,
+from handlers.ai_logic.query_detection import (
     is_character_query,
     extract_tell_me_about_subject,
     extract_ship_log_query
 )
+from handlers.handlers_utils import convert_earth_date_to_star_trek
 
 
 def get_focused_continuation_context(strategy: Dict[str, Any]) -> str:

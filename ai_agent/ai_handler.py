@@ -22,10 +22,9 @@ from typing import Dict
 
 # Core handler packages (Phase 4 Refactor)
 from handlers.ai_coordinator import coordinate_response
-from handlers.ai_response_decision import ResponseDecision
+from handlers.ai_logic import ResponseDecision
 
-# Legacy support for backwards compatibility
-from ai_emotion import mock_ai_response
+
 
 
 def get_gemma_response(user_message: str, conversation_history: list, channel_context: Dict = None) -> str:

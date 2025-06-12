@@ -7,7 +7,7 @@ URL requests and general OOC information retrieval.
 """
 
 from content_retrieval_db import get_relevant_wiki_context, get_log_url
-from ai_logic import extract_ooc_log_url_request, is_ooc_query
+from handlers.ai_logic.query_detection import extract_ooc_log_url_request, is_ooc_query
 
 
 def handle_ooc_url_request(user_message: str) -> str:

@@ -13,7 +13,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from handlers.ai_mock import (
+from handlers.ai_emotion import (
     get_mock_response, 
     should_use_mock_response,
     detect_mock_personality_context,

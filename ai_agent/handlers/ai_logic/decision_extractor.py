@@ -13,12 +13,11 @@ from typing import Dict
 from .response_decision import ResponseDecision
 from .strategy_engine import determine_response_strategy
 
-from ai_logic import (
-    extract_character_names_from_emotes,
-    get_roleplay_state,
-    _extract_drink_from_emote
-)
-from ai_emotion import (
+# Import from ai_attention handlers (Phase 6A)
+from handlers.ai_attention.character_tracking import extract_character_names_from_emotes
+from handlers.ai_attention.state_manager import get_roleplay_state
+from handlers.ai_attention.response_logic import extract_drink_from_emote as _extract_drink_from_emote
+from handlers.ai_emotion import (
     get_reset_response,
     get_simple_continuation_response,
     get_menu_response

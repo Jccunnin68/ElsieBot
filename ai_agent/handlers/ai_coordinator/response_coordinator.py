@@ -8,7 +8,7 @@ optimizing the flow to avoid expensive AI calls when possible.
 
 from typing import Dict
 
-from handlers.ai_response_decision import extract_response_decision
+from handlers.ai_logic import extract_response_decision
 from handlers.ai_attention import extract_character_names_from_emotes, get_roleplay_state
 from .ai_engine import generate_ai_response_with_decision
 

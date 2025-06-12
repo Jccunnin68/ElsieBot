@@ -13,9 +13,8 @@ import re
 from typing import Dict, List
 
 # Imports for strategy detection functions
-from ai_logic import (
-    is_federation_archives_request,
-    is_continuation_request, 
+from handlers.ai_wisdom.roleplay_contexts import _check_roleplay_database_needs
+from handlers.ai_logic.query_detection import (
     extract_continuation_focus,
     extract_ooc_log_url_request,
     is_character_query,
@@ -24,18 +23,27 @@ from ai_logic import (
     is_stardancer_query,
     is_stardancer_command_query,
     extract_ship_log_query,
-    is_ooc_query,
-    detect_roleplay_exit_conditions,
-    detect_roleplay_triggers,
-    extract_character_names_from_emotes,
-    extract_addressed_characters,
-    get_roleplay_state,
-    should_elsie_respond_in_roleplay,
-    is_roleplay_allowed_channel,
-    _check_dgm_post
+    is_ooc_query
 )
-from ai_emotion import is_simple_chat
-from ai_wisdom import _check_roleplay_database_needs
+
+# Import from new query_detection module (Phase 6B)
+from handlers.ai_logic.query_detection import (
+    is_federation_archives_request,
+    is_continuation_request
+)
+# Import from ai_attention handlers (Phase 6A)
+from handlers.ai_attention.roleplay_detection import detect_roleplay_triggers
+from handlers.ai_attention.exit_conditions import detect_roleplay_exit_conditions
+from handlers.ai_attention.character_tracking import (
+    extract_character_names_from_emotes,
+    extract_addressed_characters
+)
+from handlers.ai_attention.state_manager import get_roleplay_state
+from handlers.ai_attention.response_logic import should_elsie_respond_in_roleplay
+from handlers.ai_attention.channel_restrictions import is_roleplay_allowed_channel
+from handlers.ai_attention.dgm_handler import check_dgm_post as _check_dgm_post
+from handlers.ai_emotion import is_simple_chat   
+from handlers.ai_wisdom.context_coordinator  import get_context_for_strategy
 from log_processor import is_log_query
 
 

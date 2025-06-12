@@ -20,7 +20,7 @@ DRINKS_DATABASE = {
     "tea earl grey hot": "Tea, Earl Grey, hot. *presents cup* A classic choice.",
     "raktajino": "Raktajino. *slides mug forward* Bold enough to rouse the dead.",
     "slug-o-cola": "Slug-o-Cola. *raises eyebrow* Ferengi... ingenuity. An experience, certainly.",
-    "an ambassador": "An Ambassador. *slides glass forward* A diplomatic choice. *smirks slightly*"
+    "ambassador": "Ambassador. *slides glass forward* A diplomatic choice. *smirks slightly*"
 }
 
 

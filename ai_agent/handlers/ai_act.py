@@ -19,10 +19,10 @@ from typing import Dict, Optional, List, Any
 from dataclasses import dataclass
 from datetime import datetime
 
-# Future imports - these will be created during refactor
-# from ai_logic import process_message_logic
-# from ai_emotion import get_personality_context
-# from config import validate_total_prompt_size
+# Refactor complete - importing from new handler packages
+from handlers.ai_coordinator import coordinate_response
+from handlers.ai_emotion import detect_mock_personality_context
+from config import estimate_token_count
 
 
 @dataclass
@@ -86,15 +86,12 @@ class DiscordInterface:
             # Format context for AI processing
             ai_context = self._format_ai_context(message_context)
             
-            # Process through AI logic (will be implemented during refactor)
-            # response = await process_message_logic(
-            #     message_context.content,
-            #     message_context.conversation_history,
-            #     ai_context
-            # )
-            
-            # Temporary placeholder response
-            response = "AI processing will be implemented during refactor"
+            # Process through AI coordinator (refactor complete)
+            response = coordinate_response(
+                message_context.content,
+                message_context.conversation_history or [],
+                ai_context
+            )
             
             # Log interaction
             await self._log_interaction(message_context, response)
@@ -106,7 +103,17 @@ class DiscordInterface:
             
         except Exception as e:
             self.logger.error(f"Error processing message: {e}")
-            return self._get_error_response()
+            
+            # Try to provide a contextual fallback response based on personality
+            try:
+                personality_context = detect_mock_personality_context(message_context.content)
+                if personality_context in ['stellar_cartographer', 'dance_instructor', 'bartender']:
+                    return f"*adjusts {self._get_personality_prop(personality_context)} with practiced precision* " \
+                           f"I'm experiencing some technical difficulties. Please try again in a moment."
+                else:
+                    return self._get_error_response()
+            except:
+                return self._get_error_response()
     
     def _format_ai_context(self, message_context: MessageContext) -> Dict[str, Any]:
         """
@@ -118,6 +125,9 @@ class DiscordInterface:
         Returns:
             Dictionary formatted for AI processing
         """
+        # Detect personality context for enhanced responses
+        personality_context = detect_mock_personality_context(message_context.content)
+        
         return {
             'session_id': message_context.channel_context.channel_id,
             'type': message_context.channel_context.channel_type,
@@ -127,7 +137,9 @@ class DiscordInterface:
             'author': message_context.author_name,
             'timestamp': message_context.timestamp.isoformat(),
             'mentions': message_context.mentions or [],
-            'has_attachments': bool(message_context.attachments)
+            'has_attachments': bool(message_context.attachments),
+            'personality_context': personality_context,
+            'estimated_tokens': estimate_token_count(message_context.content)
         }
     
     def _format_discord_response(self, ai_response: str) -> str:
@@ -180,6 +192,16 @@ class DiscordInterface:
         """Get response for processing errors."""
         return ("🔧 I'm experiencing some technical difficulties. "
                 "Please try again in a moment.")
+    
+    def _get_personality_prop(self, personality_context: str) -> str:
+        """Get appropriate prop for personality context."""
+        props = {
+            'stellar_cartographer': 'stellar cartography display',
+            'dance_instructor': 'posture with graceful precision',
+            'bartender': 'bottles behind the bar',
+            'complete_self': 'display'
+        }
+        return props.get(personality_context, 'display')
     
     async def _log_interaction(self, message_context: MessageContext, response: str) -> None:
         """

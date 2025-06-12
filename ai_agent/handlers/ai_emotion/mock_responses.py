@@ -13,7 +13,8 @@ import os
 # Add parent directories to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from ai_logic import is_federation_archives_request, convert_earth_date_to_star_trek
+from handlers.ai_logic.query_detection import is_federation_archives_request
+from handlers.handlers_utils import convert_earth_date_to_star_trek
 from content_retrieval_db import search_memory_alpha
 
 from .personality_contexts import detect_mock_personality_context, is_simple_chat

@@ -13,7 +13,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ai_logic import (
+from handlers.handlers_utils import (
     convert_earth_date_to_star_trek,
     is_continuation_request,
     is_federation_archives_request,
