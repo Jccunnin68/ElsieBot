@@ -1,54 +1,104 @@
 # Elsie System Architecture
 
-This document provides a detailed overview of the technical architecture of the Elsie project. For a simpler, high-level overview, please see the main [README.md](../README.md).
+This document provides a detailed overview of the technical architecture of the Elsie project.
 
-## High-Level Overview
+## High-Level System Flow
 
-The Elsie system consists of three main parts:
-1.  **Discord Bot (Go)**: A lightweight Go application that connects to the Discord Gateway, listens for messages, and handles basic command parsing.
-2.  **AI Agent (Python/FastAPI)**: The "brain" of the system. It receives complex queries from the Go bot via an HTTP API and performs all the natural language processing, state management, and response generation.
-3.  **Database (PostgreSQL)**: The knowledge base (`elsiebrain`) that stores lore, logs, and character information.
+The following diagram illustrates the flow of a message through the entire system, from the user's input in Discord to the final response. It shows the major components and their interactions.
+
+```mermaid
+graph TD
+    subgraph "User"
+        A[Discord User]
+    end
+
+    subgraph "Elsie System"
+        subgraph "Discord Bot (Go)"
+            B[discord_bot/main.go]
+        end
+
+        subgraph "AI Agent (Python/FastAPI)"
+            C[ai_agent/main.py]
+        end
+
+        subgraph "Database"
+            D[(PostgreSQL<br/>elsiebrain)]
+        end
+
+        subgraph "External Services"
+            E((LLM API))
+        end
+    end
+
+    A -- "1. Sends Message" --> B;
+    B -- "2. Simple Command? (ping)" --> B;
+    B -- "7. Posts Response" --> A;
+    B -- "3. HTTP POST to /process" --> C;
+    C -- "4. Fetches Context" --> D;
+    C -- "5. Calls LLM API" --> E;
+    E -- "6a. LLM Response" --> C;
+    D -- "6b. DB Response" --> C;
+    C -- "6c. Final Response" --> B;
+```
 
 ## Component Breakdown
 
-### 1. User Interaction
-- **Discord User**: The end-user who interacts with Elsie by sending messages in a Discord server.
+### 1. Discord Bot (Go)
 
-### 2. Discord Bot (Go)
-- **`discord_bot/main.go`**: The single-entry point for the Go application.
-- **Responsibilities**:
-    - Connects to the Discord Gateway.
-    - Listens for message events.
-    - Handles very simple, hard-coded commands (`!elsie ping`).
-    - Packages the message content, user information, and channel context into a JSON payload.
-    - Sends an HTTP POST request to the AI Agent and waits for a response.
-    - Posts the final response back to the Discord channel, handling message splitting if necessary.
+-   **Location**: `discord_bot/`
+-   **Technology**: Go, `discordgo` library.
+-   **Responsibilities**:
+    -   Connects to the Discord Gateway and maintains a persistent WebSocket connection.
+    -   Listens for and handles Discord events, primarily `messageCreate`.
+    -   Handles simple, hard-coded commands like `!elsie ping` for quick, local responses.
+    -   Packages complex messages and context (user info, channel info) into a JSON payload.
+    -   Forwards the payload to the AI Agent via an HTTP POST request.
+    -   Receives the generated response from the AI agent and posts it back to Discord, handling message splitting for long responses.
+-   **Key Principle**: This component is designed to be a lightweight and robust Discord client. All complex logic is delegated to the AI Agent to keep this part simple and focused.
 
-### 3. AI Agent (Python/FastAPI)
+### 2. AI Agent (Python/FastAPI)
 
-This section details the architecture of the Python-based AI agent.
+This is the core "brain" of the system, where all intelligence resides. See the detailed architecture breakdown below for more information.
 
-#### Core Components
+-   **Location**: `ai_agent/`
+-   **Technology**: Python, FastAPI, Google Gemma.
+-   **Responsibilities**:
+    -   Provides an HTTP API (`/process`) to receive requests from the Go bot.
+    -   Analyzes user messages to determine intent and strategy.
+    -   Manages roleplay state, including participants, turns, and DGM commands.
+    -   Queries the database for contextual information (lore, character bios, logs).
+    -   Constructs detailed prompts and calls an external Large Language Model (LLM) for response generation.
+    -   Provides efficient, pre-generated responses for simple interactions to avoid unnecessary LLM calls.
+
+### 3. Database (PostgreSQL)
+
+-   **Name**: `elsiebrain`
+-   **Responsibilities**: Acts as the long-term memory and knowledge base for the AI Agent. It stores structured data on:
+    -   Mission logs and events.
+    -   Character biographies.
+    -   Ship information.
+    -   General lore and world-building articles.
+
+---
+
+## Detailed AI Agent Architecture
+
+This section provides a more detailed breakdown of the internal architecture of the AI Agent component.
+
+### Core Components
 
 -   **`main.py`**: The main FastAPI application file. It defines the API endpoints (`/process`, `/health`), manages the application lifecycle (startup/shutdown), and handles incoming requests.
-
 -   **`database_controller.py`**: The low-level controller for database interactions. It manages the connection pool to the `elsiebrain` PostgreSQL database and executes raw SQL queries.
+-   **`content_retrieval_db.py`**: A high-level abstraction layer that provides simple, purpose-built functions (e.g., `get_character_context`) that the rest of the application can use.
+-   **`handlers/`**: This directory contains the core intelligence of the AI agent:
+    -   **`ai_act` & `ai_coordinator`**: The top-level coordinators that interface with `main.py` and direct requests through the processing pipeline.
+    -   **`ai_logic`**: Contains the "inner monologue" of the bot, determining response strategy and detecting user intent.
+    -   **`ai_attention`**: Manages all aspects of roleplay state, DGM commands, and social interaction rules.
+    -   **`ai_wisdom`**: Gathers and coordinates context from the database to build rich prompts.
+    -   **`ai_emotion`**: Provides pre-generated, "canned" responses for simple interactions, allowing for a highly efficient "fast path".
+    -   **`ai_engine`**: Constructs the final prompt and performs the expensive call to the external LLM API.
 
--   **`content_retrieval_db.py`**: A high-level abstraction layer that sits on top of the `database_controller`. It provides simple, purpose-built functions (e.g., `get_character_context`, `get_log_content`) that the rest of the application can use without needing to know the database schema.
-
--   **`log_processor.py`**: A utility module for parsing and cleaning raw log content retrieved from the database.
-
--   **`config.py`**: Stores all configuration, including API keys, database credentials, and regex patterns used for query detection throughout the application.
-
--   **`handlers/`**: This directory contains the core intelligence of the AI agent, broken down into the following packages:
-    -   **`ai_act` & `ai_coordinator`**: The top-level coordinators that interface with `main.py`, receive requests, and direct them through the processing pipeline. `ai_act.py` specifically handles the interface with the Discord bot's data structures.
-    -   **`ai_logic`**: Contains the "inner monologue" of the bot. It uses the `strategy_engine` to determine the high-level response strategy and `query_detection` to identify specific user intents.
-    -   **`ai_attention`**: Manages all aspects of roleplay, including state management (`state_manager.py`), DGM command handling, character tracking, and response logic for social situations.
-    -   **`ai_wisdom`**: Responsible for gathering and coordinating context from `content_retrieval_db.py` to build rich, informative prompts for the AI.
-    -   **`ai_emotion`**: Contains handlers for pre-generated "canned" responses. This gives Elsie a consistent personality for simple interactions (like greetings or drink orders) without needing to call the full AI model, making the system highly efficient.
-    -   **`ai_engine`**: The final step in the "smart" pipeline. This module constructs the final prompt and performs the expensive call to the external AI (Gemma) API.
-
-#### Data & Processing Flow
+### AI Agent Data & Processing Flow
 
 ```mermaid
 graph TD
@@ -88,18 +138,16 @@ graph TD
     end
 ```
 
-#### How it Works
+### How the AI Agent Works
 
 1.  A `POST` request with the message context arrives at **`main.py`**.
-2.  The request is passed to **`ai_act.py`** and then to the **`ai_coordinator`**, which begins the main processing pipeline.
-3.  The **`ai_logic`** layer determines a `strategy` for the response. It leverages the **`ai_attention`** layer to understand the social context (is it roleplay? who is speaking?).
+2.  The request is passed to **`ai_act.py`** and then to the **`ai_coordinator`**.
+3.  The **`ai_logic`** layer determines a `strategy` for the response, using the **`ai_attention`** layer to understand the social context.
 4.  A crucial decision is made:
-    -   **Fast Path (No AI)**: If the strategy is simple (a greeting, a DGM post, a drink order), a pre-generated response is retrieved from the **`ai_emotion`** package and returned immediately.
-    -   **Slow Path (AI Needed)**: For complex queries, the **`ai_wisdom`** layer is engaged.
-5.  `ai_wisdom` fetches relevant information by calling functions in **`content_retrieval_db.py`**, which in turn uses the **`database_controller`** to query the database.
-6.  The retrieved context is passed to the **`ai_engine`**, which builds a final prompt and sends it to the external LLM for generation.
-7.  The final response is passed back up the chain and sent out via the API.
+    -   **Fast Path (No AI)**: For simple strategies, a pre-generated response is retrieved from the **`ai_emotion`** package and returned immediately.
+    -   **Slow Path (AI Needed)**: For complex queries, the **`ai_wisdom`** layer is engaged to fetch context from the database.
+5.  The retrieved context is passed to the **`ai_engine`**, which builds a prompt and sends it to the external LLM.
+6.  The final response is passed back up the chain and sent out via the API. 
 
-### 4. Database Ecosystem
-- **PostgreSQL (`elsiebrain`)**: The knowledge base of the bot, containing structured data about the game world.
+### 4. Supporting functions
 - **`db_populator/wiki_crawler.py`**: An external script used to populate the database from a wiki or other data source. This is not part of the live application but is a critical tool for maintaining the bot's knowledge. 
