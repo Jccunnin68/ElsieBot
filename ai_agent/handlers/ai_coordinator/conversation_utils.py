@@ -1,11 +1,10 @@
 """
-Conversation Utilities - Phase 6B
+Conversation Utilities 
 =================================
 
 This module contains utilities for managing conversation history and topic changes.
 """
 
-from typing import Optional, Tuple, Dict, List
 from handlers.ai_logic.query_detection import (
     is_continuation_request,
     extract_tell_me_about_subject,

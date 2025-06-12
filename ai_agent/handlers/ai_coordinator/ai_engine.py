@@ -9,7 +9,8 @@ Gemma API calls, database searches, and response processing.
 import google.generativeai as genai
 from typing import Dict
 
-from config import GEMMA_API_KEY, estimate_token_count
+from config import GEMMA_API_KEY
+from handlers.handlers_utils import estimate_token_count
 from handlers.ai_logic import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
 from handlers.handlers_utils import (
     

@@ -8,7 +8,7 @@ including character info, logs, ship data, and general information.
 
 from typing import Dict, Any
 
-from content_retrieval_db import (
+from handlers.ai_wisdom.content_retrieval_db import (
     get_log_content,
     get_relevant_wiki_context,
     get_ship_information,
@@ -115,7 +115,7 @@ def _get_character_info_optimized(character_name: str) -> str:
     to prevent massive context chunking for character queries.
     """
     try:
-        from content_retrieval_db import get_db_controller
+        from handlers.ai_wisdom.content_retrieval_db import get_db_controller
         
         controller = get_db_controller()
         print(f"🎯 OPTIMIZED CHARACTER SEARCH: '{character_name}'")
@@ -204,7 +204,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
         
         # Use database controller to search ship-specific logs only
         try:
-            from content_retrieval_db import get_db_controller
+            from handlers.ai_wisdom.content_retrieval_db import get_db_controller
             controller = get_db_controller()
             
             # Search for logs that mention the target ship
@@ -241,7 +241,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
         
         # Use database controller to search character-specific logs only
         try:
-            from content_retrieval_db import get_db_controller
+            from handlers.ai_wisdom.content_retrieval_db import get_db_controller
             controller = get_db_controller()
             
             # Search for logs that mention the target character

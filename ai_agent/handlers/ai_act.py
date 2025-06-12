@@ -22,7 +22,7 @@ from datetime import datetime
 # Refactor complete - importing from new handler packages
 from handlers.ai_coordinator import coordinate_response
 from handlers.ai_emotion import detect_mock_personality_context
-from config import estimate_token_count
+from handlers.handlers_utils import estimate_token_count
 
 
 @dataclass

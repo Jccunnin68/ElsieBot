@@ -1,118 +1,123 @@
 """Database-driven content retrieval and wiki search functionality"""
 
 from database_controller import get_db_controller
-from config import truncate_to_token_limit
-from handlers.ai_logic.log_processor import parse_log_characters, is_ship_log_title, parse_character_dialogue
+from handlers.ai_logic.log_processor import parse_log_characters, is_ship_log_title
 from handlers.ai_logic.query_detection import is_log_query
 from typing import Optional
-import psycopg2
-import psycopg2.extras
 import requests
-import json
 from urllib.parse import quote
 
 def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool = False) -> str:
     """
-    Search Memory Alpha (Star Trek wiki) using MediaWiki API as fallback when local database has no results.
-    Returns formatted content from Memory Alpha articles.
+    Search multiple Star Trek wikis using MediaWiki API as fallback when local database has no results.
+    Returns formatted content from wiki articles.
     
     Args:
         query: Search query
-        limit: Number of results to return
+        limit: Number of results to return per wiki
         is_federation_archives: If True, adds [Federation Archives] tags for explicit federation archives requests
     """
     try:
-        print(f"🌟 MEMORY ALPHA SEARCH: '{query}' (fallback search)")
+        print(f"🌟 WIKI SEARCH: '{query}' (fallback search)")
         
         # Clean up the query for better search results
         search_query = query.strip()
         
-        # MediaWiki API search endpoint
-        base_url = "https://memory-alpha.fandom.com/api.php"
+        # Get wiki endpoints from config
+        from config import WIKI_ENDPOINTS
+        all_content = []
         
-        # First, search for articles
-        search_params = {
-            'action': 'query',
-            'format': 'json',
-            'list': 'search',
-            'srsearch': search_query,
-            'srlimit': limit,
-            'srnamespace': 0,  # Main namespace only
-            'srprop': 'snippet|titlesnippet'
-        }
-        
-        search_response = requests.get(base_url, params=search_params, timeout=10)
-        search_data = search_response.json()
-        
-        if 'query' not in search_data or 'search' not in search_data['query']:
-            print(f"   ❌ No Memory Alpha search results found")
-            return ""
-        
-        search_results = search_data['query']['search']
-        if not search_results:
-            print(f"   ❌ No Memory Alpha articles found for '{query}'")
-            return ""
-        
-        print(f"   📊 Found {len(search_results)} Memory Alpha articles")
-        
-        # Get content for the top results
-        memory_alpha_content = []
-        page_titles = [result['title'] for result in search_results[:limit]]
-        
-        # Get page content
-        content_params = {
-            'action': 'query',
-            'format': 'json',
-            'titles': '|'.join(page_titles),
-            'prop': 'extracts',
-            'exintro': True,  # Only get intro section
-            'explaintext': True,  # Plain text, no HTML
-            'exsectionformat': 'plain'
-        }
-        
-        content_response = requests.get(base_url, params=content_params, timeout=10)
-        content_data = content_response.json()
-        
-        if 'query' not in content_data or 'pages' not in content_data['query']:
-            print(f"   ❌ Could not retrieve Memory Alpha content")
-            return ""
-        
-        pages = content_data['query']['pages']
-        
-        for page_id, page_data in pages.items():
-            if page_id == '-1':  # Page not found
-                continue
-                
-            title = page_data.get('title', 'Unknown Title')
-            extract = page_data.get('extract', '')
+        for base_url in WIKI_ENDPOINTS:
+            wiki_name = base_url.split('/')[-2]  # Extract wiki name from URL
+            print(f"   🔍 Searching {wiki_name}...")
             
-            if extract:
-                # Format for Elsie's response - only add [Federation Archives] tag if explicitly requested
-                page_url = f"https://memory-alpha.fandom.com/wiki/{quote(title.replace(' ', '_'))}"
-                if is_federation_archives:
-                    formatted_content = f"**{title}** [Federation Archives]\n{extract}"
-                else:
-                    formatted_content = f"**{title}**\n{extract}"
-                memory_alpha_content.append(formatted_content)
-                print(f"   ✓ Retrieved Memory Alpha article: '{title}' ({len(extract)} chars)")
+            # First, search for articles
+            search_params = {
+                'action': 'query',
+                'format': 'json',
+                'list': 'search',
+                'srsearch': search_query,
+                'srlimit': limit,
+                'srnamespace': 0,  # Main namespace only
+                'srprop': 'snippet|titlesnippet'
+            }
+            
+            search_response = requests.get(base_url, params=search_params, timeout=10)
+            search_data = search_response.json()
+            
+            if 'query' not in search_data or 'search' not in search_data['query']:
+                print(f"   ❌ No {wiki_name} search results found")
+                continue
+            
+            search_results = search_data['query']['search']
+            if not search_results:
+                print(f"   ❌ No {wiki_name} articles found for '{query}'")
+                continue
+            
+            print(f"   📊 Found {len(search_results)} {wiki_name} articles")
+            
+            # Get content for the top results
+            wiki_content = []
+            page_titles = [result['title'] for result in search_results[:limit]]
+            
+            # Get page content
+            content_params = {
+                'action': 'query',
+                'format': 'json',
+                'titles': '|'.join(page_titles),
+                'prop': 'extracts',
+                'exintro': True,  # Only get intro section
+                'explaintext': True,  # Plain text, no HTML
+                'exsectionformat': 'plain'
+            }
+            
+            content_response = requests.get(base_url, params=content_params, timeout=10)
+            content_data = content_response.json()
+            
+            if 'query' not in content_data or 'pages' not in content_data['query']:
+                print(f"   ❌ Could not retrieve {wiki_name} content")
+                continue
+            
+            pages = content_data['query']['pages']
+            
+            for page_id, page_data in pages.items():
+                if page_id == '-1':  # Page not found
+                    continue
+                    
+                title = page_data.get('title', 'Unknown Title')
+                extract = page_data.get('extract', '')
+                
+                if extract:
+                    # Format for Elsie's response
+                    page_url = f"{base_url.rsplit('/', 1)[0]}/wiki/{quote(title.replace(' ', '_'))}"
+                    if is_federation_archives:
+                        formatted_content = f"**{title}** [{wiki_name} - Federation Archives]\n{extract}"
+                    else:
+                        formatted_content = f"**{title}** [{wiki_name}]\n{extract}"
+                    wiki_content.append(formatted_content)
+                    print(f"   ✓ Retrieved {wiki_name} article: '{title}' ({len(extract)} chars)")
+            
+            if wiki_content:
+                all_content.extend(wiki_content)
         
-        if not memory_alpha_content:
-            print(f"   ❌ No usable Memory Alpha content found")
+        if not all_content:
+            print(f"   ❌ No usable wiki content found")
             return ""
         
-        # Only use Federation Archives separator when explicitly requested
+        # Join all content with appropriate separators
         if is_federation_archives:
-            final_content = '\n\n---FEDERATION ARCHIVES---\n\n'.join(memory_alpha_content)
+            final_content = '\n\n---FEDERATION ARCHIVES---\n\n'.join(all_content)
         else:
-            final_content = '\n\n---\n\n'.join(memory_alpha_content)
-        print(f"✅ MEMORY ALPHA SEARCH COMPLETE: {len(final_content)} characters from {len(memory_alpha_content)} articles")
+            final_content = '\n\n---\n\n'.join(all_content)
+            
+        print(f"✅ WIKI SEARCH COMPLETE: {len(final_content)} characters from {len(all_content)} articles")
         return final_content
         
     except requests.RequestException as e:
-        print(f"   ❌ Memory Alpha API request failed: {e}")
+        print(f"   ❌ Wiki API request failed: {e}")
         return ""
     except Exception as e:
-        print(f"   ❌ Memory Alpha search error: {e}")
+        print(f"   ❌ Wiki search error: {e}")
         return ""
 
 def check_elsiebrain_connection() -> bool:

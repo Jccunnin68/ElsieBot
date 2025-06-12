@@ -10,7 +10,7 @@ import os
 # Add the current directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from content_retrieval_db import run_database_cleanup, cleanup_ship_names_only, cleanup_seed_data_only
+from handlers.ai_wisdom.content_retrieval_db import run_database_cleanup, cleanup_ship_names_only, cleanup_seed_data_only
 
 def main():
     """Main cleanup function"""

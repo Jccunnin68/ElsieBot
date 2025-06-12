@@ -6,7 +6,7 @@ This module handles all out-of-character (OOC) queries including
 URL requests and general OOC information retrieval.
 """
 
-from content_retrieval_db import get_relevant_wiki_context, get_log_url
+from handlers.ai_wisdom.content_retrieval_db import get_relevant_wiki_context, get_log_url
 from handlers.ai_logic.query_detection import extract_ooc_log_url_request, is_ooc_query
 
 

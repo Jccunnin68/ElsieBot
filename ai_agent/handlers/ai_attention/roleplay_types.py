@@ -6,7 +6,7 @@ This module contains shared types and constants used across roleplay-related mod
 This helps break circular dependencies by providing a central location for shared definitions.
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 # Roleplay detection constants
 ROLEPLAY_INDICATORS = {

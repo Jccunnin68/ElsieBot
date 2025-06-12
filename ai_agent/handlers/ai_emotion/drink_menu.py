@@ -6,7 +6,7 @@ This module handles all drink-related mock responses, including the galactic bar
 and specific drink orders.
 """
 
-from typing import Optional, Dict
+from typing import Optional
 
 
 # Star Trek drinks database with responses

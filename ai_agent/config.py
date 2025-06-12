@@ -8,6 +8,8 @@ import re
 # Load environment variables
 load_dotenv()
 
+PORT = int(os.getenv("PORT", 8000))
+
 # Configure Gemma API
 GEMMA_API_KEY = os.getenv("GEMMA_API_KEY")
 if GEMMA_API_KEY:
@@ -19,6 +21,12 @@ if GEMMA_API_KEY:
 GEMMA_MAX_TOKENS = 8192
 GEMMA_SAFETY_MARGIN = 1000  # Reserve tokens for response generation
 MAX_INPUT_TOKENS = GEMMA_MAX_TOKENS - GEMMA_SAFETY_MARGIN  # 7192 tokens
+# Wiki endpoints for search_memory_alpha
+WIKI_ENDPOINTS = [
+    "https://memory-alpha.fandom.com/api.php",
+    "https://22ndmobile.fandom.com/api.php"]
+
+
 
 # Character-based limits REMOVED - Elsie now gets full context
 # These were previously used for truncation but are now disabled
@@ -28,173 +36,10 @@ MAX_INPUT_TOKENS = GEMMA_MAX_TOKENS - GEMMA_SAFETY_MARGIN  # 7192 tokens
 # MAX_CHARS_SHIP_INFO = 4000   # ~1000 tokens for ship info
 MAX_CHARS_PROMPT_BASE = 8000 # ~2000 tokens for base prompt/instructions (kept for prompt validation)
 
-def estimate_token_count(text: str) -> int:
-    """
-    Estimate token count for text input to Gemma API
-    Uses conservative estimate: 1 token ≈ 4 characters (more conservative)
-    """
-    if not text:
-        return 0
-    return int(len(text) / 4)
-
-def truncate_to_token_limit(text: str, max_tokens: int) -> str:
-    """
-    Truncate text to fit within token limit
-    Preserves word boundaries when possible
-    """
-    if not text:
-        return text
-    
-    estimated_tokens = estimate_token_count(text)
-    if estimated_tokens <= max_tokens:
-        return text
-    
-    # Calculate target character count (more conservative)
-    target_chars = int(max_tokens * 4)
-    
-    if len(text) <= target_chars:
-        return text
-    
-    # Truncate at word boundary
-    truncated = text[:target_chars]
-    last_space = truncated.rfind(' ')
-    
-    if last_space > target_chars * 0.8:  # If we can find a space in the last 20%
-        truncated = truncated[:last_space]
-    
-    return truncated + "...[CONTENT TRUNCATED DUE TO LENGTH]"
-
-def validate_total_prompt_size(prompt: str) -> str:
-    """
-    Validate and truncate entire prompt to fit within Gemma token limits
-    """
-    estimated_tokens = estimate_token_count(prompt)
-    
-    if estimated_tokens <= MAX_INPUT_TOKENS:
-        return prompt
-    
-    print(f"⚠️  WARNING: Prompt too long ({estimated_tokens} tokens > {MAX_INPUT_TOKENS} limit)")
-    
-    # Truncate the prompt to fit, being more aggressive
-    target_tokens = MAX_INPUT_TOKENS - 50  # Extra safety margin
-    truncated_prompt = truncate_to_token_limit(prompt, target_tokens)
-    
-    final_tokens = estimate_token_count(truncated_prompt)
-    print(f"   ✂️  Truncated prompt to {final_tokens} tokens")
-    
-    return truncated_prompt
 
 
 
 
 
-# Ship log search patterns
-SHIP_LOG_PATTERNS = [
-    r"show.*logs? for (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
-    r"what.*happened (?:on|aboard) (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
-    r"tell.*about.*(?:the )?(USS )?(?P<ship>[A-Za-z]+).*(?:logs?|events|missions?)",
-    r"(?:get|fetch|find).*logs? for (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
-    r"summarize.*logs? (?:for|from) (?:the )?(USS )?(?P<ship>[A-Za-z]+)"
-]
 
-# Log search keywords
-LOG_SEARCH_KEYWORDS = [
-    'mission', 'event', 'incident', 'encounter', 'expedition',
-    'first contact', 'combat', 'diplomatic', 'exploration',
-    'scientific', 'medical', 'emergency', 'distress', 'rescue'
-]
 
-# Character name patterns and indicators
-CHARACTER_PATTERNS = [
-    r"tell.*about (?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
-    r"who (?:is|was) (?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
-    r"(?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*) (?:biography|background|history|profile)",
-    r"(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*) (?:character|person|officer|crew)",
-    r"(?:about|info on|information about) (?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
-    r"(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)'s (?:background|history|bio)"
-]
-
-CHARACTER_KEYWORDS = [
-    'captain', 'commander', 'lieutenant', 'doctor', 'dr.', 'ensign', 'chief',
-    'officer', 'crew', 'member', 'personnel', 'biography', 'background', 
-    'history', 'profile', 'character', 'person'
-]
-
-# Common Star Trek character names (for better detection)
-COMMON_CHARACTER_NAMES = [
-    'kirk', 'spock', 'mccoy', 'scotty', 'uhura', 'sulu', 'chekov',
-    'picard', 'riker', 'data', 'worf', 'geordi', 'troi', 'beverly',
-    'janeway', 'chakotay', 'tuvok', 'paris', 'torres', 'kim', 'neelix',
-    'sisko', 'kira', 'odo', 'dax', 'bashir', 'obrien', 'nog',
-    'archer', 'trip', 'reed', 'hoshi', 'travis', 'phlox'
-]
-# Activity keywords for ship activity detection
-ACTIVITY_KEYWORDS = ['what happened', 'recent', 'latest', 'activities', 'missions', 'events']
-
-# OOC query detection
-OOC_PREFIX = "OOC"
-OOC_KEYWORDS = [
-    'players handbook',
-    'phb',
-    'rules',
-    'species traits',
-    'character creation',
-    'mechanics',
-    'game mechanics',
-    'link',
-    'url',
-    'page',
-    'get me',
-    'show me',
-    'find'
-]# Meeting information to filter out
-MEETING_INFO_PATTERNS = [
-    r"meets.*[0-9].*[AP]M.*[A-Z]ST",
-    r"GMed by.*",
-    r"DGM.*and DGM.*",
-    r"Game Master.*schedule",
-    r"session.*schedule"
-]
-PORT = int(os.getenv("PORT", 8000))# Roleplay detection patterns and constants
-ROLEPLAY_CONFIDENCE_THRESHOLD = 0.4  # Minimum confidence score to enter roleplay mode
-ROLEPLAY_EXIT_THRESHOLD = 0.3        # Below this for sustained period triggers exit
-ROLEPLAY_SUSTAINED_EXIT_TURNS = 3    # Number of turns below threshold to trigger exit
-
-# Channel restrictions for roleplay mode
-ROLEPLAY_ALLOWED_CHANNEL_TYPES = ['dm', 'thread', 'private']
-ROLEPLAY_RESTRICTED_CHANNELS = ['general', 'public', 'announcements']# Passive listening behavior
-ELSIE_NAME_INDICATORS = [
-    'elsie', 'bartender', 'hey you', 'excuse me',
-    'miss', 'ma\'am', 'server', 'hologram'
-]
-
-# Bar interaction indicators for roleplay responses
-BAR_INTERACTION_INDICATORS = [
-    'approaches the bar', 'walks to the bar', 'sits at the bar',
-    'looks around', 'enters the', 'walks in', 'arrives',
-    'orders', 'asks for', 'requests', 'signals'
-]
-
-# Addressing patterns for character detection
-CHARACTER_ADDRESSING_PATTERNS = [
-    r'^(?:hey|hi|hello|yo)\s+([A-Z][a-z]+),?\s',  # "Hey John,"
-    r'^([A-Z][a-z]+),\s+',                        # "John, ..."
-    r',\s+([A-Z][a-z]+)[.!?]?\s*$',              # "..., John"
-    r'(?:what do you think|your thoughts|what about you|how about you),?\s+([A-Z][a-z]+)[.!?]?',  # Questions
-    r'\*[^*]*(?:turns? to|looks? at|speaks? to|addresses?|faces?)\s+([A-Z][a-z]+)[^*]*\*'  # Emote addressing
-]
-
-# Emote pattern for roleplay detection
-EMOTE_PATTERN = r'\*([^*]+)\*'
-
-# Common words to exclude from character name detection
-ROLEPLAY_EXCLUDED_WORDS = {
-    'The', 'She', 'He', 'They', 'This', 'That', 'Then', 'Now', 'Here', 'There',
-    'When', 'Where', 'What', 'Who', 'Why', 'How', 'Can', 'Could', 'Would', 'Should',
-    'Will', 'Shall', 'May', 'Might', 'Must', 'Do', 'Does', 'Did', 'Have', 'Has',
-    'Had', 'Is', 'Are', 'Was', 'Were', 'Am', 'Be', 'Been', 'Being',
-    'Walks', 'Runs', 'Sits', 'Stands', 'Looks', 'Sees', 'Hears', 'Says', 'Tells',
-    'Gets', 'Takes', 'Gives', 'Brings', 'Comes', 'Goes', 'Turns', 'Moves',
-    'Smiles', 'Laughs', 'Nods', 'Shrugs', 'Points', 'Waves', 'Reaches',
-    'Enters', 'Exits', 'Approaches', 'Leaves', 'Returns', 'Stops'
-} 

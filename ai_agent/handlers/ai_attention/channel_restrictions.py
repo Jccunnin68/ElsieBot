@@ -7,9 +7,9 @@ Roleplay is only allowed in appropriate channels (threads, DMs) to prevent spam 
 DGM posts can override these restrictions to start roleplay in any channel.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 import traceback
-import sys
+
 from .roleplay_types import ALLOWED_CHANNEL_TYPES, RESTRICTED_CHANNEL_TYPES
 from .dgm_handler import check_dgm_post
 

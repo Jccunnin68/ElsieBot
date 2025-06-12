@@ -38,28 +38,7 @@ def detect_roleplay_exit_conditions(user_message: str) -> Tuple[bool, str]:
     for pattern in ooc_patterns:
         if re.search(pattern, user_message, re.IGNORECASE):
             return True, "ooc_brackets"
+ 
     
-    # 3. Technical/factual questions (strong indicators of non-RP)
-    technical_indicators = [
-        'write a script', 'python code', 'javascript', 'programming',
-        'how do i', 'what is the', 'explain how', 'definition of',
-        'calculate', 'formula', 'algorithm', 'debug', 'error',
-        'install', 'download', 'documentation', 'api', 'database'
-    ]
-    
-    for indicator in technical_indicators:
-        if indicator in message_lower:
-            return True, "technical_query"
-    
-    # 4. Meta questions about the system
-    meta_indicators = [
-        'are you an ai', 'what model are you', 'who created you',
-        'what are you', 'how do you work', 'what can you do',
-        'your capabilities', 'your limitations'
-    ]
-    
-    for indicator in meta_indicators:
-        if indicator in message_lower:
-            return True, "meta_query"
     
     return False, "" 

@@ -13,7 +13,7 @@ import os
 
 # from handlers.ai_logic.query_detection import is_federation_archives_request  # Moved to local import to prevent circular dependency
 from handlers.handlers_utils import convert_earth_date_to_star_trek
-from content_retrieval_db import search_memory_alpha
+from handlers.ai_wisdom.content_retrieval_db import search_memory_alpha
 
 from .personality_contexts import detect_mock_personality_context, is_simple_chat
 from .drink_menu import handle_drink_request, get_menu_response, is_menu_request

@@ -30,7 +30,30 @@ LOG_INDICATORS = [
     # Named incidents
     'incident log', 'crisis log', 'affair log', 'operation log'
 ]
-
+CHARACTER_CORRECTIONS = {
+    'serafino': 'Commander Serafino',
+    'doctor serafino': 'Commander Serafino',
+    'ankos': 'Doctor Ankos',
+    'sif': 'Commander Sif',
+    'zhal': 'Commander Zhal',
+    'blaine': 'Captain Blaine',
+    'marcus blaine': 'Captain Marcus Blaine',
+    'eren': 'Captain Sereya Eren',
+    'sereya eren': 'Captain Sereya Eren',
+    'tolena': 'Ensign Blaine',
+    'dryellia': 'Cadet Dryellia',
+    'zarina dryellia': 'Cadet Zarina Dryellia',
+    'snow': 'Cadet Snow',
+    'rigby': 'Cadet Rigby',
+    'scarlett': 'Cadet Scarlett',
+    'bethany scarlett': 'Cadet Bethany Scarlett',
+    'antony': 'Cadet Antony',
+    'finney': 'Cadet Finney',
+    'schwarzweld': 'Cadet Hedwik Schwarzweld',
+    'kodor': 'Cadet Kodor',
+    'vrajen kodor': 'Cadet Vrajen Kodor',
+    'tavi': 'Cadet Antony'
+} 
 def is_log_query(query: str) -> bool:
     """Determine if the query is asking about logs"""
     query_lower = query.lower()

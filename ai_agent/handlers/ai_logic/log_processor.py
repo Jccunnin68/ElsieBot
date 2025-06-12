@@ -28,7 +28,7 @@ This module now handles the advanced gamemaster format for character dialogue in
 """
 
 import re
-from handlers.ai_wisdom.models import CHARACTER_CORRECTIONS
+from handlers.ai_logic.log_patterns import CHARACTER_CORRECTIONS
 from typing import List, Tuple, Dict
 from handlers.ai_logic.log_patterns import SHIP_NAMES
 
