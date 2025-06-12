@@ -128,23 +128,29 @@ Stay helpful and informative. When providing database information, be thorough a
         estimated_tokens = estimate_token_count(prompt)
         print(f"🧮 Estimated token count: {estimated_tokens}")
         
-        if estimated_tokens > 7192:
+        # Increased token limit for more comprehensive responses
+        # Only chunk if we're significantly over the limit (was 7192, now much more conservative)
+        max_allowed_tokens = 7000  # Leave room for response generation
+        
+        if estimated_tokens > max_allowed_tokens:
             print(f"⚠️  Prompt too large ({estimated_tokens} tokens), implementing chunking strategy...")
             
             essential_prompt = f"{context}\n\nCustomer: {user_message}\nElsie:"
             essential_tokens = estimate_token_count(essential_prompt)
             
-            if essential_tokens <= 7192:
+            if essential_tokens <= max_allowed_tokens:
                 prompt = essential_prompt
                 print(f"   📦 Using essential prompt: {essential_tokens} tokens")
             else:
-                # Use larger chunks close to the 7192 token limit to maximize context
-                chunks = chunk_prompt_for_tokens(context, 7192)  # Use 7000 to leave room for prompt structure
-                print(f"   📦 Context chunked into {len(chunks)} parts using large chunks")
+                # Use much larger chunks (6800 tokens instead of 7192) to maximize content
+                # This allows for comprehensive responses while leaving room for the prompt structure
+                large_chunk_size = 6800
+                chunks = chunk_prompt_for_tokens(context, large_chunk_size)
+                print(f"   📦 Context chunked into {len(chunks)} parts using LARGE chunks ({large_chunk_size} tokens each)")
                 
                 prompt = f"{chunks[0]}\n\nCustomer: {user_message}\nElsie:"
                 final_tokens = estimate_token_count(prompt)
-                print(f"   📦 Using first large chunk: {final_tokens} tokens")
+                print(f"   📦 Using first LARGE chunk: {final_tokens} tokens (chunk contains {estimate_token_count(chunks[0])} tokens of content)")
         
         # Generate response
         response = model.generate_content(prompt)

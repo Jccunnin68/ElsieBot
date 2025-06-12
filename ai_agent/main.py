@@ -8,14 +8,15 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from handlers.ai_coordinator import coordinate_response
 from content_retrieval_db import check_elsiebrain_connection, run_database_cleanup
+import traceback
 
 # Check if cleanup flag is set
 CLEANUP_ON_STARTUP = os.getenv("CLEANUP_DATABASE", "false").lower() == "true"
 
 class ChatMessage(BaseModel):
     message: str
-    conversation_history: list = []
     context: dict = {}
+    conversation_history: list = []
 
 from contextlib import asynccontextmanager
 
@@ -57,34 +58,69 @@ async def read_root():
 async def process_message(chat_message: ChatMessage):
     """Process a chat message and return AI response"""
     try:
+        print(f"\n🔍 PROCESS ENDPOINT DEBUG:")
+        print(f"   📝 Received message: {chat_message.message}")
+        print(f"   📦 Raw context: {chat_message.context}")
+        print(f"   📚 Conversation history: {chat_message.conversation_history}")
+        
         # Extract channel context from the request context
         channel_context = None
         if chat_message.context:
-            # Build channel context from Discord bot context
-            channel_context = {
-                'session_id': chat_message.context.get('session_id'),
-                'platform': chat_message.context.get('platform', 'unknown'),
-                'type': chat_message.context.get('channel_type', 'unknown'),
-                'name': chat_message.context.get('channel_name', 'unknown'),
-                'is_thread': chat_message.context.get('is_thread', False),
-                'is_dm': chat_message.context.get('is_dm', False),
-                'channel_id': chat_message.context.get('channel_id'),
-                'guild_id': chat_message.context.get('guild_id'),
-                'user_id': chat_message.context.get('user_id'),
-                'username': chat_message.context.get('username'),
-                'raw_context': chat_message.context  # Keep original for debugging
-            }
-            
-            # Log the incoming context for debugging
-            print(f"🌐 RECEIVED CONTEXT FROM DISCORD BOT:")
-            print(f"   📋 Raw Context: {chat_message.context}")
-            print(f"   🔧 Processed Context: {channel_context}")
+            try:
+                # Build channel context from Discord bot context
+                channel_context = {
+                    'session_id': chat_message.context.get('session_id'),
+                    'platform': chat_message.context.get('platform', 'unknown'),
+                    'type': chat_message.context.get('channel_type', 'unknown'),
+                    'name': chat_message.context.get('channel_name', 'unknown'),
+                    'is_thread': chat_message.context.get('is_thread', False),
+                    'is_dm': chat_message.context.get('is_dm', False),
+                    'channel_id': chat_message.context.get('channel_id'),
+                    'guild_id': chat_message.context.get('guild_id'),
+                    'user_id': chat_message.context.get('user_id'),
+                    'username': chat_message.context.get('username'),
+                    'raw_context': chat_message.context  # Keep original for debugging
+                }
+                
+                print(f"   🌐 Processed channel context:")
+                print(f"      - Type: {channel_context['type']}")
+                print(f"      - Name: {channel_context['name']}")
+                print(f"      - Is Thread: {channel_context['is_thread']}")
+                print(f"      - Is DM: {channel_context['is_dm']}")
+                
+            except Exception as e:
+                print(f"   ❌ Error processing channel context: {str(e)}")
+                print(f"   📚 Traceback: {traceback.format_exc()}")
+                channel_context = {
+                    'type': 'unknown',
+                    'name': 'unknown',
+                    'is_thread': False,
+                    'is_dm': False
+                }
         
-        response = coordinate_response(chat_message.message, chat_message.conversation_history, channel_context)
-        return {"response": response}
+        try:
+            print(f"   🔄 Calling coordinate_response...")
+            response = coordinate_response(chat_message.message, chat_message.conversation_history, channel_context)
+            print(f"   ✅ Response generated successfully")
+            return {"response": response}
+            
+        except Exception as e:
+            print(f"   ❌ Error in coordinate_response: {str(e)}")
+            print(f"   📚 Traceback: {traceback.format_exc()}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error generating response: {str(e)}"
+            )
+            
     except Exception as e:
-        print(f"Error processing message: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ CRITICAL ERROR in process_message:")
+        print(f"   Error: {str(e)}")
+        print(f"   Type: {type(e).__name__}")
+        print(f"   Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 @app.get("/health")
 async def health_check():

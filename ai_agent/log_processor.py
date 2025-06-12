@@ -30,36 +30,12 @@ This module now handles the advanced gamemaster format for character dialogue in
 import re
 from models import CHARACTER_CORRECTIONS
 from typing import List, Tuple, Dict
+from handlers.ai_logic.log_patterns import is_log_query, LOG_INDICATORS
 
 SHIP_NAMES = [
     'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
     'caelian', 'gigantes', 'banshee'
 ]
-
-# Log indicators for query detection
-LOG_INDICATORS = [
-    'log', 'logs', 'mission log', 'ship log', 'stardancer log', 
-    'captain log', 'personal log', 'stardate', 'entry',
-    'what happened', 'events', 'mission report', 'incident report',
-    'summarize', 'summary', 'recap', 'tell me what',
-    'last mission', 'recent mission', 'latest log',
-    'captain\'s log', 'first officer\'s log',
-    'expedition', 'away mission', 'away team',
-    'event log', 'event logs', 'incident', 'incident log',
-    'event report', 'occurrence', 'happening',
-    # Ship-specific log patterns
-    'adagio log', 'pilgrim', 'stardancer log', 'protector log',
-    'manta ', 'sentinel', 'caelian','gigantes', 'banshee','adagio'
-    # Date-based patterns
-    'retrieve', 'show me', 'get the log', 'find the log',
-    # Named incidents
-    'incident log', 'crisis log', 'affair log', 'operation log'
-]
-
-def is_log_query(query: str) -> bool:
-    """Determine if the query is asking about logs"""
-    query_lower = query.lower()
-    return any(indicator in query_lower for indicator in LOG_INDICATORS)
 
 def is_ship_log_title(title: str) -> bool:
     """Enhanced ship log title detection supporting multiple formats:

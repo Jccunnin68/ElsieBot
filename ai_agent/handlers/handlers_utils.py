@@ -3,13 +3,9 @@
 import re
 from datetime import datetime
 
+from config import estimate_token_count
 
-from config import (
-    estimate_token_count,
-   
-)
-
-# Meeting information patterns for filtering
+# Meeting information patterns for filtering (defined locally)
 MEETING_INFO_PATTERNS = [
     r'Meeting times?.*?\n',
     r'Game master.*?\n',
@@ -95,17 +91,18 @@ def convert_earth_date_to_star_trek(date_text: str) -> str:
     return converted_text
 
 
-def chunk_prompt_for_tokens(prompt: str, max_tokens: int = 7192) -> list:
+def chunk_prompt_for_tokens(prompt: str, max_tokens: int = 6800) -> list:
     """
     Break large prompts into manageable chunks that fit within token limits.
     Returns a list of prompt chunks.
+    Updated to use larger chunks by default for more comprehensive responses.
     """
     estimated_tokens = estimate_token_count(prompt)
     
     if estimated_tokens <= max_tokens:
         return [prompt]
     
-    # Split prompt into sections
+    # Split prompt into sections - try to keep larger logical blocks together
     sections = prompt.split('\n\n')
     chunks = []
     current_chunk = ""
@@ -130,7 +127,7 @@ def chunk_prompt_for_tokens(prompt: str, max_tokens: int = 7192) -> list:
                 current_chunk = section
                 current_tokens = section_tokens
             else:
-                # Section too large, split it further
+                # Section too large, split it further but use larger word groups
                 words = section.split()
                 temp_section = ""
                 for word in words:
@@ -146,7 +143,6 @@ def chunk_prompt_for_tokens(prompt: str, max_tokens: int = 7192) -> list:
                     current_chunk = temp_section
                     current_tokens = estimate_token_count(temp_section)
     
-   
     if current_chunk:
         chunks.append(current_chunk)
     

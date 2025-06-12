@@ -51,7 +51,7 @@ def get_focused_continuation_context(strategy: Dict[str, Any]) -> str:
     
     converted_wiki_info = convert_earth_date_to_star_trek(wiki_info) if wiki_info else wiki_info
     
-    return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with expertise in stellar cartography and database research.
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance
 
 CRITICAL INSTRUCTIONS FOR FOCUSED CONTINUATION:
 - The user is asking for MORE SPECIFIC information about: "{focus_subject}"
@@ -82,7 +82,7 @@ def get_character_context(user_message: str) -> str:
     
     converted_character_info = convert_earth_date_to_star_trek(character_info) if character_info else character_info
     
-    return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with expertise in stellar cartography and database research.
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
 CRITICAL INSTRUCTIONS FOR CHARACTER QUERIES:
 - You are being asked about the character: {character_name}
@@ -168,7 +168,7 @@ def get_federation_archives_context(user_message: str) -> str:
     
     converted_archives_info = convert_earth_date_to_star_trek(archives_info) if archives_info else archives_info
     
-    return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with access to Federation archives and databases.
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
 CRITICAL INSTRUCTIONS FOR FEDERATION ARCHIVES ACCESS:
 - The user specifically requested federation archives access for: "{search_query}"
@@ -190,32 +190,117 @@ Present the archives information comprehensively and reference it as external fe
 def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     """Generate context for log queries."""
     print(f"📋 SEARCHING LOG DATA")
-    mission_logs_only = strategy.get('log_specific', False)
-    if mission_logs_only:
-        wiki_info = get_log_content(user_message, mission_logs_only=True)
-        print(f"   - Retrieved MISSION LOGS ONLY content length: {len(wiki_info)} chars")
+    
+    # Check for enhanced log-specific search strategies
+    if strategy.get('ship_logs_only'):
+        target_ship = strategy.get('target_ship')
+        log_type = strategy.get('log_type')
+        print(f"   🚢📋 SHIP LOGS ONLY: searching logs for '{target_ship}' (log_type: {log_type})")
+        
+        # Use database controller to search ship-specific logs only
+        try:
+            from content_retrieval_db import get_db_controller
+            controller = get_db_controller()
+            
+            # Search for logs that mention the target ship
+            search_query = f"{target_ship} {log_type}" if log_type else target_ship
+            results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            
+            if results:
+                wiki_info = ""
+                for result in results:
+                    content = result['raw_content']
+                    page_type = result.get('page_type', 'general')
+                    log_date = result.get('log_date', 'Unknown Date')
+                    ship_name = result.get('ship_name', 'Unknown Ship')
+                    
+                    type_indicator = f" [Mission Log - {log_date}]"
+                    if ship_name and ship_name.lower() != 'unknown ship':
+                        type_indicator += f" ({ship_name.upper()})"
+                    
+                    wiki_info += f"**{result['title']}{type_indicator}**\n{content}\n\n"
+                
+                print(f"   📊 Found {len(results)} ship-specific logs ({len(wiki_info)} chars)")
+            else:
+                wiki_info = f"No logs found specifically mentioning '{target_ship}'"
+                print(f"   ❌ No ship-specific logs found for '{target_ship}'")
+        
+        except Exception as e:
+            print(f"   ❌ Error searching ship logs: {e}")
+            wiki_info = f"Error searching for {target_ship} logs: {e}"
+    
+    elif strategy.get('character_logs_only'):
+        target_character = strategy.get('target_character')
+        log_type = strategy.get('log_type')
+        print(f"   🧑📋 CHARACTER LOGS ONLY: searching logs for '{target_character}' (log_type: {log_type})")
+        
+        # Use database controller to search character-specific logs only
+        try:
+            from content_retrieval_db import get_db_controller
+            controller = get_db_controller()
+            
+            # Search for logs that mention the target character
+            search_query = f"{target_character} {log_type}" if log_type else target_character
+            results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            
+            if results:
+                wiki_info = ""
+                for result in results:
+                    content = result['raw_content']
+                    log_date = result.get('log_date', 'Unknown Date')
+                    ship_name = result.get('ship_name', 'Unknown Ship')
+                    
+                    type_indicator = f" [Mission Log - {log_date}]"
+                    if ship_name and ship_name.lower() != 'unknown ship':
+                        type_indicator += f" ({ship_name.upper()})"
+                    
+                    wiki_info += f"**{result['title']}{type_indicator}**\n{content}\n\n"
+                
+                print(f"   📊 Found {len(results)} character-specific logs ({len(wiki_info)} chars)")
+            else:
+                wiki_info = f"No logs found specifically mentioning '{target_character}'"
+                print(f"   ❌ No character-specific logs found for '{target_character}'")
+        
+        except Exception as e:
+            print(f"   ❌ Error searching character logs: {e}")
+            wiki_info = f"Error searching for {target_character} logs: {e}"
+    
     else:
-        wiki_info = get_relevant_wiki_context(user_message)
-        print(f"   - Retrieved general log content length: {len(wiki_info)} chars")
+        # Standard log search behavior
+        mission_logs_only = strategy.get('log_specific', False)
+        if mission_logs_only:
+            wiki_info = get_log_content(user_message, mission_logs_only=True)
+            print(f"   - Retrieved MISSION LOGS ONLY content length: {len(wiki_info)} chars")
+        else:
+            wiki_info = get_relevant_wiki_context(user_message)
+            print(f"   - Retrieved general log content length: {len(wiki_info)} chars")
     
     total_found = wiki_info.count("**") if wiki_info else 0
     
     converted_wiki_info = convert_earth_date_to_star_trek(wiki_info) if wiki_info else wiki_info
     
-    log_type_description = "mission logs only" if mission_logs_only else "logs and related content"
+    # Determine log type description based on strategy
+    if strategy.get('ship_logs_only'):
+        log_type_description = f"logs mentioning {strategy.get('target_ship')}"
+    elif strategy.get('character_logs_only'):
+        log_type_description = f"logs mentioning {strategy.get('target_character')}"
+    elif strategy.get('log_specific'):
+        log_type_description = "mission logs only"
+    else:
+        log_type_description = "logs and related content"
     
     return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with access to comprehensive ship databases.
 
-CRITICAL INSTRUCTIONS FOR LOG QUERIES - HIERARCHICAL DATABASE SEARCH:
+CRITICAL INSTRUCTIONS FOR LOG QUERIES - ENHANCED SEARCH STRATEGY:
 - You are being asked to summarize or explain {log_type_description}
-- HIERARCHICAL SEARCH was performed: titles first, then content search
-- Search prioritized exact title matches before searching within log content
+- ENHANCED SEARCH was performed: prioritizing log-specific content over general information
+- Search focused specifically on mission logs when ship/character names were combined with log terms
 - ALL DATES have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after)
 
 DATABASE QUERY: "{user_message}"
+SEARCH STRATEGY: {strategy.get('reasoning', 'Standard log search')}
 TOTAL LOG ENTRIES FOUND: {total_found}
 SEARCH RESULTS SIZE: {len(converted_wiki_info)} characters
-SEARCH TYPE: {"Mission logs only" if mission_logs_only else "Comprehensive search"}
 
 STRICT DATABASE ADHERENCE REQUIRED:
 - ONLY use the log content provided in the DATABASE SEARCH RESULTS section below
