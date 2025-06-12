@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'ai_agent'))
 
-from content_retrieval_db import search_memory_alpha
+from handlers.ai_wisdom.content_retrieval_db import search_memory_alpha
 
 def test_memory_alpha_search():
     """Test the Memory Alpha search functionality"""

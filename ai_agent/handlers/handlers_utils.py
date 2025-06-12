@@ -3,7 +3,7 @@
 import re
 from datetime import datetime
 
-from config import estimate_token_count
+
 
 # Meeting information patterns for filtering (defined locally)
 MEETING_INFO_PATTERNS = [
@@ -162,3 +162,11 @@ def filter_meeting_info(text: str) -> str:
     return filtered_text.strip()
 
 
+def estimate_token_count(text: str) -> int:
+    """
+    Estimate token count for text input to Gemma API
+    Uses conservative estimate: 1 token ≈ 4 characters (more conservative)
+    """
+    if not text:
+        return 0
+    return int(len(text) / 4)

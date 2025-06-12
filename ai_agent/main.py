@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from handlers.ai_coordinator import coordinate_response
-from content_retrieval_db import check_elsiebrain_connection, run_database_cleanup
+from handlers.ai_wisdom.content_retrieval_db import check_elsiebrain_connection, run_database_cleanup
 import traceback
 
 # Check if cleanup flag is set

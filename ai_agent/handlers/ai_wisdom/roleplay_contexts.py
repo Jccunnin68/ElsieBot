@@ -8,7 +8,7 @@ including personality detection and database integration for roleplay queries.
 
 from typing import Dict, Any, List
 
-from content_retrieval_db import (
+from handlers.ai_wisdom.content_retrieval_db import (
     get_log_content,
     search_by_type,
     get_tell_me_about_content_prioritized,
@@ -180,7 +180,7 @@ Current roleplay confidence: {confidence:.2f}
 Detected triggers: {', '.join(triggers)}
 {addressed_note}
 {"Direct mention detected - engage fully!" if elsie_mentioned else ""}
-{"DGM ULTRA-PASSIVE MODE: ONLY respond when directly addressed by name!" if is_dgm_session else ""}
+{"DGM ULTRA-PASSIVE MODE: ONLY respond when directly addressed by name or someone is talking about you, do not respond to general bar actions like '*looks around*' or '*sits at table*'" if is_dgm_session else ""}
 
 Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, be like invisible furniture unless someone specifically talks TO you." if is_dgm_session else ""}"""
 

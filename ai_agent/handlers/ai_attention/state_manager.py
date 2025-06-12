@@ -6,7 +6,7 @@ Manages the state of ongoing roleplay sessions, including participant tracking,
 turn management, and conversation flow logic.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from .character_tracking import extract_current_speaker, is_valid_character_name
 
 

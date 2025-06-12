@@ -15,15 +15,10 @@ Usage:
 from typing import Optional, Tuple, Dict, List
 import re
 
-from handlers.ai_logic.log_patterns import is_log_query, has_log_specific_terms
+from handlers.ai_logic.log_patterns import is_log_query, has_log_specific_terms, SHIP_NAMES
 
 # Define all pattern recognition constants locally (moved from config.py)
-# Ship names from the fleet
-SHIP_NAMES = [
-    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
-    'caelian', 'enterprise', 'montagnier', 'faraday', 'cook', 'mjolnir',
-    'rendino', 'gigantes', 'banshee'
-]
+
 OOC_PREFIX = "OOC"
 OOC_KEYWORDS = [
     'players handbook',

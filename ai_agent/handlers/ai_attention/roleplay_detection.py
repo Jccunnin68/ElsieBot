@@ -15,8 +15,6 @@ from .roleplay_types import (
     RoleplayConfidence,
     RoleplayTrigger,
     MIN_ROLEPLAY_CONFIDENCE,
-    MIN_CONTINUATION_CONFIDENCE,
-    MIN_THREAD_CONFIDENCE,
     TRIGGER_TYPES
 )
 from .channel_restrictions import is_roleplay_allowed_channel

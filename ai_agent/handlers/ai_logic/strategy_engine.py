@@ -14,7 +14,6 @@ from typing import Dict, List, Optional
 import traceback
 
 # Imports for strategy detection functions
-from handlers.ai_wisdom.roleplay_contexts import _check_roleplay_database_needs
 from handlers.ai_logic.query_detection import (
     extract_continuation_focus,
     extract_ooc_log_url_request,
@@ -27,7 +26,6 @@ from handlers.ai_logic.query_detection import (
     is_ooc_query,
     is_log_query,
     is_federation_archives_request,
-    should_prioritize_logs_over_general_info,
     is_ship_plus_log_query,
     is_character_plus_log_query
 )
@@ -42,17 +40,13 @@ from handlers.ai_attention.roleplay_detection import detect_roleplay_triggers
 from handlers.ai_attention.exit_conditions import detect_roleplay_exit_conditions
 from handlers.ai_attention.roleplay_strategy import process_roleplay_strategy
 from handlers.ai_attention.state_manager import get_roleplay_state
-from handlers.ai_attention.channel_restrictions import is_roleplay_allowed_channel
 from handlers.ai_attention.dgm_handler import check_dgm_post as _check_dgm_post
-from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
 
 # Import shared roleplay types
 from handlers.ai_attention.roleplay_types import (
     APPROACH_TYPES,
     CONTEXT_PRIORITIES,
-    DATABASE_NEEDS,
     EXIT_CONDITIONS,
-    RESPONSE_REASONS,
     TRIGGER_TYPES
 )
 

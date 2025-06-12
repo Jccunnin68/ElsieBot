@@ -13,7 +13,6 @@ from .character_tracking import (
 )
 from .state_manager import get_roleplay_state
 from .response_logic import should_elsie_respond_in_roleplay
-from .dgm_handler import check_dgm_post
 import re
 
 def process_roleplay_strategy(user_message: str, turn_number: int, channel_context: Dict, confidence_score: float, triggers: List[str]) -> Dict[str, any]:

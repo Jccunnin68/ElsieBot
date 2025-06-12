@@ -13,7 +13,6 @@ from typing import Tuple, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from .state_manager import RoleplayStateManager
 
-from .character_tracking import is_valid_character_name
 
 
 def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayStateManager', current_turn: int) -> Tuple[bool, str]:
