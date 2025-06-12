@@ -2,89 +2,12 @@
 
 This document provides a detailed overview of the technical architecture of the Elsie project. For a simpler, high-level overview, please see the main [README.md](../README.md).
 
-## Architecture Diagram
+## High-Level Overview
 
-The following diagram illustrates the flow of a message through the entire system, from the user's input in Discord to the final response. It shows the major components, their interactions, and where key decisions are made.
-
-```mermaid
-graph TD
-    subgraph "User Interaction"
-        User[Discord User]
-    end
-
-    subgraph "Elsie Project"
-        subgraph "Discord Bot (Go)"
-            Bot[discord_bot/main.go]
-        end
-
-        subgraph "AI Agent (Python/FastAPI)"
-            Agent[ai_agent/main.py]
-            subgraph "Coordination Layer"
-                Coordinator[handlers.ai_coordinator]
-            end
-            subgraph "Decision & Logic Layer"
-                Logic[handlers.ai_logic]
-                Decision["decision_extractor.py<br/>(Decides if AI call is needed)"]
-                Strategy["strategy_engine.py<br/>(Determines approach)"]
-                Query["query_detection.py<br/>(Identifies intent)"]
-            end
-            subgraph "Roleplay Attention Layer"
-                Attention[handlers.ai_attention]
-                RP_Detection["roleplay_detection.py<br/>(Is this roleplay?)"]
-                DGM["dgm_handler.py<br/>(Is this a DGM post?)"]
-                RP_State["state_manager.py<br/>(Tracks RP session)"]
-                RP_Logic["response_logic.py<br/>(Should Elsie respond?)"]
-                Restrictions["channel_restrictions.py<br/>(Is RP allowed here?)"]
-            end
-            subgraph "Context & Wisdom Layer"
-                Wisdom[handlers.ai_wisdom]
-                Context["context_coordinator.py<br/>(Gathers all context)"]
-                DB_Context["database_contexts.py<br/>(Gets info from DB)"]
-                RP_Context["roleplay_contexts.py<br/>(Builds RP prompt)"]
-            end
-        end
-
-        subgraph "Database Ecosystem"
-            DB[(PostgreSQL<br/>elsiebrain)]
-            Populator[db_populator/wiki_crawler.py]
-        end
-    end
-
-    User -- "Message/Command" --> Bot
-    Bot -- "Simple Command? (ping/help)" --> Bot
-    Bot -- "Process & Respond" --> User
-    
-    Bot -- "HTTP POST Request<br/>(Message + Context)" --> Agent
-    Agent -- "Receives Request" --> Coordinator
-    Coordinator -- "Coordinates Response" --> Logic
-    
-    Logic -- "Determines Strategy" --> Strategy
-    Strategy -- "Detects Triggers" --> Attention
-    Attention -- "Is Roleplay?" --> RP_Detection
-    RP_Detection -- "Checks DGM" --> DGM
-    RP_Detection -- "Checks Channel" --> Restrictions
-    Strategy -- "Handles Ongoing RP" --> RP_State
-    Strategy -- "Decides RP Response" --> RP_Logic
-
-    Strategy -- "Detects Query Type" --> Query
-    
-    Logic -- "Makes Final Decision" --> Decision
-    Decision -- "Simple Response (No AI)" --> Coordinator
-    Decision -- "Needs AI Generation" --> Wisdom
-    
-    Wisdom -- "Gathers Context" --> Context
-    Context -- "Needs DB Info?" --> DB_Context
-    DB_Context -- "SELECT Query" --> DB
-    
-    Context -- "Needs RP Context?" --> RP_Context
-    
-    Wisdom -- "Generates Full Prompt" --> Coordinator
-    Coordinator -- "Sends to AI Model (Gemma)" --> Coordinator
-    Coordinator -- "Returns Final Text" --> Agent
-    Agent -- "HTTP Response" --> Bot
-
-    Populator -- "INSERT/UPDATE Data" --> DB
-```
+The Elsie system consists of three main parts:
+1.  **Discord Bot (Go)**: A lightweight Go application that connects to the Discord Gateway, listens for messages, and handles basic command parsing.
+2.  **AI Agent (Python/FastAPI)**: The "brain" of the system. It receives complex queries from the Go bot via an HTTP API and performs all the natural language processing, state management, and response generation.
+3.  **Database (PostgreSQL)**: The knowledge base (`elsiebrain`) that stores lore, logs, and character information.
 
 ## Component Breakdown
 
@@ -102,31 +25,80 @@ graph TD
     - Posts the final response back to the Discord channel, handling message splitting if necessary.
 
 ### 3. AI Agent (Python/FastAPI)
-This is the core of the system, where all the intelligence resides.
 
-- **`ai_agent/main.py`**: The FastAPI server that exposes the `/process` endpoint.
+This section details the architecture of the Python-based AI agent.
 
-- **Coordination Layer (`handlers.ai_coordinator`)**:
-    - Acts as the central hub for processing a request. It directs the flow of data through the other layers.
+#### Core Components
 
-- **Decision & Logic Layer (`handlers.ai_logic`)**:
-    - **`strategy_engine.py`**: The "inner monologue" of the bot. It performs the first major analysis of the user's message to determine the overall *approach* (e.g., this is a roleplay message, a database query, or just small talk).
-    - **`query_detection.py`**: A set of specific functions, mostly using regular expressions, to identify fine-grained user intents, such as asking for a log or information about a character.
-    - **`decision_extractor.py`**: A critical optimization component. After the strategy is determined, this module decides if a full, expensive call to an AI model is necessary. For simple actions (like acknowledging a DGM post or listening in a scene), it provides a pre-generated response, saving time and resources.
+-   **`main.py`**: The main FastAPI application file. It defines the API endpoints (`/process`, `/health`), manages the application lifecycle (startup/shutdown), and handles incoming requests.
 
-- **Roleplay Attention Layer (`handlers.ai_attention`)**:
-    - This layer manages all aspects of roleplay.
-    - **`roleplay_detection.py`**: Detects the presence of roleplay triggers (emotes, dialogue) and calculates a confidence score.
-    - **`dgm_handler.py`**: Parses and handles `[DGM]` commands, which have the highest priority.
-    - **`state_manager.py`**: A state machine that tracks the current status of a roleplay session (e.g., who is participating, how long the session has been active).
-    - **`response_logic.py`**: Once in a roleplay session, this module determines *if* and *how* Elsie should respond. It's responsible for making her a passive listener in multi-character scenes or an active participant when addressed directly.
-    - **`channel_restrictions.py`**: Checks if roleplay is allowed in the current channel, but can be overridden by a DGM command.
+-   **`database_controller.py`**: The low-level controller for database interactions. It manages the connection pool to the `elsiebrain` PostgreSQL database and executes raw SQL queries.
 
-- **Context & Wisdom Layer (`handlers.ai_wisdom`)**:
-    - This layer is responsible for gathering all the necessary information to build a high-quality prompt for the AI model.
-    - **`context_coordinator.py`**: The main entry point that assembles the final context.
-    - **`database_contexts.py`**: Fetches and formats information from the `elsiebrain` PostgreSQL database if the strategy requires it.
-    - **`roleplay_contexts.py`**: Constructs the specialized prompts needed for Elsie to respond naturally and in-character during roleplay.
+-   **`content_retrieval_db.py`**: A high-level abstraction layer that sits on top of the `database_controller`. It provides simple, purpose-built functions (e.g., `get_character_context`, `get_log_content`) that the rest of the application can use without needing to know the database schema.
+
+-   **`log_processor.py`**: A utility module for parsing and cleaning raw log content retrieved from the database.
+
+-   **`config.py`**: Stores all configuration, including API keys, database credentials, and regex patterns used for query detection throughout the application.
+
+-   **`handlers/`**: This directory contains the core intelligence of the AI agent, broken down into the following packages:
+    -   **`ai_act` & `ai_coordinator`**: The top-level coordinators that interface with `main.py`, receive requests, and direct them through the processing pipeline. `ai_act.py` specifically handles the interface with the Discord bot's data structures.
+    -   **`ai_logic`**: Contains the "inner monologue" of the bot. It uses the `strategy_engine` to determine the high-level response strategy and `query_detection` to identify specific user intents.
+    -   **`ai_attention`**: Manages all aspects of roleplay, including state management (`state_manager.py`), DGM command handling, character tracking, and response logic for social situations.
+    -   **`ai_wisdom`**: Responsible for gathering and coordinating context from `content_retrieval_db.py` to build rich, informative prompts for the AI.
+    -   **`ai_emotion`**: Contains handlers for pre-generated "canned" responses. This gives Elsie a consistent personality for simple interactions (like greetings or drink orders) without needing to call the full AI model, making the system highly efficient.
+    -   **`ai_engine`**: The final step in the "smart" pipeline. This module constructs the final prompt and performs the expensive call to the external AI (Gemma) API.
+
+#### Data & Processing Flow
+
+```mermaid
+graph TD
+    subgraph "Interface & Core"
+        A[FastAPI Request] --> B(main.py);
+        B --> C(handlers/ai_act.py);
+    end
+
+    subgraph "Handler Pipeline"
+        C --> D{ai_coordinator};
+        D --> E{ai_logic};
+        E --> F{ai_attention};
+        E --> G{ai_wisdom};
+        D --> H{ai_emotion};
+        D --> I{ai_engine};
+    end
+
+    subgraph "Database Layer"
+        G -- "get_context()" --> J(content_retrieval_db.py);
+        J -- "SELECT..." --> K(database_controller.py);
+        K -- "SQL" --> L[(elsiebrain DB)];
+    end
+    
+    subgraph "AI Generation"
+       I -- "Generates Prompt" --> M((LLM API));
+    end
+
+    subgraph "Control Flow"
+        C -- "Process Message" --> D;
+        D -- "Strategy" --> E;
+        E -- "Is Roleplay?" --> F;
+        D -- "Simple Query?" --> H;
+        D -- "Complex Query?" --> G;
+        G -- "Context for Prompt" --> I;
+        H -- "Canned Response" --> C;
+        I -- "Generated Response" --> C;
+    end
+```
+
+#### How it Works
+
+1.  A `POST` request with the message context arrives at **`main.py`**.
+2.  The request is passed to **`ai_act.py`** and then to the **`ai_coordinator`**, which begins the main processing pipeline.
+3.  The **`ai_logic`** layer determines a `strategy` for the response. It leverages the **`ai_attention`** layer to understand the social context (is it roleplay? who is speaking?).
+4.  A crucial decision is made:
+    -   **Fast Path (No AI)**: If the strategy is simple (a greeting, a DGM post, a drink order), a pre-generated response is retrieved from the **`ai_emotion`** package and returned immediately.
+    -   **Slow Path (AI Needed)**: For complex queries, the **`ai_wisdom`** layer is engaged.
+5.  `ai_wisdom` fetches relevant information by calling functions in **`content_retrieval_db.py`**, which in turn uses the **`database_controller`** to query the database.
+6.  The retrieved context is passed to the **`ai_engine`**, which builds a final prompt and sends it to the external LLM for generation.
+7.  The final response is passed back up the chain and sent out via the API.
 
 ### 4. Database Ecosystem
 - **PostgreSQL (`elsiebrain`)**: The knowledge base of the bot, containing structured data about the game world.
