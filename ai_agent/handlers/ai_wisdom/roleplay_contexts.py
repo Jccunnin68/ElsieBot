@@ -214,7 +214,7 @@ def detect_roleplay_personality_context(user_message: str) -> str:
     drink_keywords = [
         'drink', 'cocktail', 'beer', 'wine', 'whiskey', 'alcohol',
         'beverage', 'bartender', 'bar', 'menu', 'order', 'serve',
-        'romulan ale', 'synthehol', 'kanar', 'raktajino'
+        'romulan ale', 'synthehol', 'kanar', 'raktajino', 'slug-o-cola', 'ambassador', 'dizzy lizzy'
     ]
     
     # Check for stellar cartography context
