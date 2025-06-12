@@ -26,6 +26,70 @@ from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
 from handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
 from handlers.ai_coordinator.conversation_utils import detect_topic_change
 
+def convert_to_third_person_emotes(response_text: str) -> str:
+    """
+    Convert first-person emotes to third-person for consistent roleplay perspective.
+    Examples:
+    - "*I glance*" -> "*glances*" 
+    - "*shakes my head*" -> "*shakes her head*"
+    - "*I smile*" -> "*smiles*"
+    """
+    import re
+    
+    # Find all emotes (text between asterisks)
+    emote_pattern = r'\*([^*]+)\*'
+    
+    def convert_emote(match):
+        emote_text = match.group(1).strip()
+        original_emote = emote_text
+        
+        # Convert first-person pronouns to third-person
+        conversions = [
+            # "I" at the beginning of emotes
+            (r'^I\s+', ''),  # "*I glance*" -> "*glance*"
+            (r'\bI\s+', ''),  # "and I smile" -> "and smile"
+            
+            # "my" to "her"
+            (r'\bmy\b', 'her'),  # "*shakes my head*" -> "*shakes her head*"
+            (r'\bMy\b', 'Her'),  # "*My eyes widen*" -> "*Her eyes widen*"
+            
+            # "me" to "her" (when appropriate)
+            (r'\bme\b', 'her'),  # "*looks at me*" -> "*looks at her*"
+            (r'\bMe\b', 'Her'),  # "*Me too*" -> "*Her too*"
+            
+            # "myself" to "herself"
+            (r'\bmyself\b', 'herself'),
+            (r'\bMyself\b', 'Herself'),
+        ]
+        
+        # Apply conversions
+        for pattern, replacement in conversions:
+            emote_text = re.sub(pattern, replacement, emote_text)
+        
+        # Handle verb conjugation for "I" removal
+        # This is a simplified approach - catches common cases
+        verb_fixes = [
+            # Fix common verb forms after removing "I"
+            (r'^am\b', 'is'),  # "*am walking*" -> "*is walking*"
+            (r'^have\b', 'has'),  # "*have noticed*" -> "*has noticed*"
+            (r'^do\b', 'does'),  # "*do think*" -> "*does think*"
+            (r'^are\b', 'is'),  # "*are feeling*" -> "*is feeling*" (rare but possible)
+        ]
+        
+        for pattern, replacement in verb_fixes:
+            emote_text = re.sub(pattern, replacement, emote_text, flags=re.IGNORECASE)
+        
+        # Log the conversion if it changed
+        if emote_text != original_emote:
+            print(f"   🎭 EMOTE CONVERSION: '*{original_emote}*' -> '*{emote_text}*'")
+        
+        return f"*{emote_text}*"
+    
+    # Apply the conversion to all emotes
+    converted_text = re.sub(emote_pattern, convert_emote, response_text)
+    
+    return converted_text
+
 def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
     """
     AI response generation using a pre-made decision.
@@ -185,6 +249,9 @@ Stay helpful and informative. When providing database information, be thorough a
         
         # Track who Elsie addressed in her response for simple implicit response logic
         if strategy['approach'] == 'roleplay_active':
+            # Convert first-person emotes to third-person for consistent roleplay perspective
+            response_text = convert_to_third_person_emotes(response_text)
+            
             rp_state = get_roleplay_state()
             turn_number = len(conversation_history) + 1
             
