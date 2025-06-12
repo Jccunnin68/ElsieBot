@@ -13,7 +13,7 @@ import os
 # Add parent directories to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from handlers.ai_logic.query_detection import is_federation_archives_request
+# from handlers.ai_logic.query_detection import is_federation_archives_request  # Moved to local import to prevent circular dependency
 from handlers.handlers_utils import convert_earth_date_to_star_trek
 from content_retrieval_db import search_memory_alpha
 
@@ -47,8 +47,15 @@ def should_use_mock_response(user_message: str, api_available: bool = False) -> 
         return True
     
     # Use mock for federation archives requests (they have their own search)
-    if is_federation_archives_request(user_message):
-        return True
+    try:
+        from handlers.ai_logic.query_detection import is_federation_archives_request
+        if is_federation_archives_request(user_message):
+            return True
+    except ImportError:
+        # Fallback federation archives detection
+        archives_patterns = ['federation archives', 'check archives', 'search archives']
+        if any(pattern in user_message.lower() for pattern in archives_patterns):
+            return True
     
     return False
 
@@ -70,8 +77,15 @@ def get_mock_response(user_message: str, context: Dict[str, Any] = None) -> str:
     # Check for specific response types in order of priority
     
     # 1. Federation Archives requests (special handling)
-    if is_federation_archives_request(user_message):
-        return _handle_federation_archives_request(user_message)
+    try:
+        from handlers.ai_logic.query_detection import is_federation_archives_request
+        if is_federation_archives_request(user_message):
+            return _handle_federation_archives_request(user_message)
+    except ImportError:
+        # Fallback federation archives detection
+        archives_patterns = ['federation archives', 'check archives', 'search archives']
+        if any(pattern in user_message.lower() for pattern in archives_patterns):
+            return _handle_federation_archives_request(user_message)
     
     # 2. Menu requests
     if is_menu_request(user_message):
@@ -168,10 +182,19 @@ def is_mock_response_appropriate(user_message: str, conversation_history: list =
     # - Status inquiries
     # - Federation archives requests
     
+    # Check federation archives with local import
+    is_archives_request = False
+    try:
+        from handlers.ai_logic.query_detection import is_federation_archives_request
+        is_archives_request = is_federation_archives_request(user_message)
+    except ImportError:
+        archives_patterns = ['federation archives', 'check archives', 'search archives']
+        is_archives_request = any(pattern in user_message.lower() for pattern in archives_patterns)
+    
     return (is_simple_chat(user_message) or
             handle_drink_request(user_message) is not None or
             is_menu_request(user_message) or
             handle_greeting(user_message) is not None or
             handle_farewell(user_message) is not None or
             handle_status_inquiry(user_message) is not None or
-            is_federation_archives_request(user_message)) 
+            is_archives_request) 

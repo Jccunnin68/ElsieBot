@@ -19,19 +19,22 @@ Usage:
 """
 
 from .mock_responses import get_mock_response, should_use_mock_response
-from .personality_contexts import detect_mock_personality_context
+from .personality_contexts import detect_mock_personality_context, is_simple_chat
 from .drink_menu import handle_drink_request, get_menu_response
 from .greetings import handle_greeting, handle_farewell
-from .poetic_responses import get_poetic_response, should_trigger_poetic_circuit
+from .poetic_responses import get_poetic_response, should_trigger_poetic_circuit, get_reset_response, get_simple_continuation_response
 
 __all__ = [
     'get_mock_response',
     'should_use_mock_response',
     'detect_mock_personality_context',
+    'is_simple_chat',
     'handle_drink_request',
     'get_menu_response',
     'handle_greeting',
     'handle_farewell',
     'get_poetic_response',
-    'should_trigger_poetic_circuit'
+    'should_trigger_poetic_circuit',
+    'get_reset_response',
+    'get_simple_continuation_response'
 ] 

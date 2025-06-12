@@ -42,7 +42,7 @@ from handlers.ai_attention.state_manager import get_roleplay_state
 from handlers.ai_attention.response_logic import should_elsie_respond_in_roleplay
 from handlers.ai_attention.channel_restrictions import is_roleplay_allowed_channel
 from handlers.ai_attention.dgm_handler import check_dgm_post as _check_dgm_post
-from handlers.ai_emotion import is_simple_chat   
+# from handlers.ai_emotion import is_simple_chat  # Removed to prevent circular import   
 from handlers.ai_wisdom.context_coordinator  import get_context_for_strategy
 from log_processor import is_log_query
 
@@ -401,15 +401,28 @@ def _handle_standard_message_types(user_message: str, user_lower: str, strategy:
 def _handle_remaining_standard_types(user_message: str, user_lower: str, strategy: Dict[str, any]) -> Dict[str, any]:
     """Handle the remaining standard message types."""
     
-    # Simple chat - no database needed
-    if is_simple_chat(user_message):
-        strategy.update({
-            'approach': 'simple_chat',
-            'needs_database': False,
-            'reasoning': 'Simple conversational response - use bartender personality',
-            'context_priority': 'minimal'
-        })
-        return strategy
+    # Simple chat - no database needed (using local import to avoid circular dependency)
+    try:
+        from handlers.ai_emotion.personality_contexts import is_simple_chat
+        if is_simple_chat(user_message):
+            strategy.update({
+                'approach': 'simple_chat',
+                'needs_database': False,
+                'reasoning': 'Simple conversational response - use bartender personality',
+                'context_priority': 'minimal'
+            })
+            return strategy
+    except ImportError:
+        # Fallback simple chat detection if import fails
+        simple_chat_patterns = ['hi', 'hello', 'hey', 'how are you', 'thanks', 'thank you', 'bye', 'goodbye']
+        if any(pattern in user_message.lower().strip() for pattern in simple_chat_patterns):
+            strategy.update({
+                'approach': 'simple_chat',
+                'needs_database': False,
+                'reasoning': 'Simple conversational response (fallback detection) - use bartender personality',
+                'context_priority': 'minimal'
+            })
+            return strategy
     
     # Stardancer queries - check early to catch command queries before general context
     if is_stardancer_query(user_message):
