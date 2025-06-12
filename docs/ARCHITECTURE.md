@@ -7,38 +7,27 @@ This document provides a detailed overview of the technical architecture of the 
 The following diagram illustrates the flow of a message through the entire system, from the user's input in Discord to the final response. It shows the major components and their interactions.
 
 ```mermaid
-graph TD
-    subgraph "User"
-        A[Discord User]
+sequenceDiagram
+    participant A as Discord User
+    participant B as Discord Bot (Go)
+    participant C as AI Agent (Python)
+    participant D as Database
+    participant E as LLM API
+
+    A->>B: 1. Sends Message
+    
+    alt Simple Command (e.g., !ping)
+        B->>B: 2. Processed locally
+        B-->>A: 7. Posts immediate response
+    else Complex Query
+        B->>C: 3. Forwards request to AI Agent
+        C->>D: 4. Fetches context from DB
+        D-->>C: DB Response
+        C->>E: 5. Sends prompt to LLM
+        E-->>C: LLM Response
+        C-->>B: 6. Returns generated response
+        B-->>A: 7. Posts final response
     end
-
-    subgraph "Elsie System"
-        subgraph "Discord Bot (Go)"
-            B[discord_bot/main.go]
-        end
-
-        subgraph "AI Agent (Python/FastAPI)"
-            C[ai_agent/main.py]
-        end
-
-        subgraph "Database"
-            D[(PostgreSQL<br/>elsiebrain)]
-        end
-
-        subgraph "External Services"
-            E((LLM API))
-        end
-    end
-
-    A -- "1. Sends Message" --> B
-    B -- "2. Simple Command? (ping)" --> B
-    B -- "3. HTTP POST to /process" --> C
-    C -- "4. Fetches Context" --> D
-    C -- "5. Calls LLM API" --> E
-    E -- "6a. LLM Response" --> C
-    D -- "6b. DB Response" --> C
-    C -- "6c. Final Response" --> B
-    B -- "7. Posts Response" --> A
 ```
 
 ## Component Breakdown
