@@ -12,14 +12,53 @@ from typing import List, Optional
 
 # Common words to exclude from character name detection
 ROLEPLAY_EXCLUDED_WORDS = {
-    'The', 'She', 'He', 'They', 'This', 'That', 'Then', 'Now', 'Here', 'There',
-    'When', 'Where', 'What', 'Who', 'Why', 'How', 'Can', 'Could', 'Would', 'Should',
-    'Will', 'Shall', 'May', 'Might', 'Must', 'Do', 'Does', 'Did', 'Have', 'Has',
-    'Had', 'Is', 'Are', 'Was', 'Were', 'Am', 'Be', 'Been', 'Being',
-    'Walks', 'Runs', 'Sits', 'Stands', 'Looks', 'Sees', 'Hears', 'Says', 'Tells',
-    'Gets', 'Takes', 'Gives', 'Brings', 'Comes', 'Goes', 'Turns', 'Moves',
-    'Smiles', 'Laughs', 'Nods', 'Shrugs', 'Points', 'Waves', 'Reaches',
-    'Enters', 'Exits', 'Approaches', 'Leaves', 'Returns', 'Stops'
+    # Articles
+    'The', 'A', 'An',
+    # Pronouns
+    'She', 'He', 'They', 'It', 'I', 'We', 'You', 'Me', 'Him', 'Her', 'Them', 'Us',
+    'This', 'That', 'These', 'Those', 'My', 'Your', 'His', 'Her', 'Its', 'Our', 'Their',
+    'Mine', 'Yours', 'Ours', 'Theirs', 'Myself', 'Yourself', 'Himself', 'Herself', 'Itself',
+    'Ourselves', 'Yourselves', 'Themselves',
+    # Demonstratives and determiners
+    'Then', 'Now', 'Here', 'There', 'Some', 'Any', 'All', 'Each', 'Every', 'Both', 'Either',
+    'Neither', 'Much', 'Many', 'Few', 'Little', 'More', 'Most', 'Less', 'Least',
+    # Question words
+    'When', 'Where', 'What', 'Who', 'Why', 'How', 'Which', 'Whose', 'Whom',
+    # Modal verbs
+    'Can', 'Could', 'Would', 'Should', 'Will', 'Shall', 'May', 'Might', 'Must', 'Ought',
+    # Auxiliary verbs
+    'Do', 'Does', 'Did', 'Have', 'Has', 'Had', 'Is', 'Are', 'Was', 'Were', 'Am', 'Be', 'Been', 'Being',
+    # Common prepositions
+    'To', 'From', 'In', 'On', 'At', 'By', 'For', 'With', 'Without', 'About', 'Above', 'Below',
+    'Under', 'Over', 'Through', 'Between', 'Among', 'During', 'Before', 'After', 'Since',
+    'Until', 'Toward', 'Against', 'Into', 'Onto', 'Upon', 'Within', 'Beneath', 'Beside',
+    'Beyond', 'Across', 'Around', 'Behind', 'Along', 'Near', 'Off', 'Out', 'Up', 'Down',
+    # Common conjunctions
+    'And', 'Or', 'But', 'So', 'Yet', 'Nor', 'For', 'Because', 'Since', 'Although', 'Though',
+    'While', 'Whereas', 'If', 'Unless', 'Whether', 'Than', 'As', 'Like',
+    # Common verbs
+    'Walks', 'Runs', 'Sits', 'Stands', 'Looks', 'Sees', 'Hears', 'Says', 'Tells', 'Asks',
+    'Gets', 'Takes', 'Gives', 'Brings', 'Comes', 'Goes', 'Turns', 'Moves', 'Makes', 'Does',
+    'Smiles', 'Laughs', 'Nods', 'Shrugs', 'Points', 'Waves', 'Reaches', 'Touches', 'Holds',
+    'Enters', 'Exits', 'Approaches', 'Leaves', 'Returns', 'Stops', 'Starts', 'Begins', 'Ends',
+    'Opens', 'Closes', 'Pushes', 'Pulls', 'Throws', 'Catches', 'Drops', 'Picks',
+    # Common adverbs
+    'Very', 'Really', 'Quite', 'Rather', 'Too', 'So', 'Just', 'Only', 'Even', 'Still',
+    'Already', 'Yet', 'Soon', 'Often', 'Sometimes', 'Always', 'Never', 'Usually', 'Rarely',
+    'Quickly', 'Slowly', 'Carefully', 'Suddenly', 'Finally', 'First', 'Last', 'Next',
+    # Common adjectives that might appear as single words
+    'Good', 'Bad', 'Big', 'Small', 'Old', 'New', 'Long', 'Short', 'High', 'Low', 'Hot', 'Cold',
+    'Fast', 'Slow', 'Easy', 'Hard', 'Light', 'Dark', 'Heavy', 'Soft', 'Loud', 'Quiet',
+    'Clean', 'Dirty', 'Full', 'Empty', 'Open', 'Closed', 'Free', 'Busy', 'Rich', 'Poor',
+    # Common nouns that aren't names
+    'Thing', 'Things', 'Person', 'People', 'Man', 'Woman', 'Boy', 'Girl', 'Child', 'Children',
+    'Place', 'Time', 'Day', 'Night', 'Week', 'Month', 'Year', 'Hour', 'Minute', 'Second',
+    'Home', 'House', 'Room', 'Door', 'Window', 'Table', 'Chair', 'Bed', 'Floor', 'Wall',
+    'Hand', 'Hands', 'Face', 'Eyes', 'Head', 'Body', 'Foot', 'Feet', 'Arm', 'Arms', 'Leg', 'Legs',
+    # Additional common words
+    'Yes', 'No', 'Maybe', 'Perhaps', 'Please', 'Thank', 'Thanks', 'Sorry', 'Excuse', 'Welcome',
+    'Hello', 'Hi', 'Hey', 'Goodbye', 'Bye', 'See', 'Later', 'Today', 'Tomorrow', 'Yesterday',
+    'Morning', 'Afternoon', 'Evening', 'Night', 'Way', 'Ways', 'Side', 'Part', 'End', 'Start'
 }
 
 # Define valid character ranges including Nordic and Icelandic characters
@@ -89,15 +128,22 @@ def is_valid_character_name(name: str) -> bool:
     """
     Check if a potential name is valid.
     Enhanced to handle Nordic, Icelandic, and special characters.
+    Now with stricter filtering to avoid common words.
     """
+    if not name or len(name) < 2:
+        return False
+    
+    # Remove brackets before validation as a safeguard
+    name = name.replace('[', '').replace(']', '').strip()
     if not name or len(name) < 2:
         return False
         
     # Convert to lowercase for comparison
     name_lower = name.lower()
     
-    # Check against excluded words
-    if name in ROLEPLAY_EXCLUDED_WORDS or name_lower in ['you', 'me', 'us', 'them', 'everyone', 'anyone', 'someone']:
+    # Check against excluded words (case-insensitive)
+    excluded_lower = {word.lower() for word in ROLEPLAY_EXCLUDED_WORDS}
+    if name_lower in excluded_lower or name_lower in ['you', 'me', 'us', 'them', 'everyone', 'anyone', 'someone']:
         return False
     
     # Check if name contains any valid characters
@@ -108,9 +154,21 @@ def is_valid_character_name(name: str) -> bool:
     if not name[0].isalpha():
         return False
     
+    # Must be properly capitalized (first letter uppercase for proper names)
+    if not name[0].isupper():
+        return False
+    
     # Check if name is too short after removing special characters
     clean_name = re.sub(r'[^A-Za-zÀ-ÿÞþÐðÆæØøÅåÖöÄäÜüÉéÍíÓóÚúÝýÁáÑñŸÿŒœ]', '', name)
     if len(clean_name) < 2:
+        return False
+    
+    # Additional checks: avoid single letters followed by apostrophe or common patterns
+    if len(name) == 2 and name[1] in ["'", "."]:
+        return False
+    
+    # Avoid obvious non-names like "To", "At", etc. that might be capitalized
+    if name_lower in ['to', 'at', 'in', 'on', 'by', 'for', 'with', 'from', 'of', 'as', 'is', 'it']:
         return False
     
     return True
