@@ -84,6 +84,32 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 	log.Printf("Logged in as: %v#%v\n", s.State.User.Username, s.State.User.Discriminator)
 }
 
+// Helper function to split messages into chunks of 2000 characters
+func splitMessage(message string) []string {
+	if len(message) <= 2000 {
+		return []string{message}
+	}
+
+	var chunks []string
+	for len(message) > 0 {
+		chunk := message
+		if len(chunk) > 2000 {
+			// Find the last space before 2000 characters
+			lastSpace := strings.LastIndex(chunk[:2000], " ")
+			if lastSpace == -1 {
+				// If no space found, just split at 2000
+				lastSpace = 2000
+			}
+			chunk = chunk[:lastSpace]
+			message = message[lastSpace+1:]
+		} else {
+			message = ""
+		}
+		chunks = append(chunks, chunk)
+	}
+	return chunks
+}
+
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Enhanced mention detection
 	mentioned := false
@@ -253,7 +279,15 @@ You can also chat with me privately by sending me a direct message! I'll respond
 
 	// Send response
 	if response != "" && response != "NO_RESPONSE" {
-		s.ChannelMessageSend(m.ChannelID, response)
+		// Split response into chunks if needed
+		chunks := splitMessage(response)
+		for _, chunk := range chunks {
+			_, err := s.ChannelMessageSend(m.ChannelID, chunk)
+			if err != nil {
+				log.Printf("Error sending message chunk: %v", err)
+				return
+			}
+		}
 	} else if response == "NO_RESPONSE" {
 		log.Printf("🤐 NO_RESPONSE received - Elsie is staying silent (DGM post or listening mode)")
 		// Don't send any message - Elsie is intentionally staying quiet

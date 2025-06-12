@@ -68,9 +68,14 @@ FOCUSED DATABASE SEARCH RESULTS for "{focus_subject}":
 Provide a focused, detailed response about {focus_subject} specifically. Be comprehensive and informative."""
 
 
-def get_character_context(user_message: str) -> str:
+def get_character_context(user_message: str, strategy: Dict[str, Any] = None) -> str:
     """Generate context for character information queries."""
-    is_character, character_name = is_character_query(user_message)
+    # Get character name from strategy if available, otherwise extract from message
+    if strategy and 'character_name' in strategy:
+        character_name = strategy['character_name']
+    else:
+        is_character, character_name = is_character_query(user_message)
+    
     print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}'")
     
     # First try personnel type search

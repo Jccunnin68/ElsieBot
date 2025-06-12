@@ -35,8 +35,8 @@ def get_context_for_strategy(strategy: Dict[str, Any], user_message: str) -> str
         return _get_roleplay_listening_context(strategy, user_message)
     elif approach == 'focused_continuation':
         return get_focused_continuation_context(strategy)
-    elif approach == 'character':
-        return get_character_context(user_message)
+    elif approach == 'character_info':
+        return get_character_context(user_message, strategy)
     elif approach == 'federation_archives':
         return get_federation_archives_context(user_message)
     elif approach == 'logs':

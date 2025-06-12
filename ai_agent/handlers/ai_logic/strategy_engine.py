@@ -188,183 +188,156 @@ def _handle_standard_message_types(user_message: str, user_lower: str, strategy:
     print(f"   📝 Processing message: {user_message}")
     print(f"   🔄 Current strategy: {strategy}")
     
-    try:
-        # Check for continuation requests
-        is_continuation, focus = is_continuation_request(user_message, conversation_history)
-        if is_continuation:
-            print(f"   ✅ Detected continuation request with focus: {focus}")
-            strategy.update({
-                'approach': APPROACH_TYPES['continuation'],
-                'needs_database': True,
-                'reasoning': f'Continuation request detected - focus: {focus}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for log URL requests
-        is_log_url, log_url = extract_ooc_log_url_request(user_message)
-        if is_log_url:
-            strategy.update({
-                'approach': APPROACH_TYPES['log_url'],
-                'needs_database': True,
-                'reasoning': f'Log URL request detected - URL: {log_url}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for character queries
-        is_character, character_name = is_character_query(user_message)
-        if is_character:
-            strategy.update({
-                'approach': APPROACH_TYPES['character_info'],
-                'needs_database': True,
-                'reasoning': f'Character query detected - character: {character_name}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for specific log requests
-        is_specific_log, log_type = is_specific_log_request(user_message)
-        if is_specific_log:
-            strategy.update({
-                'approach': APPROACH_TYPES['specific_log'],
-                'needs_database': True,
-                'reasoning': f'Specific log request detected - type: {log_type}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for "tell me about" queries
-        subject = extract_tell_me_about_subject(user_message)
-        if subject:
-            strategy.update({
-                'approach': APPROACH_TYPES['tell_me_about'],
-                'needs_database': True,
-                'reasoning': f'"Tell me about" query detected - subject: {subject}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for Stardancer queries
-        is_stardancer, stardancer_type = is_stardancer_query(user_message)
-        if is_stardancer:
-            strategy.update({
-                'approach': APPROACH_TYPES['stardancer_info'],
-                'needs_database': True,
-                'reasoning': f'Stardancer query detected - type: {stardancer_type}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for Stardancer command queries
-        is_command, command_type = is_stardancer_command_query(user_message)
-        if is_command:
-            strategy.update({
-                'approach': APPROACH_TYPES['stardancer_command'],
-                'needs_database': True,
-                'reasoning': f'Stardancer command query detected - type: {command_type}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for ship log queries
-        is_ship_log, ship_name = extract_ship_log_query(user_message)
-        if is_ship_log:
-            strategy.update({
-                'approach': APPROACH_TYPES['ship_log'],
-                'needs_database': True,
-                'reasoning': f'Ship log query detected - ship: {ship_name}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for OOC queries
-        if is_ooc_query(user_message):
-            strategy.update({
-                'approach': APPROACH_TYPES['ooc'],
-                'needs_database': False,
-                'reasoning': 'OOC query detected',
-                'context_priority': CONTEXT_PRIORITIES['low']
-            })
-            return strategy
-        
-        # Check for log queries
-        if is_log_query(user_message):
-            strategy.update({
-                'approach': APPROACH_TYPES['log_query'],
-                'needs_database': True,
-                'reasoning': 'Log query detected',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for Federation Archives requests
-        if is_federation_archives_request(user_message):
-            strategy.update({
-                'approach': APPROACH_TYPES['federation_archives'],
-                'needs_database': True,
-                'reasoning': 'Federation Archives request detected',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for ship+log queries
-        is_ship_log, ship_name, log_type = is_ship_plus_log_query(user_message)
-        if is_ship_log:
-            strategy.update({
-                'approach': APPROACH_TYPES['ship_log_combined'],
-                'needs_database': True,
-                'reasoning': f'Ship+log query detected - ship: {ship_name}, log type: {log_type}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Check for character+log queries
-        is_char_log, char_name, log_type = is_character_plus_log_query(user_message)
-        if is_char_log:
-            strategy.update({
-                'approach': APPROACH_TYPES['character_log_combined'],
-                'needs_database': True,
-                'reasoning': f'Character+log query detected - character: {char_name}, log type: {log_type}',
-                'context_priority': CONTEXT_PRIORITIES['high']
-            })
-            return strategy
-        
-        # Default to general approach
-        print(f"   ℹ️  No specific query type detected - using general approach")
-        print(f"   📦 APPROACH_TYPES: {APPROACH_TYPES}")
-        print(f"   📦 CONTEXT_PRIORITIES: {CONTEXT_PRIORITIES}")
-        
-        try:
-            strategy.update({
-                'approach': APPROACH_TYPES['general'],
-                'needs_database': False,
-                'reasoning': 'No specific query type detected',
-                'context_priority': CONTEXT_PRIORITIES['minimal']
-            })
-            print(f"   ✅ Strategy updated successfully: {strategy}")
-        except Exception as e:
-            print(f"   ❌ Error updating strategy: {str(e)}")
-            print(f"   📚 Traceback: {traceback.format_exc()}")
-            # Fallback to safe values
-            strategy.update({
-                'approach': 'general',
-                'needs_database': False,
-                'reasoning': 'Error in strategy update - using fallback values',
-                'context_priority': 'minimal'
-            })
-        
+    # Check for continuation requests
+    is_continuation = is_continuation_request(user_message)
+    if is_continuation:
+        # Get focus from conversation history if needed
+        _, focus, _ = extract_continuation_focus(user_message, conversation_history)
+        print(f"   ✅ Detected continuation request with focus: {focus}")
+        strategy.update({
+            'approach': APPROACH_TYPES['continuation'],
+            'needs_database': True,
+            'reasoning': f'Continuation request detected - focus: {focus}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
         return strategy
-        
-    except Exception as e:
-        print(f"❌ CRITICAL ERROR in _handle_standard_message_types:")
-        print(f"   Error: {str(e)}")
-        print(f"   Type: {type(e).__name__}")
-        print(f"   Traceback: {traceback.format_exc()}")
-        # Return safe fallback strategy
-        return {
-            'approach': 'general',
+    
+    # Check for log URL requests
+    is_log_url, log_url = extract_ooc_log_url_request(user_message)
+    if is_log_url:
+        strategy.update({
+            'approach': APPROACH_TYPES['log_url'],
+            'needs_database': True,
+            'reasoning': f'Log URL request detected - URL: {log_url}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for character queries
+    is_character, character_name = is_character_query(user_message)
+    if is_character:
+        strategy.update({
+            'approach': APPROACH_TYPES['character_info'],
+            'needs_database': True,
+            'reasoning': f'Character query detected - character: {character_name}',
+            'context_priority': CONTEXT_PRIORITIES['none'],
+            'character_name': character_name
+        })
+        return strategy
+    
+    # Check for specific log requests
+    is_specific_log = is_specific_log_request(user_message)
+    if is_specific_log:
+        strategy.update({
+            'approach': APPROACH_TYPES['specific_log'],
+            'needs_database': True,
+            'reasoning': 'Specific log request detected',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for "tell me about" queries
+    subject = extract_tell_me_about_subject(user_message)
+    if subject:
+        strategy.update({
+            'approach': APPROACH_TYPES['tell_me_about'],
+            'needs_database': True,
+            'reasoning': f'"Tell me about" query detected - subject: {subject}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for Stardancer queries
+    is_stardancer = is_stardancer_query(user_message)
+    if is_stardancer:
+        strategy.update({
+            'approach': APPROACH_TYPES['stardancer_info'],
+            'needs_database': True,
+            'reasoning': 'Stardancer query detected',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for Stardancer command queries
+    is_command = is_stardancer_command_query(user_message)
+    if is_command:
+        strategy.update({
+            'approach': APPROACH_TYPES['stardancer_command'],
+            'needs_database': True,
+            'reasoning': 'Stardancer command query detected',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for ship log queries
+    is_ship_log, ship_details = extract_ship_log_query(user_message)
+    if is_ship_log:
+        strategy.update({
+            'approach': APPROACH_TYPES['ship_log'],
+            'needs_database': True,
+            'reasoning': f'Ship log query detected - ship: {ship_details.get("ship")}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for OOC queries
+    is_ooc, ooc_subject = is_ooc_query(user_message)
+    if is_ooc:
+        strategy.update({
+            'approach': APPROACH_TYPES['ooc'],
             'needs_database': False,
-            'reasoning': 'Error in message type handling - using fallback values',
-            'context_priority': 'minimal'
-        } 
+            'reasoning': f'OOC query detected - subject: {ooc_subject}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for log queries
+    if is_log_query(user_message):
+        strategy.update({
+            'approach': APPROACH_TYPES['log_query'],
+            'needs_database': True,
+            'reasoning': 'Log query detected',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for Federation Archives requests
+    if is_federation_archives_request(user_message):
+        strategy.update({
+            'approach': APPROACH_TYPES['federation_archives'],
+            'needs_database': True,
+            'reasoning': 'Federation Archives request detected',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for ship+log queries
+    is_ship_log, ship_name, log_type = is_ship_plus_log_query(user_message)
+    if is_ship_log:
+        strategy.update({
+            'approach': APPROACH_TYPES['ship_log_combined'],
+            'needs_database': True,
+            'reasoning': f'Ship+log query detected - ship: {ship_name}, log type: {log_type}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # Check for character+log queries
+    is_char_log, char_name, log_type = is_character_plus_log_query(user_message)
+    if is_char_log:
+        strategy.update({
+            'approach': APPROACH_TYPES['character_log_combined'],
+            'needs_database': True,
+            'reasoning': f'Character+log query detected - character: {char_name}, log type: {log_type}',
+            'context_priority': CONTEXT_PRIORITIES['none']
+        })
+        return strategy
+    
+    # If we get here, treat as a general message
+    strategy.update({
+        'approach': APPROACH_TYPES['general'],
+        'needs_database': False,
+        'reasoning': 'General message or greeting detected',
+        'context_priority': CONTEXT_PRIORITIES['none']
+    })
+    return strategy 
