@@ -83,7 +83,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     # 5. Single Character Scene Handling
     if len(participants) == 1:
         # In single character scenes, be more responsive
-        if word_count >= 5:  # Lower threshold for single character
+        if word_count >= 3:  # Lower threshold for single character
             print(f"   👤 SINGLE CHARACTER: Substantial message")
             return True, "single_character_substantial"
     
