@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from ai_handler import get_gemma_response
+from handlers.ai_coordinator import coordinate_response
 from content_retrieval_db import check_elsiebrain_connection, run_database_cleanup
 
 # Check if cleanup flag is set
@@ -80,7 +80,7 @@ async def process_message(chat_message: ChatMessage):
             print(f"   📋 Raw Context: {chat_message.context}")
             print(f"   🔧 Processed Context: {channel_context}")
         
-        response = get_gemma_response(chat_message.message, chat_message.conversation_history, channel_context)
+        response = coordinate_response(chat_message.message, chat_message.conversation_history, channel_context)
         return {"response": response}
     except Exception as e:
         print(f"Error processing message: {e}")

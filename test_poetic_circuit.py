@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'ai_agent'))
 
-from ai_handler import should_trigger_poetic_circuit, get_poetic_response
+from ai_agent.handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
 
 def test_poetic_circuits():
     """Test the poetic short circuit functionality"""
