@@ -30,6 +30,10 @@ MAX_INPUT_TOKENS = GEMMA_MAX_TOKENS - GEMMA_SAFETY_MARGIN  # 7192 tokens
 # MAX_CHARS_SHIP_INFO = 4000   # ~1000 tokens for ship info
 MAX_CHARS_PROMPT_BASE = 5000 # ~2000 tokens for base prompt/instructions (kept for prompt validation)
 
+
+
+
+
 def estimate_token_count(text: str) -> int:
     """
     Estimate token count for text input to Gemma API

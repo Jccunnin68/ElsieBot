@@ -6,10 +6,18 @@ from datetime import datetime
 
 from config import (
     estimate_token_count,
-    MEETING_INFO_PATTERNS,
    
 )
 
+# Meeting information patterns for filtering
+MEETING_INFO_PATTERNS = [
+    r'Meeting times?.*?\n',
+    r'Game master.*?\n',
+    r'GM:.*?\n',
+    r'Session.*?\n',
+    r'Next meeting.*?\n',
+    r'Schedule.*?\n'
+]
 
 def convert_earth_date_to_star_trek(date_text: str) -> str:
     """
