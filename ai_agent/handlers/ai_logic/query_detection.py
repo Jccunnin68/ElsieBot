@@ -15,12 +15,68 @@ Usage:
 from typing import Optional, Tuple, Dict, List
 import re
 
-from config import (
-    OOC_PREFIX, OOC_KEYWORDS,
-    SHIP_LOG_PATTERNS, SHIP_NAMES, LOG_SEARCH_KEYWORDS,
-    CHARACTER_PATTERNS, CHARACTER_KEYWORDS, COMMON_CHARACTER_NAMES
-)
 from log_processor import is_log_query
+
+# Define all pattern recognition constants locally (moved from config.py)
+# Ship names from the fleet
+SHIP_NAMES = [
+    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
+    'caelian', 'enterprise', 'montagnier', 'faraday', 'cook', 'mjolnir',
+    'rendino', 'gigantes', 'banshee'
+]
+OOC_PREFIX = "OOC"
+OOC_KEYWORDS = [
+    'players handbook',
+    'phb',
+    'rules',
+    'species traits',
+    'character creation',
+    'mechanics',
+    'game mechanics',
+    'link',
+    'url',
+    'page',
+    'get me',
+    'show me',
+    'find'
+]
+
+CHARACTER_PATTERNS = [
+    r"tell.*about (?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
+    r"who (?:is|was) (?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
+    r"(?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*) (?:biography|background|history|profile)",
+    r"(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*) (?:character|person|officer|crew)",
+    r"(?:about|info on|information about) (?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
+    r"(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)'s (?:background|history|bio)"
+]
+
+CHARACTER_KEYWORDS = [
+    'captain', 'commander', 'lieutenant', 'doctor', 'dr.', 'ensign', 'chief',
+    'officer', 'crew', 'member', 'personnel', 'biography', 'background', 
+    'history', 'profile', 'character', 'person'
+]
+
+COMMON_CHARACTER_NAMES = [
+    'kirk', 'spock', 'mccoy', 'scotty', 'uhura', 'sulu', 'chekov',
+    'picard', 'riker', 'data', 'worf', 'geordi', 'troi', 'beverly',
+    'janeway', 'chakotay', 'tuvok', 'paris', 'torres', 'kim', 'neelix',
+    'sisko', 'kira', 'odo', 'dax', 'bashir', 'obrien', 'nog',
+    'archer', 'trip', 'reed', 'hoshi', 'travis', 'phlox'
+]
+
+SHIP_LOG_PATTERNS = [
+    r"show.*logs? for (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
+    r"what.*happened (?:on|aboard) (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
+    r"tell.*about.*(?:the )?(USS )?(?P<ship>[A-Za-z]+).*(?:logs?|events|missions?)",
+    r"(?:get|fetch|find).*logs? for (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
+    r"summarize.*logs? (?:for|from) (?:the )?(USS )?(?P<ship>[A-Za-z]+)"
+]
+
+LOG_SEARCH_KEYWORDS = [
+    'mission', 'event', 'incident', 'encounter', 'expedition',
+    'first contact', 'combat', 'diplomatic', 'exploration',
+    'scientific', 'medical', 'emergency', 'distress', 'rescue'
+]
 
 
 def is_continuation_request(user_message: str) -> bool:

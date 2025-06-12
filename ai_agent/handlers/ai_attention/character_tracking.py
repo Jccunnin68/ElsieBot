@@ -9,8 +9,17 @@ Supports both [Character Name] bracket format and emote-based character detectio
 import re
 from typing import List
 
-from config import ROLEPLAY_EXCLUDED_WORDS
-
+# Common words to exclude from character name detection
+ROLEPLAY_EXCLUDED_WORDS = {
+    'The', 'She', 'He', 'They', 'This', 'That', 'Then', 'Now', 'Here', 'There',
+    'When', 'Where', 'What', 'Who', 'Why', 'How', 'Can', 'Could', 'Would', 'Should',
+    'Will', 'Shall', 'May', 'Might', 'Must', 'Do', 'Does', 'Did', 'Have', 'Has',
+    'Had', 'Is', 'Are', 'Was', 'Were', 'Am', 'Be', 'Been', 'Being',
+    'Walks', 'Runs', 'Sits', 'Stands', 'Looks', 'Sees', 'Hears', 'Says', 'Tells',
+    'Gets', 'Takes', 'Gives', 'Brings', 'Comes', 'Goes', 'Turns', 'Moves',
+    'Smiles', 'Laughs', 'Nods', 'Shrugs', 'Points', 'Waves', 'Reaches',
+    'Enters', 'Exits', 'Approaches', 'Leaves', 'Returns', 'Stops'
+} 
 
 def is_valid_character_name(name: str) -> bool:
     """Check if a potential name is valid (not a common word)."""

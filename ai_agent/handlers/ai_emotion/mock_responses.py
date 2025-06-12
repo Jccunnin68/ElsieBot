@@ -10,8 +10,6 @@ from typing import Optional, Dict, Any
 import sys
 import os
 
-# Add parent directories to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # from handlers.ai_logic.query_detection import is_federation_archives_request  # Moved to local import to prevent circular dependency
 from handlers.handlers_utils import convert_earth_date_to_star_trek
