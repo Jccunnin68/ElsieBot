@@ -5,7 +5,12 @@ Log Pattern Recognition
 This module contains shared log-related patterns and functions used by both
 query_detection.py and log_processor.py to avoid circular imports.
 """
-
+# Ship names from the fleet
+SHIP_NAMES = [
+    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
+    'caelian', 'enterprise', 'montagnier', 'faraday', 'cook', 'mjolnir',
+    'rendino', 'gigantes', 'banshee'
+]
 # Log indicators for query detection
 LOG_INDICATORS = [
     'log', 'logs', 'mission log', 'ship log', 'stardancer log', 

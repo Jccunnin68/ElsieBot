@@ -2,7 +2,7 @@
 
 from database_controller import get_db_controller
 from config import truncate_to_token_limit
-from log_processor import is_log_query, parse_log_characters, is_ship_log_title, parse_character_dialogue
+from handlers.ai_logic.log_processor import is_log_query, parse_log_characters, is_ship_log_title, parse_character_dialogue
 from typing import Optional
 import psycopg2
 import psycopg2.extras

@@ -1,6 +1,6 @@
 """Session and conversation management"""
 
-from models import Conversation
+from handlers.ai_wisdom.models import Conversation
 
 # Store conversations by session ID
 conversations = {}

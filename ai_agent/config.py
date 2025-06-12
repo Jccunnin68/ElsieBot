@@ -88,46 +88,6 @@ def validate_total_prompt_size(prompt: str) -> str:
 
 
 
-
-
-
-
-
-# Port 
-# Legacy constants - use the new token-aware limits above instead
-# MAX_CHARS_LOG = 8000
-# MAX_CHARS_CONTEXT = 30000  
-# MAX_CHARS_TELL_ME_ABOUT = 5000
-
-# Ship names from the fleet
-SHIP_NAMES = [
-    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
-    'caelian', 'enterprise', 'montagnier', 'faraday', 'cook', 'mjolnir',
-    'rendino', 'gigantes', 'banshee'
-]
-
-# Log indicators for query detection
-LOG_INDICATORS = [
-    'log', 'logs', 'mission log', 'ship log', 'stardancer log', 
-    'captain log', 'personal log', 'stardate', 'entry',
-    'what happened', 'events', 'mission report', 'incident report',
-    'summarize', 'summary', 'recap', 'tell me what',
-    'last mission', 'recent mission', 'latest log',
-    'captain\'s log', 'first officer\'s log',
-    'expedition', 'away mission', 'away team',
-    'event log', 'event logs', 'incident', 'incident log',
-    'event report', 'occurrence', 'happening',
-    # Ship-specific log patterns
-    'adagio log', 'pilgrim', 'stardancer log', 'protector log',
-    'manta ', 'sentinel', 'caelian', 'enterprise log',
-    'montagnier log', 'faraday log', 'cook log', 'mjolnir log',
-    'rendino log', 'gigantes', 'banshee','adagio',
-    # Date-based patterns
-    'retrieve', 'show me', 'get the log', 'find the log',
-    # Named incidents
-    'incident log', 'crisis log', 'affair log', 'operation log'
-]
-
 # Ship log search patterns
 SHIP_LOG_PATTERNS = [
     r"show.*logs? for (?:the )?(USS )?(?P<ship>[A-Za-z]+)",
