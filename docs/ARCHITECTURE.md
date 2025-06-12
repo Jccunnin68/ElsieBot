@@ -30,20 +30,20 @@ graph TD
         end
     end
 
-    A -- "1. Sends Message" --> B;
-    B -- "2. Simple Command? (ping)" --> B;
-    B -- "7. Posts Response" --> A;
-    B -- "3. HTTP POST to /process" --> C;
-    C -- "4. Fetches Context" --> D;
-    C -- "5. Calls LLM API" --> E;
-    E -- "6a. LLM Response" --> C;
-    D -- "6b. DB Response" --> C;
-    C -- "6c. Final Response" --> B;
+    A -- "1. Sends Message" --> B
+    B -- "2. Simple Command? (ping)" --> B
+    B -- "3. HTTP POST to /process" --> C
+    C -- "4. Fetches Context" --> D
+    C -- "5. Calls LLM API" --> E
+    E -- "6a. LLM Response" --> C
+    D -- "6b. DB Response" --> C
+    C -- "6c. Final Response" --> B
+    B -- "7. Posts Response" --> A
 ```
 
 ## Component Breakdown
 
-### 1. Discord Bot (Go)
+### Discord Bot (Go)
 
 -   **Location**: `discord_bot/`
 -   **Technology**: Go, `discordgo` library.
@@ -56,7 +56,7 @@ graph TD
     -   Receives the generated response from the AI agent and posts it back to Discord, handling message splitting for long responses.
 -   **Key Principle**: This component is designed to be a lightweight and robust Discord client. All complex logic is delegated to the AI Agent to keep this part simple and focused.
 
-### 2. AI Agent (Python/FastAPI)
+### AI Agent (Python/FastAPI)
 
 This is the core "brain" of the system, where all intelligence resides. See the detailed architecture breakdown below for more information.
 
@@ -70,7 +70,7 @@ This is the core "brain" of the system, where all intelligence resides. See the 
     -   Constructs detailed prompts and calls an external Large Language Model (LLM) for response generation.
     -   Provides efficient, pre-generated responses for simple interactions to avoid unnecessary LLM calls.
 
-### 3. Database (PostgreSQL)
+### Database (PostgreSQL)
 
 -   **Name**: `elsiebrain`
 -   **Responsibilities**: Acts as the long-term memory and knowledge base for the AI Agent. It stores structured data on:
@@ -78,6 +78,9 @@ This is the core "brain" of the system, where all intelligence resides. See the 
     -   Character biographies.
     -   Ship information.
     -   General lore and world-building articles.
+
+### Supporting functions
+- **`db_populator/wiki_crawler.py`**: An external script used to populate the database from a wiki or other data source. This is not part of the live application but is a critical tool for maintaining the bot's knowledge. 
 
 ---
 
@@ -147,7 +150,4 @@ graph TD
     -   **Fast Path (No AI)**: For simple strategies, a pre-generated response is retrieved from the **`ai_emotion`** package and returned immediately.
     -   **Slow Path (AI Needed)**: For complex queries, the **`ai_wisdom`** layer is engaged to fetch context from the database.
 5.  The retrieved context is passed to the **`ai_engine`**, which builds a prompt and sends it to the external LLM.
-6.  The final response is passed back up the chain and sent out via the API. 
-
-### 4. Supporting functions
-- **`db_populator/wiki_crawler.py`**: An external script used to populate the database from a wiki or other data source. This is not part of the live application but is a critical tool for maintaining the bot's knowledge. 
+6.  The final response is passed back up the chain and sent out via the API.
