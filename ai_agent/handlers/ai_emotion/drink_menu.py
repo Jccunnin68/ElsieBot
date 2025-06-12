@@ -20,7 +20,8 @@ DRINKS_DATABASE = {
     "tea earl grey hot": "Tea, Earl Grey, hot. *presents cup* A classic choice.",
     "raktajino": "Raktajino. *slides mug forward* Bold enough to rouse the dead.",
     "slug-o-cola": "Slug-o-Cola. *raises eyebrow* Ferengi... ingenuity. An experience, certainly.",
-    "ambassador": "Ambassador. *slides glass forward* A diplomatic choice. *smirks slightly*"
+    "ambassador": "Ambassador. *slides glass forward* A diplomatic choice. *smirks slightly*",
+    "dizzy lizzy": "Dizzy Lizzy. *raises eyebrow* Don't tell the Captain. *smirks slightly*"
 }
 
 
@@ -86,8 +87,10 @@ def get_menu_response() -> str:
 
 **For the Adventurous:**
 • Slug-o-Cola - A Ferengi curiosity (proceed with caution)
+• Ambassador - A diplomatic choice
+• Dizzy Lizzy - Shhhh...
 
-What tempts you this evening?"""
+"""
 
 
 def is_menu_request(user_message: str) -> bool:
@@ -131,7 +134,9 @@ def get_drink_info(drink_name: str) -> Optional[str]:
         "andorian ale": "A blue alcoholic beverage from Andoria, served chilled and known for its refreshing qualities.",
         "tranya": "A sweet, orange-colored beverage from the First Federation.",
         "raktajino": "A Klingon coffee beverage, strong and black, popular throughout the quadrant.",
-        "slug-o-cola": "A Ferengi soft drink with a questionable taste and unusual ingredients."
+        "slug-o-cola": "A Ferengi soft drink with a questionable taste and unusual ingredients.",
+        "ambassador": "A Trill drink, it has spots.",
+        "dizzy lizzy": "A secret drink, purple and sweet with enough kick to make you forget your past lives or future ones. Shhhh..."
     }
     
     if drink_lower in drink_info:

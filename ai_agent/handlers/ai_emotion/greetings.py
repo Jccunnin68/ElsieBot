@@ -50,7 +50,7 @@ def handle_greeting(user_message: str, personality_context: str = "complete_self
         greetings = [
             "Welcome. *adjusts display with fluid precision* I'm Elsie. What brings you here tonight?",
             "*looks up with interest* Good evening. Always a pleasure to meet someone new. How can I help you?",
-            "*pauses thoughtfully* Hello there. The night holds many possibilities. What draws your attention?"
+            "*pauses thoughtfully* Hello there."
         ]
     
     return random.choice(greetings)
