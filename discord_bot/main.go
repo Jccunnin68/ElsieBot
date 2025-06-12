@@ -161,6 +161,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 	}
 
+	// Check for DGM posts - they override all channel restrictions
+	if strings.HasPrefix(strings.TrimSpace(content), "[DGM]") {
+		shouldMonitorAll = true
+		log.Printf("DEBUG: DGM post detected - monitoring regardless of channel type")
+	}
+
 	// Simple mention detection - if there are any mentions, process them
 	if len(m.Mentions) > 0 || len(m.MentionRoles) > 0 {
 		// Check user mentions

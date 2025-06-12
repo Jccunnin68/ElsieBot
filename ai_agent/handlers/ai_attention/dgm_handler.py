@@ -1,5 +1,5 @@
 """
-DGM (Deputy Game Master) Handler
+DGM (Daedalus Game Master) Handler
 ===============================
 
 Handles DGM posts for scene setting, character control, and roleplay session management.
@@ -20,7 +20,8 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
     Enhanced to detect DGM-controlled Elsie posts with [DGM][Elsie] pattern.
     Returns dict with is_dgm, action, triggers_roleplay, confidence, triggers, characters, dgm_controlled_elsie
     """
-    dgm_pattern = r'\[DGM\]'
+    # Check for DGM tag at the start of the message
+    dgm_pattern = r'^\s*\[DGM\]'
     if not re.search(dgm_pattern, user_message, re.IGNORECASE):
         return {
             'is_dgm': False,
@@ -41,57 +42,97 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
     
     if dgm_elsie_match:
         elsie_content = dgm_elsie_match.group(1).strip()
-        print(f"      🎭 DGM-CONTROLLED ELSIE DETECTED!")
-        print(f"      📝 Elsie Content: '{elsie_content[:100]}{'...' if len(elsie_content) > 100 else ''}'")
-        
+        print(f"   🎭 DGM-CONTROLLED ELSIE DETECTED")
         return {
             'is_dgm': True,
-            'action': 'dgm_controlled_elsie',
+            'action': 'control_elsie',
             'triggers_roleplay': True,
             'confidence': 1.0,
             'triggers': ['dgm_controlled_elsie'],
-            'characters': ['Elsie'],
+            'characters': [],
             'dgm_controlled_elsie': True,
             'elsie_content': elsie_content
         }
     
-    # Parse character names from DGM post
-    characters_mentioned = extract_characters_from_dgm_post(user_message)
+    # Extract character names from multiple sources
+    characters = set()  # Use a set to avoid duplicates
     
-    # Check for scene ending patterns
-    ending_patterns = [
-        r'\*end scene\*', r'\*roll credits\*', r'\*scene ends\*',
-        r'\*fade to black\*', r'\*curtain falls\*', r'\*scene fades\*',
-        r'end of scene', r'scene complete'
+    # 1. Extract from [Character Name] format - now handles multi-word names
+    bracket_pattern = r'\[([^\]]+)\]'
+    bracket_matches = re.finditer(bracket_pattern, user_message)
+    for match in bracket_matches:
+        char_name = match.group(1).strip()
+        # Skip DGM tag itself
+        if char_name.lower() == 'dgm':
+            continue
+            
+        # Check if this is a multi-word name
+        words = char_name.split()
+        if len(words) > 1:
+            # For multi-word names, validate the entire name as one entity
+            if is_valid_character_name(char_name):
+                characters.add(char_name)
+                print(f"   👤 Multi-word character detected: {char_name}")
+        else:
+            # Single word names handled as before
+            if is_valid_character_name(char_name):
+                characters.add(char_name)
+    
+    # 2. Extract from *italicized text*
+    italic_pattern = r'\*([^*]+)\*'
+    italic_matches = re.finditer(italic_pattern, user_message)
+    for match in italic_matches:
+        italic_text = match.group(1).strip()
+        # Split the italicized text into words and check each
+        words = italic_text.split()
+        for word in words:
+            # Clean the word of any punctuation
+            clean_word = re.sub(r'[^\w\s]', '', word)
+            if is_valid_character_name(clean_word):
+                characters.add(clean_word)
+    
+    # Convert set back to list for the return value
+    character_list = list(characters)
+    if character_list:
+        print(f"   👥 CHARACTERS DETECTED IN DGM POST: {character_list}")
+    
+    # Check for scene end indicators - multiple patterns
+    scene_end_patterns = [
+        r'\[DGM\]\s*\[END\]',  # [DGM][END]
+        r'\[DGM\]\s*\*end\s+scene\*',  # [DGM] *end scene*
+        r'\[DGM\]\s*\*scene\s+ends?\*',  # [DGM] *scene ends*
+        r'\[DGM\]\s*\*fade\s+to\s+black\*',  # [DGM] *fade to black*
+        r'\[DGM\]\s*\*roll\s+credits\*',  # [DGM] *roll credits*
+        r'\[DGM\]\s*\*curtain\s+falls?\*',  # [DGM] *curtain falls*
+        r'\[DGM\]\s*\*scene\s+fades?\*',  # [DGM] *scene fades*
+        r'\[DGM\]\s*end\s+of\s+scene',  # [DGM] end of scene
+        r'\[DGM\]\s*scene\s+complete',  # [DGM] scene complete
+        r'\[DGM\]\s*\*the\s+end\*',  # [DGM] *the end*
     ]
     
-    message_lower = user_message.lower()
-    for pattern in ending_patterns:
-        if re.search(pattern, message_lower):
-            print(f"      🎬 SCENE ENDING DETECTED: '{pattern}'")
+    for pattern in scene_end_patterns:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            print(f"   🎬 DGM SCENE END DETECTED - Pattern: {pattern}")
             return {
                 'is_dgm': True,
                 'action': 'end_scene',
-                'triggers_roleplay': False,
-                'confidence': 0.0,
+                'triggers_roleplay': True,
+                'confidence': 1.0,
                 'triggers': ['dgm_scene_end'],
-                'characters': characters_mentioned,
+                'characters': character_list,
                 'dgm_controlled_elsie': False,
                 'elsie_content': ''
             }
     
-    # Scene setting (default for DGM posts)
-    print(f"      🎬 GENERAL DGM POST - Treating as scene setting")
-    if characters_mentioned:
-        print(f"      👥 CHARACTERS MENTIONED IN DGM POST: {characters_mentioned}")
-    
+    # Default DGM scene setting
+    print(f"   🎬 DGM SCENE SETTING DETECTED")
     return {
         'is_dgm': True,
-        'action': 'set_scene',
+        'action': 'scene_setting',
         'triggers_roleplay': True,
         'confidence': 1.0,
         'triggers': ['dgm_scene_setting'],
-        'characters': characters_mentioned,
+        'characters': character_list,
         'dgm_controlled_elsie': False,
         'elsie_content': ''
     }

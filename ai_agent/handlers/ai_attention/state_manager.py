@@ -32,6 +32,7 @@ class RoleplayStateManager:
         self.last_interjection_turn = 0  # Track when we last interjected
         self.dgm_initiated = False  # Track if session was started by DGM
         self.dgm_characters = []  # Characters mentioned in DGM post
+        self.is_thread_session = False  # Track if this is a thread-based session
         
         # Simple implicit response tracking
         self.last_character_elsie_addressed = ""  # Who did Elsie last speak to
@@ -61,6 +62,14 @@ class RoleplayStateManager:
         self.dgm_initiated = 'dgm_scene_setting' in initial_triggers
         self.dgm_characters = dgm_characters or []
         
+        # Check if this is a thread-based session
+        self.is_thread_session = False
+        if channel_context:
+            is_thread = channel_context.get('is_thread', False)
+            channel_type = channel_context.get('type', '')
+            if is_thread or any(thread_type in channel_type.lower() for thread_type in ['thread', 'forum']):
+                self.is_thread_session = True
+        
         # Add DGM-mentioned characters to participants
         if self.dgm_characters:
             for character in self.dgm_characters:
@@ -71,6 +80,7 @@ class RoleplayStateManager:
         print(f"   🎯 Triggers: {initial_triggers}")
         print(f"   📍 Channel: {channel_context}")
         print(f"   🎬 DGM Initiated: {self.dgm_initiated}")
+        print(f"   🧵 Thread Session: {self.is_thread_session}")
         if self.dgm_characters:
             print(f"   👥 DGM Characters: {self.dgm_characters}")
         print(f"   🎮 State: {'DGM PASSIVE MONITORING' if self.dgm_initiated else 'ACTIVE MONITORING'}")
@@ -318,10 +328,17 @@ class RoleplayStateManager:
         self.channel_context = {}
         self.listening_mode = False
         self.last_response_turn = 0
+        self.dgm_initiated = False
+        self.dgm_characters = []
+        self.is_thread_session = False
     
     def is_dgm_session(self) -> bool:
         """Check if this is a DGM-initiated session."""
         return self.dgm_initiated
+    
+    def is_thread_based(self) -> bool:
+        """Check if this is a thread-based session."""
+        return self.is_thread_session
     
     def get_dgm_characters(self) -> List[str]:
         """Get characters that were mentioned in the DGM post."""
@@ -350,7 +367,8 @@ class RoleplayStateManager:
             'listening_turn_count': self.listening_turn_count,
             'last_interjection_turn': self.last_interjection_turn,
             'dgm_initiated': self.dgm_initiated,
-            'dgm_characters': self.dgm_characters
+            'dgm_characters': self.dgm_characters,
+            'is_thread_session': self.is_thread_session
         }
 
 

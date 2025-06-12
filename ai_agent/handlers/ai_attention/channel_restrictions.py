@@ -4,22 +4,33 @@ Channel Restrictions
 
 Manages channel-based restrictions for roleplay activities.
 Roleplay is only allowed in appropriate channels (threads, DMs) to prevent spam in general channels.
+DGM posts can override these restrictions to start roleplay in any channel.
 """
 
 from typing import Dict, Optional
 import traceback
 import sys
 from .roleplay_types import ALLOWED_CHANNEL_TYPES, RESTRICTED_CHANNEL_TYPES
+from .dgm_handler import check_dgm_post
 
-def is_roleplay_allowed_channel(channel_context: Dict = None) -> bool:
+def is_roleplay_allowed_channel(channel_context: Dict = None, user_message: str = None) -> bool:
     """
     Check if roleplay is allowed in the current channel.
     Only allowed in threads and DMs, not general channels.
+    DGM posts can override restrictions and start roleplay anywhere.
     """
     try:
         print(f"\n🔍 CHANNEL RESTRICTION DEBUG:")
         print(f"   📦 Raw Context: {channel_context}")
         print(f"   📦 Context Type: {type(channel_context)}")
+        
+        # CHECK FOR DGM OVERRIDE FIRST
+        if user_message:
+            dgm_result = check_dgm_post(user_message)
+            if dgm_result['is_dgm']:
+                print(f"   🎬 DGM POST DETECTED - OVERRIDING ALL CHANNEL RESTRICTIONS")
+                print(f"   🚀 DGM ACTION: {dgm_result['action']}")
+                return True
         
         if not channel_context:
             print(f"   ⚠️  No channel context provided - allowing roleplay (testing fallback)")

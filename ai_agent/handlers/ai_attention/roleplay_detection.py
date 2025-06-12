@@ -19,6 +19,8 @@ from .roleplay_types import (
     MIN_THREAD_CONFIDENCE,
     TRIGGER_TYPES
 )
+from .channel_restrictions import is_roleplay_allowed_channel
+from .dgm_handler import check_dgm_post
 
 def detect_roleplay_triggers(user_message: str, channel_context: Optional[Dict] = None) -> RoleplayDetection:
     """
@@ -27,6 +29,14 @@ def detect_roleplay_triggers(user_message: str, channel_context: Optional[Dict] 
     """
     triggers = []
     confidence_score = 0.0
+    
+    # Check for DGM posts first - they override all restrictions
+    dgm_result = check_dgm_post(user_message)
+    if dgm_result['is_dgm']:
+        print(f"   🎬 DGM POST DETECTED - Adding DGM trigger: {dgm_result['action']}")
+        triggers.extend(dgm_result['triggers'])
+        confidence_score = 1.0  # Maximum confidence for DGM posts
+        return True, confidence_score, triggers
     
     # Check for roleplay indicators
     for indicator_type, pattern in ROLEPLAY_INDICATORS.items():
@@ -37,6 +47,12 @@ def detect_roleplay_triggers(user_message: str, channel_context: Optional[Dict] 
     # Check for character names in thread context
     if channel_context and channel_context.get('is_thread', False):
         confidence_score += 0.1  # Additional confidence for thread context
+    
+    # Check channel restrictions (DGM posts are already handled above)
+    if not is_roleplay_allowed_channel(channel_context, user_message):
+        print(f"   🚫 CHANNEL RESTRICTED - Roleplay blocked in this channel")
+        triggers.append("channel_restricted")
+        return False, 0.0, triggers
     
     # Determine if this is roleplay based on confidence threshold
     is_roleplay = confidence_score >= MIN_ROLEPLAY_CONFIDENCE

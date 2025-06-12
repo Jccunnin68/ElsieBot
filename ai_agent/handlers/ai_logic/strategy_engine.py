@@ -132,6 +132,10 @@ def _handle_dgm_posts(triggers: List[str], user_message: str, rp_state, turn_num
     
     if TRIGGER_TYPES['dgm_scene_setting'] in triggers:
         print(f"   🎬 DGM SCENE SETTING DETECTED - Starting roleplay session but no response")
+        
+        # DGM posts override channel restrictions - force start roleplay session
+        print(f"   🚀 DGM OVERRIDE: Starting roleplay in any channel type")
+        
         # Start new session if not already roleplaying
         if not rp_state.is_roleplaying:
             dgm_characters = []
@@ -145,7 +149,7 @@ def _handle_dgm_posts(triggers: List[str], user_message: str, rp_state, turn_num
         return {
             'approach': APPROACH_TYPES['dgm_scene_setting'],
             'needs_database': False,
-            'reasoning': 'DGM scene setting - start roleplay but no response',
+            'reasoning': 'DGM scene setting - start roleplay but no response (channel restrictions overridden)',
             'context_priority': CONTEXT_PRIORITIES['none']
         }
     
@@ -163,6 +167,10 @@ def _handle_dgm_posts(triggers: List[str], user_message: str, rp_state, turn_num
     
     if TRIGGER_TYPES['dgm_controlled_elsie'] in triggers:
         print(f"   🎭 DGM-CONTROLLED ELSIE DETECTED - No response, add to context")
+        
+        # DGM posts override channel restrictions - force start roleplay session
+        print(f"   🚀 DGM OVERRIDE: Starting/continuing roleplay in any channel type")
+        
         # Get the DGM result to extract Elsie's content
         dgm_result = _check_dgm_post(user_message)
         elsie_content = dgm_result.get('elsie_content', '')
@@ -174,7 +182,7 @@ def _handle_dgm_posts(triggers: List[str], user_message: str, rp_state, turn_num
         return {
             'approach': APPROACH_TYPES['dgm_controlled_elsie'],
             'needs_database': False,
-            'reasoning': f'DGM controlling Elsie - no response, content: "{elsie_content[:50]}{"..." if len(elsie_content) > 50 else ""}"',
+            'reasoning': f'DGM controlling Elsie - no response, content: "{elsie_content[:50]}{"..." if len(elsie_content) > 50 else ""}" (channel restrictions overridden)',
             'context_priority': CONTEXT_PRIORITIES['dgm_elsie_context'],
             'elsie_content': elsie_content
         }

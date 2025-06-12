@@ -28,217 +28,67 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     message_lower = user_message.lower().strip()
     participants = rp_state.get_participant_names()
     is_dgm_session = rp_state.is_dgm_session()
+    is_thread_session = rp_state.is_thread_based()
     
     print(f"   🎭 ROLEPLAY RESPONSE CHECK:")
     print(f"      - Participants: {participants}")
     print(f"      - Multi-character scene: {len(participants) > 1}")
     print(f"      - DGM Session: {is_dgm_session}")
+    print(f"      - Thread Session: {is_thread_session}")
     
     # AUTO-DETECT: Check if this message contains a speaking character (for DGM sessions)
     # Look for [Character Name] format or character names speaking
     from .character_tracking import extract_current_speaker
     speaking_character = extract_current_speaker(user_message)
-    if speaking_character and speaking_character not in participants:
-        rp_state.add_speaking_character(speaking_character, len(rp_state.confidence_history) + 1)
-        participants = rp_state.get_participant_names()  # Refresh the list
-        print(f"   🗣️ AUTO-DETECTED SPEAKING CHARACTER: {speaking_character}")
     
-    # 1. PRIORITY CHECK: Check for "Thanks Elsie, [then addressing another character]" pattern FIRST
-    # This should get a subtle acknowledgment even if another character is addressed after
-    acknowledgment_then_redirect_patterns = [
-        r'^(?:thanks?|thank you|cheers)\s+elsie[,.]?\s+(?:so\s+)?([A-Z][a-z]+)(?:\s+what|\s+can|\s+do|\s+how)',  # "Thanks Elsie, so John what..." or "Thanks Elsie, John can..."
-        r'(?:thanks?|thank you|cheers)\s+elsie[,.]?\s+(?:so\s+)?([A-Z][a-z]+)(?:\s+what|\s+can|\s+do|\s+how)',  # "Well thanks Elsie, so John what..."
-    ]
-    
-    for pattern in acknowledgment_then_redirect_patterns:
-        match = re.search(pattern, message_lower, re.IGNORECASE)
-        if match:
-            other_character = match.group(1)
-            # Verify this is a valid character name and not a common word
-            if is_valid_character_name(other_character) and other_character.lower() not in ['that', 'this', 'what', 'how', 'when', 'where', 'why']:
-                print(f"   🙏 Acknowledgment + redirect pattern detected: Thanks to Elsie, then addressing '{other_character}'")
-                return True, f"acknowledgment_then_redirect_to_{other_character}"
-    
-    # 2. Check if this dialogue is directed at another character (but not acknowledgment + redirect)
-    # If so, Elsie should NOT respond - let that character respond first
-    other_character_addressed = check_if_other_character_addressed(user_message, rp_state)
-    if other_character_addressed:
-        print(f"   🤐 Dialogue directed at other character: '{other_character_addressed}' - Elsie should wait")
-        return False, f"dialogue_for_{other_character_addressed}"
-    
-    # 3. Always respond if directly addressed by name (including variations)
-    # Check for direct addressing patterns that indicate speaking TO Elsie, not ABOUT her
-    
-    # Direct addressing patterns (speaking TO Elsie)
-    direct_addressing_patterns = [
-        # Name variations at start or with punctuation
-        r'^elsie[,!?]?\s',  # "Elsie," "Elsie!" "Elsie?"
-        r'\belsie[,!?]\s',  # "Hey Elsie," "Well Elsie!"
-        r'^(?:hey|hi|hello)\s+elsie\b',  # "Hey Elsie"
-        r'\belsie\s*$',  # "Elsie" at end
-        
-        # Bartender addressing (but not just mentioning)
-        r'^bartender[,!?]?\s',  # "Bartender," "Bartender!"
-        r'\bbartender[,!?]\s',  # "Hey bartender,"
-        r'^(?:hey|hi|hello)\s+bartender\b',  # "Hey bartender"
-        r'\bbartender\s*$',  # "bartender" at end
-        
-        # Other addressing terms
-        r'^(?:hey you|excuse me|miss|ma\'am)[,!?]?\s',  # "Hey you," "Excuse me,"
-        r'\b(?:hey you|excuse me|miss|ma\'am)[,!?]\s',  # "Well, excuse me,"
-        
-        # Other service terms when used for addressing
-        r'^(?:barkeep|barmaid|server|waitress)[,!?]?\s',
-        r'\b(?:barkeep|barmaid|server|waitress)[,!?]\s',
-    ]
-    
-    for pattern in direct_addressing_patterns:
-        if re.search(pattern, message_lower):
-            # Extract the addressing term for logging
-            match = re.search(pattern, message_lower)
-            addressing_term = match.group(0).strip(' ,!?')
-            print(f"   👋 Elsie directly addressed: '{addressing_term}' pattern matched")
-            return True, f"addressed_as_{addressing_term}"
-    
-    # 2. Check for "@Elsie" style mentions (common in Discord/chat)
-    mention_patterns = [
-        r'@elsie\b',
-        r'\belsie[,:]',  # "Elsie," or "Elsie:"
-        r'\belsie\?',    # "Elsie?"
-        r'\belsie!',     # "Elsie!"
-    ]
-    
-    for pattern in mention_patterns:
-        if re.search(pattern, message_lower):
-            print(f"   👋 Elsie mention pattern detected: '{pattern}'")
-            return True, "mentioned_by_name"
-    
-    # 3. Check for subtle bar interactions first (non-dialogue drink orders)
-    # This happens BEFORE DGM guardrail so bar service works even in DGM sessions
-    if check_subtle_bar_interaction(user_message, rp_state):
-        print(f"   🥃 Subtle bar interaction detected - Elsie provides service")
-        return True, "subtle_bar_service"
-    
-    # 4. Check for simple implicit response (character Elsie addressed responding back)
-    # This should work in both DGM and regular sessions AND multi-character scenes
-    # It's natural conversation flow and is targeted to the specific character Elsie addressed
-    # PRIORITY: This happens BEFORE multi-character guardrail since it's targeted conversation
-    # RETURN IMMEDIATELY: If detected, don't let other logic override this response reason
-    if rp_state.is_simple_implicit_response(current_turn, user_message):
-        print(f"   💬 Simple implicit response detected - natural conversation flow")
-        print(f"   🎯 Multi-character scene: {len(participants) > 1} - implicit response still allowed")
-        print(f"   🚀 RETURNING IMMEDIATELY - implicit response takes priority over other checks")
-        return True, "simple_implicit_response"
-    
-    # SPECIAL DGM GUARDRAIL: In DGM-initiated sessions, be EXTREMELY passive
-    # Only respond to direct addressing by name - NO other interactions
-    # (Subtle bar service and implicit responses are allowed above this check)
+    # 1. DGM Session Special Handling
     if is_dgm_session:
-        print(f"   🎬 DGM SESSION GUARDRAIL: ULTRA-PASSIVE mode - ONLY respond to direct name addressing")
-        print(f"   🤐 DGM session: Elsie stays completely quiet unless explicitly addressed by name")
-        return False, "dgm_ultra_passive_listening"
-    
-    # 5. Check for bar-related actions that would naturally involve Elsie (NON-DGM sessions only)
-    emote_pattern = r'\*([^*]+)\*'
-    emotes = re.findall(emote_pattern, user_message)
-    
-    for emote in emotes:
-        emote_lower = emote.lower()
-        bar_related = [
-            'approaches the bar', 'walks to the bar', 'sits at the bar',
-            'looks at the bartender', 'gestures to', 'waves at',
-            'turns to the bar', 'faces the bar', 'at the bar'
-        ]
+        # In DGM sessions, only respond when directly addressed
+        if speaking_character and speaking_character.lower() == 'elsie':
+            print(f"   🎭 DGM SESSION: Directly addressed by {speaking_character}")
+            return True, "dgm_direct_address"
         
-        for bar_action in bar_related:
-            if bar_action in emote_lower:
-                print(f"   🍺 Bar-related action detected: '{emote}' - Elsie should respond")
-                return True, "bar_interaction"
+        # Track speaking character in DGM session
+        if speaking_character:
+            rp_state.add_speaking_character(speaking_character, current_turn)
+        
+        print(f"   👂 DGM SESSION: Passive listening mode")
+        return False, "dgm_passive_listening"
     
-    # STRICT GUARDRAIL: In multi-character scenes, be MUCH more selective
+    # 2. Thread Session Special Handling
+    if is_thread_session:
+        # In thread sessions, be more responsive to substantial messages
+        word_count = len(user_message.split())
+        if word_count >= 10:  # Substantial message threshold
+            # Check if it's not clearly OOC or technical
+            non_rp_indicators = ['ooc', 'debug', 'error', 'code', 'script', 'function']
+            if not any(indicator in message_lower for indicator in non_rp_indicators):
+                print(f"   🧵 THREAD: Substantial message detected ({word_count} words)")
+                return True, "thread_substantial_message"
+    
+    # 3. Direct Address Detection
+    if speaking_character and speaking_character.lower() == 'elsie':
+        print(f"   🎭 DIRECT ADDRESS: {speaking_character} speaking to Elsie")
+        return True, "direct_address"
+    
+    # 4. Multi-character Scene Handling
     if len(participants) > 1:
-        print(f"   🚧 MULTI-CHARACTER GUARDRAIL ACTIVE - Being very selective")
+        # In multi-character scenes, only respond when directly involved
+        if speaking_character and speaking_character.lower() == 'elsie':
+            print(f"   👥 MULTI-CHARACTER: Elsie directly addressed")
+            return True, "multi_character_direct"
         
-        # Only respond to very explicit group questions or direct commands
-        # BUT NOT in DGM sessions - DGM sessions require explicit name addressing
-        if not is_dgm_session:
-            explicit_group_patterns = [
-                r'\b(everyone|everybody|all of you|all)\b.*\?',  # Explicit group questions
-                r'^(what does everyone|what do you all|how does everyone)\b',  # Group questions
-                r'\b(anyone|anybody)\b.*\?',  # Open questions to anyone
-            ]
-            
-            is_explicit_group = any(re.search(pattern, message_lower) for pattern in explicit_group_patterns)
-            
-            if is_explicit_group:
-                print(f"   👥 Explicit group question detected - Elsie can participate")
-                return True, "explicit_group_question"
-        
-        # In multi-character scenes, don't respond to general conversation
-        print(f"   🤐 Multi-character scene: Elsie stays quiet unless directly addressed")
+        print(f"   👂 MULTI-CHARACTER: Characters talking to each other")
         return False, "multi_character_listening"
     
-    # 6. For single-character or new scenes - be more responsive to general dialogue
-    # BUT NOT in DGM sessions - DGM sessions require explicit name addressing
-    if rp_state.is_roleplaying and len(participants) <= 1 and not is_dgm_session:
-        print(f"   👤 Single character scene - More responsive")
-        
-        # Check if this is a general question (not directed at specific character)
-        group_question_patterns = [
-            r'^(what|who|when|where|why|how)\b.*\?',  # Questions starting with question words
-            r'\b(what do you think|your thoughts)\b',  # Opinion requests
-        ]
-        
-        is_general_question = any(re.search(pattern, message_lower) for pattern in group_question_patterns)
-        
-        if is_general_question:
-            print(f"   💬 General question in single-character scene - Elsie can respond")
-            return True, "single_character_question"
-        
-        # Check for general conversation starters that aren't directed
-        conversation_starters = [
-            r'^(so|well|now|then)\b',  # Conversation connectors
-            r'\b(interesting|fascinating|curious|strange|odd)\b',  # Conversation starters
-        ]
-        
-        is_conversation_starter = any(re.search(pattern, message_lower) for pattern in conversation_starters)
-        
-        if is_conversation_starter and len(user_message.split()) >= 5:
-            print(f"   💬 General conversation starter - Elsie can join")
-            return True, "conversation_starter"
+    # 5. Single Character Scene Handling
+    if len(participants) == 1:
+        # In single character scenes, be more responsive
+        if word_count >= 5:  # Lower threshold for single character
+            print(f"   👤 SINGLE CHARACTER: Substantial message")
+            return True, "single_character_substantial"
     
-    # 7. Respond to direct questions or commands directed generally (not at specific characters)
-    # BUT NOT in DGM sessions - DGM sessions require explicit name addressing
-    if not is_dgm_session:
-        direct_patterns = [
-            r'^(can you|could you|would you|will you)',
-            r'^(please|get|bring|show|tell)',
-        ]
-        
-        for pattern in direct_patterns:
-            if re.search(pattern, message_lower):
-                print(f"   ❓ Direct general command detected")
-                return True, "direct_command"
-    
-    # 8. Enhanced thread responsiveness - but only for substantial, non-directed messages in single-character scenes
-    if len(participants) <= 1 and not is_dgm_session:  # Only in single-character scenes and non-DGM sessions
-        channel_context = rp_state.channel_context
-        if channel_context:
-            is_thread = channel_context.get('is_thread', False)
-            channel_type = channel_context.get('type', 'unknown')
-            discord_thread_types = ['public_thread', 'private_thread', 'news_thread']
-            
-            if is_thread or channel_type in discord_thread_types:
-                # In threads, only respond to substantial messages that aren't clearly directed
-                word_count = len(user_message.split())
-                if word_count >= 10:  # Even higher threshold for threads
-                    # Check if it's not clearly OOC or technical
-                    non_rp_indicators = ['ooc', 'debug', 'error', 'code', 'script', 'function']
-                    if not any(indicator in message_lower for indicator in non_rp_indicators):
-                        print(f"   🧵 Thread context: Substantial undirected message in single-character scene ({word_count} words)")
-                        return True, "thread_substantial_single"
-    
-    # 9. Listen mode - don't respond to conversations clearly between other characters
+    # 6. Default to Listening Mode
     print(f"   👂 Listening mode - no response needed")
     return False, "listening"
 
