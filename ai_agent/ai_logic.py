@@ -1333,11 +1333,14 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
         print(f"   🥃 Subtle bar interaction detected - Elsie provides service")
         return True, "subtle_bar_service"
     
-    # 4. Check for implicit response to Elsie (character responding right after Elsie spoke)
-    # This should work in both DGM and regular sessions - it's natural conversation flow
-    if rp_state.is_implicit_response_to_elsie(current_turn, user_message):
-        print(f"   💬 Implicit response to Elsie detected - natural conversation flow")
-        return True, "implicit_response_to_elsie"
+    # 4. Check for simple implicit response (character Elsie addressed responding back)
+    # This should work in both DGM and regular sessions AND multi-character scenes
+    # It's natural conversation flow and is targeted to the specific character Elsie addressed
+    # PRIORITY: This happens BEFORE multi-character guardrail since it's targeted conversation
+    if rp_state.is_simple_implicit_response(current_turn, user_message):
+        print(f"   💬 Simple implicit response detected - natural conversation flow")
+        print(f"   🎯 Multi-character scene: {len(participants) > 1} - implicit response still allowed")
+        return True, "simple_implicit_response"
     
     # SPECIAL DGM GUARDRAIL: In DGM-initiated sessions, be EXTREMELY passive
     # Only respond to direct addressing by name - NO other interactions
@@ -1347,7 +1350,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
         print(f"   🤐 DGM session: Elsie stays completely quiet unless explicitly addressed by name")
         return False, "dgm_ultra_passive_listening"
     
-    # 4. Check for bar-related actions that would naturally involve Elsie (NON-DGM sessions only)
+    # 5. Check for bar-related actions that would naturally involve Elsie (NON-DGM sessions only)
     emote_pattern = r'\*([^*]+)\*'
     emotes = re.findall(emote_pattern, user_message)
     
@@ -1387,7 +1390,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
         print(f"   🤐 Multi-character scene: Elsie stays quiet unless directly addressed")
         return False, "multi_character_listening"
     
-    # 4. For single-character or new scenes - be more responsive to general dialogue
+    # 6. For single-character or new scenes - be more responsive to general dialogue
     # BUT NOT in DGM sessions - DGM sessions require explicit name addressing
     if rp_state.is_roleplaying and len(participants) <= 1 and not is_dgm_session:
         print(f"   👤 Single character scene - More responsive")
@@ -1416,7 +1419,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
             print(f"   💬 General conversation starter - Elsie can join")
             return True, "conversation_starter"
     
-    # 5. Respond to direct questions or commands directed generally (not at specific characters)
+    # 7. Respond to direct questions or commands directed generally (not at specific characters)
     # BUT NOT in DGM sessions - DGM sessions require explicit name addressing
     if not is_dgm_session:
         direct_patterns = [
@@ -1429,7 +1432,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
                 print(f"   ❓ Direct general command detected")
                 return True, "direct_command"
     
-    # 6. Enhanced thread responsiveness - but only for substantial, non-directed messages in single-character scenes
+    # 8. Enhanced thread responsiveness - but only for substantial, non-directed messages in single-character scenes
     if len(participants) <= 1 and not is_dgm_session:  # Only in single-character scenes and non-DGM sessions
         channel_context = rp_state.channel_context
         if channel_context:
@@ -1447,7 +1450,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
                         print(f"   🧵 Thread context: Substantial undirected message in single-character scene ({word_count} words)")
                         return True, "thread_substantial_single"
     
-    # 7. Listen mode - don't respond to conversations clearly between other characters
+    # 9. Listen mode - don't respond to conversations clearly between other characters
     print(f"   👂 Listening mode - no response needed")
     return False, "listening"
 
@@ -1628,16 +1631,21 @@ def _check_if_other_character_addressed(user_message: str, rp_state: 'RoleplaySt
                 return addressed_name
     
     # Check for bracket format addressing: [Character Name] followed by addressing
+    # NOTE: [Character Name] at the start usually indicates the SPEAKER, not who's being addressed
+    # Only consider it addressing if there's clear addressing language AFTER the bracket
     bracket_pattern = r'\[([A-Z][a-zA-Z\s]+)\]'
     bracket_matches = re.findall(bracket_pattern, user_message)
     for name in bracket_matches:
         name = name.strip()
         if (name in participants and 
             name.lower() not in ['elsie', 'elise', 'elsy', 'els']):
-            # Check if there's addressing language after the bracket
-            addressing_after_bracket = re.search(rf'\[{re.escape(name)}\][^[]*\b(?:you|your|yourself|what do you)\b', user_message, re.IGNORECASE)
+            # Check if there's addressing language after the bracket (not just the bracket itself)
+            # Look for patterns like "[Speaker] turns to Character" or "[Speaker] says to Character"
+            addressing_after_bracket = re.search(rf'\[{re.escape(name)}\][^[]*(?:turns? to|speaks? to|says? to|addresses?)\s+([A-Z][a-z]+)', user_message, re.IGNORECASE)
             if addressing_after_bracket:
-                return name
+                addressed_character = addressing_after_bracket.group(1)
+                if addressed_character in participants and addressed_character.lower() not in ['elsie', 'elise', 'elsy', 'els']:
+                    return addressed_character
     
     return ""
 
@@ -1833,6 +1841,11 @@ class RoleplayStateManager:
         self.last_interjection_turn = 0  # Track when we last interjected
         self.dgm_initiated = False  # Track if session was started by DGM
         self.dgm_characters = []  # Characters mentioned in DGM post
+        
+        # Simple implicit response tracking
+        self.last_character_elsie_addressed = ""  # Who did Elsie last speak to
+        self.last_character_spoke = ""  # Who spoke last (not Elsie)
+        self.turn_history = []  # Simple turn tracking: [(turn_number, speaker)]
     
     def start_roleplay_session(self, turn_number: int, initial_triggers: List[str], channel_context: Dict = None, dgm_characters: List[str] = None):
         """Initialize a new roleplay session."""
@@ -1847,6 +1860,11 @@ class RoleplayStateManager:
         self.last_response_turn = 0
         self.listening_turn_count = 0
         self.last_interjection_turn = 0
+        
+        # Reset simple tracking
+        self.last_character_elsie_addressed = ""
+        self.last_character_spoke = ""
+        self.turn_history = []
         
         # Check if this is a DGM-initiated session
         self.dgm_initiated = 'dgm_scene_setting' in initial_triggers
@@ -1956,6 +1974,89 @@ class RoleplayStateManager:
         """Mark that Elsie responded on this turn."""
         self.last_response_turn = turn_number
         self.listening_turn_count = 0  # Reset listening count after active response
+        
+        # Track turn history
+        self.turn_history.append((turn_number, "Elsie"))
+        # Keep only last 10 turns
+        if len(self.turn_history) > 10:
+            self.turn_history.pop(0)
+    
+    def mark_character_turn(self, turn_number: int, character_name: str):
+        """Mark that a character spoke on this turn."""
+        self.last_character_spoke = character_name
+        
+        # Track turn history
+        self.turn_history.append((turn_number, character_name))
+        # Keep only last 10 turns
+        if len(self.turn_history) > 10:
+            self.turn_history.pop(0)
+        
+        print(f"   📝 CHARACTER TURN TRACKED: {character_name} (Turn {turn_number})")
+    
+    def set_last_character_addressed(self, character_name: str):
+        """Set who Elsie last addressed."""
+        self.last_character_elsie_addressed = character_name
+        print(f"   👋 ELSIE ADDRESSED: {character_name}")
+    
+    def is_simple_implicit_response(self, current_turn: int, user_message: str) -> bool:
+        """
+        SIMPLE implicit response logic:
+        - If the response comes from the last character Elsie addressed
+        - AND no other characters have spoken between Elsie and this character
+        - UNLESS the message contains other character names (redirecting conversation)
+        """
+        # Check if we have turn history
+        if len(self.turn_history) < 2:
+            return False
+        
+        # Get the last two turns
+        last_turn = self.turn_history[-1]
+        second_last_turn = self.turn_history[-2] if len(self.turn_history) >= 2 else None
+        
+        # Check if Elsie spoke last
+        if last_turn[1] != "Elsie":
+            return False
+        
+        # Extract character name from current message
+        current_character = self._extract_current_speaker(user_message)
+        if not current_character:
+            return False
+        
+        # Check if this character is the one Elsie last addressed
+        if (self.last_character_elsie_addressed and 
+            current_character.lower() == self.last_character_elsie_addressed.lower()):
+            
+            # Check if the message contains other character names (redirecting)
+            if self._message_contains_other_character_names(user_message):
+                print(f"   🎯 Message contains other character names - not an implicit response")
+                return False
+            
+            print(f"   💬 SIMPLE IMPLICIT RESPONSE DETECTED:")
+            print(f"      - Elsie last addressed: {self.last_character_elsie_addressed}")
+            print(f"      - Current speaker: {current_character}")
+            print(f"      - Turn history: {self.turn_history[-3:] if len(self.turn_history) >= 3 else self.turn_history}")
+            print(f"      - This is a follow-up from the character Elsie was addressing")
+            
+            return True
+        
+        return False
+    
+    def _extract_current_speaker(self, user_message: str) -> str:
+        """Extract the character name from the current message."""
+        # Check for [Character Name] format first
+        bracket_pattern = r'\[([A-Z][a-zA-Z\s]+)\]'
+        bracket_matches = re.findall(bracket_pattern, user_message)
+        for name in bracket_matches:
+            name = name.strip()
+            if is_valid_character_name(name):
+                return ' '.join(word.capitalize() for word in name.split())
+        
+        # Check for character names in emotes
+        character_names = extract_character_names_from_emotes(user_message)
+        if character_names:
+            return character_names[0]
+        
+        return ""
     
     def get_participant_names(self) -> List[str]:
         """Get list of all participant names."""
@@ -2059,9 +2160,13 @@ class RoleplayStateManager:
         """
         Check if the message contains character names that would indicate
         it's directed at someone other than Elsie.
+        NOTE: Ignores speaker brackets [Character Name] since those indicate who is speaking, not being addressed.
         """
         # Import here to avoid circular imports
         from ai_logic import extract_character_names_from_emotes, extract_addressed_characters, is_valid_character_name
+        
+        # Extract speaker from bracket format [Character Name] - this should be ignored
+        speaker_from_bracket = self._extract_current_speaker(user_message)
         
         # Check for character names in emotes and addressing patterns
         character_names = extract_character_names_from_emotes(user_message)
@@ -2072,11 +2177,15 @@ class RoleplayStateManager:
         
         # Filter out Elsie's names (these are fine for implicit responses)
         elsie_names = {'elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid', 'server', 'waitress'}
+        
+        # Filter out the speaker (from brackets) since that's who is talking, not being addressed
         other_character_names = [name for name in all_detected_names 
-                               if name.lower() not in elsie_names and is_valid_character_name(name)]
+                               if (name.lower() not in elsie_names and 
+                                   is_valid_character_name(name) and
+                                   name.lower() != speaker_from_bracket.lower())]
         
         if other_character_names:
-            print(f"      🎯 Other character names detected: {other_character_names}")
+            print(f"      🎯 Other character names detected (excluding speaker '{speaker_from_bracket}'): {other_character_names}")
             return True
         
         return False

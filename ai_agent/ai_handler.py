@@ -43,6 +43,47 @@ from ai_emotion import (
     should_trigger_poetic_circuit,
     get_poetic_response
 )
+
+
+def _detect_who_elsie_addressed(response_text: str, user_message: str) -> str:
+    """
+    Detect who Elsie addressed in her response.
+    This helps track implicit response chains.
+    """
+    # First, try to detect who spoke in the user message (likely who Elsie is responding to)
+    from ai_logic import extract_character_names_from_emotes
+    
+    # Check for [Character Name] format in user message
+    bracket_pattern = r'\[([A-Z][a-zA-Z\s]+)\]'
+    bracket_matches = re.findall(bracket_pattern, user_message)
+    for name in bracket_matches:
+        name = name.strip()
+        if len(name) > 2:
+            name_normalized = ' '.join(word.capitalize() for word in name.split())
+            print(f"   👋 ELSIE ADDRESSING: {name_normalized} (detected from user message bracket)")
+            return name_normalized
+    
+    # Check for character names in user message emotes
+    character_names = extract_character_names_from_emotes(user_message)
+    if character_names:
+        print(f"   👋 ELSIE ADDRESSING: {character_names[0]} (detected from user message emotes)")
+        return character_names[0]
+    
+    # Check if Elsie's response contains addressing terms like "dear", "love", etc.
+    response_lower = response_text.lower()
+    addressing_terms = ['dear', 'love', 'darling', 'sweetie', 'honey']
+    
+    # If Elsie used an addressing term, she's likely responding to the speaker
+    if any(term in response_lower for term in addressing_terms):
+        # Try to extract character from user message again with more patterns
+        words = user_message.split()
+        for word in words:
+            if len(word) > 2 and word[0].isupper() and word.isalpha():
+                # Could be a character name
+                print(f"   👋 ELSIE ADDRESSING: {word} (inferred from addressing term in response)")
+                return word.capitalize()
+    
+    return ""
 from ai_wisdom import (
     get_context_for_strategy,
     handle_ooc_url_request,
@@ -256,6 +297,11 @@ def determine_response_strategy(user_message: str, conversation_history: list, c
         
         for name in addressed_characters:
             rp_state.add_participant(name, "addressed", turn_number)
+        
+        # Track character turn for simple implicit response logic
+        if character_names:
+            # Use the first detected character as the speaker
+            rp_state.mark_character_turn(turn_number, character_names[0])
         
         # Update confidence tracking
         rp_state.update_confidence(confidence_score)
@@ -679,6 +725,15 @@ def get_gemma_response(user_message: str, conversation_history: list, channel_co
             print(f"   🙏 Generated acknowledgment response: '{response}'")
             return response
         
+        # Handle simple implicit responses (follow-up from character Elsie addressed)
+        if (strategy['approach'] == 'roleplay_active' and 
+            strategy.get('response_reason') == 'simple_implicit_response'):
+            
+            print(f"   💬 SIMPLE IMPLICIT RESPONSE:")
+            print(f"      - Character following up after Elsie addressed them")
+            print(f"      - Using normal AI response generation for natural conversation")
+            # Continue to normal AI generation for natural conversation
+        
         user_lower = user_message.lower()
         if "menu" in user_lower or "what do you have" in user_lower or "what can you make" in user_lower:
             return get_menu_response()
@@ -825,6 +880,12 @@ Stay in character as this intelligent, sophisticated person with varied expertis
         if strategy['approach'] in ['simple_chat', 'general_with_context'] and should_trigger_poetic_circuit(user_message, conversation_history):
             print(f"🎭 POETIC SHORT CIRCUIT TRIGGERED - Replacing casual response with esoteric poetry")
             response_text = get_poetic_response(user_message, response_text)
+        
+        # Track who Elsie addressed in her response for simple implicit response logic
+        if strategy['approach'] == 'roleplay_active':
+            addressed_character = _detect_who_elsie_addressed(response_text, user_message)
+            if addressed_character:
+                rp_state.set_last_character_addressed(addressed_character)
         
         print(f"✅ Response generated successfully ({len(response_text)} characters)")
         return response_text
