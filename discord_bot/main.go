@@ -108,6 +108,33 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Check if message is a DM
 	isDM := m.GuildID == ""
 
+	// Get basic channel info to determine if we should monitor all messages
+	shouldMonitorAll := false
+	if !isDM {
+		// Try to get channel info to determine if this is a thread or special channel
+		if channel, err := s.Channel(m.ChannelID); err == nil {
+			// Monitor all messages in threads (where roleplay typically happens)
+			isThread := channel.Type == discordgo.ChannelTypeGuildPublicThread ||
+				channel.Type == discordgo.ChannelTypeGuildPrivateThread ||
+				channel.Type == discordgo.ChannelTypeGuildNewsThread
+
+			if isThread {
+				shouldMonitorAll = true
+				log.Printf("DEBUG: Thread detected (%s) - monitoring all messages", channel.Name)
+			}
+
+			// Also monitor channels with "rp" in the name
+			if strings.Contains(strings.ToLower(channel.Name), "rp") ||
+				strings.Contains(strings.ToLower(channel.Name), "roleplay") {
+				shouldMonitorAll = true
+				log.Printf("DEBUG: RP channel detected (%s) - monitoring all messages", channel.Name)
+			}
+		} else {
+			// If we can't get channel info, log the error but continue
+			log.Printf("DEBUG: Could not get channel info: %v", err)
+		}
+	}
+
 	// Simple mention detection - if there are any mentions, process them
 	if len(m.Mentions) > 0 || len(m.MentionRoles) > 0 {
 		// Check user mentions
@@ -149,10 +176,22 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		log.Printf("DEBUG: Command detected, content: %s", content)
 	}
 
-	// Only respond if mentioned, command used, or in DM
-	if !mentioned && !isDM {
-		log.Printf("DEBUG: Message ignored - not mentioned and not DM")
+	// Determine if we should respond
+	shouldRespond := mentioned || isDM || shouldMonitorAll
+
+	// Only respond if mentioned, command used, in DM, or in a monitored channel
+	if !shouldRespond {
+		log.Printf("DEBUG: Message ignored - not mentioned, not DM, and not in monitored channel")
 		return
+	}
+
+	// Log why we're responding
+	if mentioned {
+		log.Printf("DEBUG: Responding due to mention")
+	} else if isDM {
+		log.Printf("DEBUG: Responding due to DM")
+	} else if shouldMonitorAll {
+		log.Printf("DEBUG: Responding due to channel monitoring (thread/RP channel)")
 	}
 
 	// Clean up the content by removing mentions
@@ -210,17 +249,23 @@ You can also chat with me privately by sending me a direct message! I'll respond
 	s.ChannelTyping(m.ChannelID)
 
 	// Process message through AI agent
-	response := processWithAI(content, m.ChannelID)
+	response := processWithAIEnhanced(content, s, m)
 
 	// Send response
-	if response != "" {
+	if response != "" && response != "NO_RESPONSE" {
 		s.ChannelMessageSend(m.ChannelID, response)
+	} else if response == "NO_RESPONSE" {
+		log.Printf("🤐 NO_RESPONSE received - Elsie is staying silent (DGM post or listening mode)")
+		// Don't send any message - Elsie is intentionally staying quiet
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "*holographic matrix flickers* My apologizes, but my processing subroutines are experiencing difficulties. Please try again later.")
 	}
 }
 
 func processWithAI(content string, channelID string) string {
+	log.Printf("⚠️  USING BASIC PROCESSING (no enhanced channel detection)")
+	log.Printf("   📋 Channel ID: %s", channelID)
+
 	// Create message payload
 	message := Message{
 		Message: content,
@@ -238,7 +283,7 @@ func processWithAI(content string, channelID string) string {
 	}
 
 	// Make HTTP request to AI agent
-	log.Printf("DEBUG: Sending request to %s with data: %s", AIAgentURL+"/process", string(jsonData))
+	log.Printf("DEBUG: Sending basic request to %s with data: %s", AIAgentURL+"/process", string(jsonData))
 	resp, err := http.Post(AIAgentURL+"/process", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Error calling AI agent: %v", err)
@@ -263,6 +308,131 @@ func processWithAI(content string, channelID string) string {
 	}
 
 	// Return the response if it exists (AI agent doesn't send status field)
+	if aiResponse.Response != "" {
+		return aiResponse.Response
+	}
+
+	return ""
+}
+
+func processWithAIEnhanced(content string, s *discordgo.Session, m *discordgo.MessageCreate) string {
+	log.Printf("🔍 ATTEMPTING ENHANCED CHANNEL DETECTION:")
+	log.Printf("   📋 Channel ID: %s", m.ChannelID)
+	log.Printf("   🏰 Guild ID: %s", m.GuildID)
+
+	// Get channel information
+	channel, err := s.Channel(m.ChannelID)
+	if err != nil {
+		log.Printf("❌ ERROR getting channel info: %v", err)
+		log.Printf("   🔄 Falling back to basic processing...")
+		return processWithAI(content, m.ChannelID)
+	}
+
+	log.Printf("✅ CHANNEL INFO RETRIEVED:")
+	log.Printf("   📛 Name: %s", channel.Name)
+	log.Printf("   🏷️ Type: %v", channel.Type)
+	log.Printf("   🆔 ID: %s", channel.ID)
+
+	// Determine channel type and thread status
+	isDM := m.GuildID == ""
+	isThread := channel.Type == discordgo.ChannelTypeGuildPublicThread ||
+		channel.Type == discordgo.ChannelTypeGuildPrivateThread ||
+		channel.Type == discordgo.ChannelTypeGuildNewsThread
+
+	channelType := "unknown"
+	channelName := channel.Name
+
+	// Map Discord channel types to our system
+	switch channel.Type {
+	case discordgo.ChannelTypeDM:
+		channelType = "dm"
+		isDM = true
+		channelName = "DM"
+		log.Printf("   💬 Detected as: Direct Message")
+	case discordgo.ChannelTypeGuildText:
+		channelType = "text"
+		log.Printf("   📝 Detected as: Text Channel")
+	case discordgo.ChannelTypeGuildVoice:
+		channelType = "voice"
+		log.Printf("   🔊 Detected as: Voice Channel")
+	case discordgo.ChannelTypeGuildPublicThread:
+		channelType = "public_thread"
+		isThread = true
+		log.Printf("   🧵 Detected as: Public Thread")
+	case discordgo.ChannelTypeGuildPrivateThread:
+		channelType = "private_thread"
+		isThread = true
+		log.Printf("   🔒 Detected as: Private Thread")
+	case discordgo.ChannelTypeGuildNewsThread:
+		channelType = "news_thread"
+		isThread = true
+		log.Printf("   📰 Detected as: News Thread")
+	case discordgo.ChannelTypeGuildNews:
+		channelType = "news"
+		log.Printf("   📰 Detected as: News Channel")
+	case discordgo.ChannelTypeGuildStageVoice:
+		channelType = "stage"
+		log.Printf("   🎤 Detected as: Stage Channel")
+	default:
+		log.Printf("   ❓ Unknown channel type: %v", channel.Type)
+	}
+
+	// Create enhanced message payload with channel context
+	message := Message{
+		Message: content,
+		Context: map[string]interface{}{
+			"session_id":   m.ChannelID,
+			"platform":     "discord",
+			"channel_id":   m.ChannelID,
+			"channel_name": channelName,
+			"channel_type": channelType,
+			"is_dm":        isDM,
+			"is_thread":    isThread,
+			"guild_id":     m.GuildID,
+			"user_id":      m.Author.ID,
+			"username":     m.Author.Username,
+		},
+	}
+
+	log.Printf("🌐 ENHANCED CHANNEL CONTEXT:")
+	log.Printf("   📍 Channel: %s (%s)", channelName, channelType)
+	log.Printf("   🧵 Is Thread: %v | 💬 Is DM: %v", isThread, isDM)
+	log.Printf("   🆔 Channel ID: %s | Guild ID: %s", m.ChannelID, m.GuildID)
+	log.Printf("   👤 User: %s (%s)", m.Author.Username, m.Author.ID)
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("Error marshaling JSON: %v", err)
+		return ""
+	}
+
+	// Make HTTP request to AI agent
+	log.Printf("DEBUG: Sending enhanced request to %s", AIAgentURL+"/process")
+	resp, err := http.Post(AIAgentURL+"/process", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error calling AI agent: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response: %v", err)
+		return ""
+	}
+	log.Printf("DEBUG: Received response: %s", string(body))
+
+	// Parse AI response
+	var aiResponse AIResponse
+	err = json.Unmarshal(body, &aiResponse)
+	if err != nil {
+		log.Printf("Error unmarshaling AI response: %v", err)
+		return ""
+	}
+
+	// Return the response if it exists
 	if aiResponse.Response != "" {
 		return aiResponse.Response
 	}

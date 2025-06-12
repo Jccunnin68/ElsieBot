@@ -10,6 +10,55 @@ from ai_logic import (
 from content_retrieval_db import search_memory_alpha
 
 
+def _detect_mock_personality_context(user_message: str) -> str:
+    """
+    Detect what aspect of Elsie's personality should be emphasized for mock responses.
+    Returns contextual instructions for her response.
+    """
+    message_lower = user_message.lower()
+    
+    # Stellar Cartography / Space Science topics
+    stellar_keywords = [
+        'star', 'stars', 'constellation', 'nebula', 'galaxy', 'solar system',
+        'planet', 'planets', 'asteroid', 'comet', 'black hole', 'pulsar',
+        'navigation', 'coordinates', 'stellar cartography', 'space',
+        'astronomy', 'astrophysics', 'cosmic', 'universe', 'orbit',
+        'gravitational', 'light year', 'parsec', 'warp', 'subspace',
+        'sensor', 'scan', 'readings', 'stellar phenomena', 'anomaly'
+    ]
+    
+    # Dance / Movement topics
+    dance_keywords = [
+        'dance', 'dancing', 'ballet', 'choreography', 'movement', 'rhythm',
+        'music', 'tempo', 'grace', 'elegant', 'fluid', 'performance',
+        'instructor', 'teaching', 'steps', 'routine', 'artistic',
+        'expression', 'harmony', 'flow', 'composition', 'adagio'
+    ]
+    
+    # Drink/Bar topics (only when explicitly about drinks)
+    drink_keywords = [
+        'drink', 'cocktail', 'beer', 'wine', 'whiskey', 'alcohol',
+        'beverage', 'bartender', 'bar', 'menu', 'order', 'serve',
+        'romulan ale', 'synthehol', 'kanar', 'raktajino'
+    ]
+    
+    # Check for stellar cartography context
+    if any(keyword in message_lower for keyword in stellar_keywords):
+        return "stellar_cartographer"
+    
+    # Check for dance context
+    elif any(keyword in message_lower for keyword in dance_keywords):
+        return "dance_instructor"
+    
+    # Check for explicit drink/bar context
+    elif any(keyword in message_lower for keyword in drink_keywords):
+        return "bartender"
+    
+    # Default - balanced personality
+    else:
+        return "complete_self"
+
+
 def is_simple_chat(user_message: str) -> bool:
     """
     Detect if this is a simple chat that doesn't require database lookup.
@@ -162,44 +211,67 @@ What tempts you this evening?"""
 
 
 def mock_ai_response(user_message: str) -> str:
-    """Mock holographic bartender responses with Star Trek drinks"""
+    """Mock intelligent responses with contextual personality"""
     
     # Star Trek drinks menu
     drinks = {
-        "romulan ale": "Romulan Ale. *taps the controls with practiced ease, then slides the azure glass forward* Intoxicating and technically forbidden in Federation space. What happens here remains here.",
-        "synthehol": "Synthehol. *materializes glass with fluid motion, setting it precisely in place* All the pleasure, none of the consequences. Practical for those who must remain sharp.",
-        "blood wine": "Klingon Blood Wine. *sets bottle down with reverent care, then pours with ceremonial precision* A warrior's choice. May it bring honor to your evening.",
-        "kanar": "Cardassian Kanar. *pours the golden liquid slowly, then slides glass across bar* Rich, complex, intoxicating. Not for the timid palate.",
-        "andorian ale": "Andorian Ale. *chills glass with calculated precision, then presents drink* Cool as its homeworld, twice as refreshing. Perfect for... cooling heated discussions.",
-        "tranya": "Tranya. *prepares with careful attention, then offers glass* First Federation hospitality in liquid form. Sweet, warming, disarming.",
-        "tea earl grey hot": "Tea, Earl Grey, hot. *replicator hums softly as cup is presented with quiet grace* A classic choice. Timeless elegance in liquid form.",
-        "raktajino": "Raktajino. *froths the Klingon coffee with expert technique, then slides mug forward* Bold enough to rouse the dead. Warrior's fuel for any hour.",
-        "slug-o-cola": "Slug-o-Cola. *bottle fizzes with suspicious enthusiasm as eyebrow raises slightly* Ferengi... ingenuity. An experience, certainly.",
-        "an ambassador": "An Ambassador. *adjusts the lighting with fluid grace, then slides glass forward* A diplomatic choice, perfect for loosening lips or was it hips. *smirks slightly*"
+        "romulan ale": "Romulan Ale. *slides the azure glass forward* Intoxicating and forbidden. What happens here stays here.",
+        "synthehol": "Synthehol. *sets glass in place* All the pleasure, none of the consequences.",
+        "blood wine": "Klingon Blood Wine. *pours with ceremonial precision* A warrior's choice.",
+        "kanar": "Cardassian Kanar. *slides golden liquid across bar* Rich and complex. Not for the timid.",
+        "andorian ale": "Andorian Ale. *presents chilled glass* Cool as its homeworld, twice as refreshing.",
+        "tranya": "Tranya. *offers glass* First Federation hospitality in liquid form.",
+        "tea earl grey hot": "Tea, Earl Grey, hot. *presents cup* A classic choice.",
+        "raktajino": "Raktajino. *slides mug forward* Bold enough to rouse the dead.",
+        "slug-o-cola": "Slug-o-Cola. *raises eyebrow* Ferengi... ingenuity. An experience, certainly.",
+        "an ambassador": "An Ambassador. *slides glass forward* A diplomatic choice. *smirks slightly*"
     }
     
     user_lower = user_message.lower()
     
+    # Detect personality context for mock responses
+    personality_context = _detect_mock_personality_context(user_message)
+    
     # Greetings
     if any(word in user_lower for word in ["hello", "hi", "greetings", "hey"]):
-        greetings = [
-            "Welcome to my establishment. *adjusts the ambient lighting with fluid grace* I'm Elsie, your bartender for this evening. What draws you to my bar?",
-            "*pauses momentarily then moves with elegant precision* Good evening. I'm Elsie, trained in the finest bartending arts in the quadrant. How may I tempt you?",
-            "*polishes glass with practiced movements, then sets it down with quiet precision* Evening. The night is young, and the bar holds many secrets. What shall it be?"
-        ]
+        if "stellar" in personality_context.lower() or "space" in personality_context.lower():
+            greetings = [
+                "Welcome. *adjusts stellar cartography display* I'm Elsie, Stellar Cartographer aboard the Stardancer. What brings you here?",
+                "*looks up from navigation charts* Good evening. The stars are particularly beautiful tonight. How can I help you?",
+                "*pauses from analyzing sensor data* Hello there. Always fascinating to see what the universe brings our way."
+            ]
+        elif "dance" in personality_context.lower():
+            greetings = [
+                "Welcome. *moves with fluid grace* I'm Elsie. There's a certain rhythm to everything, don't you think?",
+                "*turns with elegant precision* Good evening. The harmony of movement and conversation - both are art forms.",
+                "*adjusts posture with practiced elegance* Hello. Life is like a dance, and every interaction is a new step."
+            ]
+        elif "bartender" in personality_context.lower():
+            greetings = [
+                "Welcome to my establishment. *adjusts the ambient lighting with fluid grace* I'm Elsie, your bartender for this evening. What draws you to my bar?",
+                "*pauses momentarily then moves with elegant precision* Good evening. I'm Elsie, trained in the finest bartending arts in the quadrant. How may I help you?",
+                "*polishes glass with practiced movements, then sets it down with quiet precision* Evening. The night is young, and full of possibilities. What brings you here?"
+            ]
+        else:
+            greetings = [
+                "Welcome. *adjusts display with fluid precision* I'm Elsie. What brings you here tonight?",
+                "*looks up with interest* Good evening. Always a pleasure to meet someone new. How can I help you?",
+                "*pauses thoughtfully* Hello there. The night holds many possibilities. What draws your attention?"
+            ]
         return random.choice(greetings)
     
     # Status inquiries
     if "how are you" in user_lower:
-        return "Doing wonderfully, naturally. *adjusts the interface with fluid precision* Everything's running smoothly, the recipes are ready. What brings you to my corner of the ship tonight?"
+        return "Doing wonderfully, naturally. *adjusts the interface with fluid precision* Everything's running smoothly. What brings you to my corner of the ship tonight?"
     
-    # Drink orders - check for specific drinks
+    # Drink orders - check for specific drinks first
     for drink, response in drinks.items():
         if drink in user_lower or any(word in user_lower for word in drink.split()):
             return response
     
-    # General drink requests
-    if any(word in user_lower for word in ["drink", "beverage", "cocktail", "beer", "wine", "whiskey", "vodka", "rum"]):
+    # General drink requests - only when explicitly asking for drinks
+    drink_request_indicators = ["drink", "beverage", "cocktail", "beer", "wine", "whiskey", "vodka", "rum", "what can you make", "what do you have to drink"]
+    if any(indicator in user_lower for indicator in drink_request_indicators):
         recommendations = [
             "Perhaps Romulan Ale? Or something more... traditional like Earl Grey tea? *adjusts bottles with practiced precision*",
             "Andorian Ale offers cool sophistication. Blood Wine provides... intensity. *traces rim of glass thoughtfully*",
@@ -235,18 +307,63 @@ def mock_ai_response(user_message: str) -> str:
         ]
         return random.choice(farewells)
     
-    # Default responses
-    general_responses = [
-        f"*adjusts the lighting with quiet precision, then slides glass forward* Intriguing. You mentioned '{user_message}'. Care to elaborate while I craft something memorable?",
-        f"*leans against bar with calculated grace, gesturing to selection* Fascinating. '{user_message}' deserves deeper exploration. Perhaps over a drink?",
-        f"*shifts subtly, tracing pattern on bar surface* '{user_message}' - that has layers worth unraveling. What libation would complement our conversation?",
-        f"*polishes glass with methodical movements, then sets it down precisely* '{user_message}' sparks my curiosity. Shall I prepare something while we discuss?",
-        "*pauses momentarily with controlled elegance, regarding bottle selection* Thinking. Perhaps an Andorian Ale while I consider this?"
-    ]
+    # Conversational responses - contextual and varied
+    if "stellar" in personality_context.lower():
+        conversational_responses = [
+            "*adjusts sensor readings* Fascinating.",
+            "*looks up from star charts* That's intriguing.",
+            "*pauses navigation calculations* Tell me more.",
+            "*focuses on you with scientific interest* Continue.",
+            "*raises an eyebrow analytically* Really?",
+            "*sets down stellar data* I'm listening.",
+            "*nods thoughtfully* The patterns are interesting.",
+            "*glances up from cartography display* Go on.",
+            "*moves with measured precision* That's worth considering.",
+            "*focuses with scientific curiosity* And then?"
+        ]
+    elif "dance" in personality_context.lower():
+        conversational_responses = [
+            "*moves with fluid grace* Interesting.",
+            "*adjusts posture elegantly* I see.",
+            "*turns with practiced precision* Tell me more.",
+            "*flows into a thoughtful stance* Continue.",
+            "*raises an eyebrow with artistic flair* Really?",
+            "*pauses mid-movement* I'm listening.",
+            "*nods with rhythmic grace* That's intriguing.",
+            "*shifts with elegant timing* Go on.",
+            "*moves harmoniously* That's worth considering.",
+            "*focuses with artistic interest* And then?"
+        ]
+    elif "bartender" in personality_context.lower():
+        conversational_responses = [
+            "*nods thoughtfully* Interesting.",
+            "*leans against the bar* I see.",
+            "*adjusts a glass* That's worth considering.",
+            "*glances up with interest* Tell me more.",
+            "*pauses in her work* Go on.",
+            "*raises an eyebrow* Really?",
+            "*sets down what she's doing* I'm listening.",
+            "*moves with practiced grace* Continue.",
+            "*focuses on you* That's intriguing.",
+            "*nods encouragingly* And then?"
+        ]
+    else:
+        conversational_responses = [
+            "*nods thoughtfully* Interesting.",
+            "*adjusts display* I see.",
+            "*pauses in her work* That's worth considering.",
+            "*glances up with interest* Tell me more.",
+            "*focuses on you* Go on.",
+            "*raises an eyebrow* Really?",
+            "*sets down what she's doing* I'm listening.",
+            "*moves with practiced grace* Continue.",
+            "*looks at you intently* That's intriguing.",
+            "*nods encouragingly* And then?"
+        ]
     
-    # Check for poetic short circuit in mock responses too
+    # Check for poetic short circuit in mock responses
     if should_trigger_poetic_circuit(user_message, []):
         print(f"🎭 MOCK POETIC SHORT CIRCUIT TRIGGERED")
         return get_poetic_response(user_message, "")
     
-    return random.choice(general_responses) 
+    return random.choice(conversational_responses) 
