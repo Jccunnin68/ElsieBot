@@ -8,7 +8,7 @@ passive listening behavior.
 """
 
 import re
-from typing import Tuple, Optional, TYPE_CHECKING
+from typing import Tuple, Optional, TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from .state_manager import RoleplayStateManager
@@ -18,10 +18,16 @@ if TYPE_CHECKING:
 def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayStateManager', current_turn: int) -> Tuple[bool, str]:
     """
     Determine if Elsie should actively respond during roleplay or just listen.
-    Enhanced for better followup dialogue detection in ongoing sessions.
-    Now includes better recognition of when dialogue is directed at other characters.
-    STRICT GUARDRAILS: In multi-character scenes, only respond when directly involved.
-    SPECIAL DGM MODE: In DGM-initiated sessions, be even more passive until directly addressed.
+    
+    IMPLICIT RESPONSE PATHWAYS:
+    
+    Pathway 1 (Single Character):
+    - Character Addresses Elsie → Elsie Addresses Character → Character Responds → Elsie Responds (no break)
+    
+    Pathway 2 (Multi-Character):
+    - Character Addresses Elsie → Elsie Addresses Character → Character Responds → Elsie Responds
+    - Continue chain UNLESS: Character 2 addresses Elsie explicitly, Character 1 addresses Character 2 explicitly, or Character walks away
+    
     Returns (should_respond, reason)
     """
     message_lower = user_message.lower().strip()
@@ -35,61 +41,139 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     print(f"      - DGM Session: {is_dgm_session}")
     print(f"      - Thread Session: {is_thread_session}")
     
-    # AUTO-DETECT: Check if this message contains a speaking character (for DGM sessions)
-    # Look for [Character Name] format or character names speaking
+    # Get speaking character from current message
     from .character_tracking import extract_current_speaker
     speaking_character = extract_current_speaker(user_message)
     
-    # 1. DGM Session Special Handling
+    print(f"      - Speaking Character: {speaking_character}")
+    print(f"      - Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
+    print(f"      - Turn History: {rp_state.turn_history[-3:] if len(rp_state.turn_history) >= 3 else rp_state.turn_history}")
+    
+    # 1. DGM Session Special Handling (unchanged)
     if is_dgm_session:
-        # In DGM sessions, only respond when directly addressed
         if speaking_character and speaking_character.lower() == 'elsie':
             print(f"   🎭 DGM SESSION: Directly addressed by {speaking_character}")
             return True, "dgm_direct_address"
         
-        # Track speaking character in DGM session
         if speaking_character:
             rp_state.add_speaking_character(speaking_character, current_turn)
         
         print(f"   👂 DGM SESSION: Passive listening mode")
         return False, "dgm_passive_listening"
     
-    # 2. Thread Session Special Handling
+    # 2. Direct Address Detection (always respond)
+    if _is_elsie_directly_addressed(user_message, speaking_character):
+        print(f"   🎭 DIRECT ADDRESS: Elsie directly addressed")
+        return True, "direct_address"
+    
+    # 3. Check for explicit redirection (breaks implicit chain)
+    redirection_target = _check_explicit_redirection(user_message, participants)
+    if redirection_target:
+        print(f"   🔄 EXPLICIT REDIRECTION: Conversation redirected to {redirection_target}")
+        return False, "explicit_redirection"
+    
+    # 4. Check for walk-away emotes (breaks implicit chain)
+    if _check_walk_away_emote(user_message):
+        print(f"   🚶 WALK AWAY: Character walking away detected")
+        return False, "character_walking_away"
+    
+    # 5. IMPLICIT RESPONSE LOGIC - The core fix
+    is_implicit = rp_state.is_simple_implicit_response(current_turn, user_message)
+    if is_implicit:
+        # Pathway 1: Single Character - Always respond
+        if len(participants) <= 1:
+            print(f"   💬 PATHWAY 1 (SINGLE): Implicit response - always respond")
+            return True, "implicit_single_character"
+        
+        # Pathway 2: Multi-Character - Respond unless redirected (already checked above)
+        else:
+            print(f"   💬 PATHWAY 2 (MULTI): Implicit response - continuing conversation chain")
+            return True, "implicit_multi_character"
+    
+    # 6. Thread Session Special Handling
     if is_thread_session:
-        # In thread sessions, be more responsive to substantial messages
         word_count = len(user_message.split())
-        if word_count >= 10:  # Substantial message threshold
-            # Check if it's not clearly OOC or technical
+        if word_count >= 10:
             non_rp_indicators = ['ooc', 'debug', 'error', 'code', 'script', 'function']
             if not any(indicator in message_lower for indicator in non_rp_indicators):
                 print(f"   🧵 THREAD: Substantial message detected ({word_count} words)")
                 return True, "thread_substantial_message"
     
-    # 3. Direct Address Detection
-    if speaking_character and speaking_character.lower() == 'elsie':
-        print(f"   🎭 DIRECT ADDRESS: {speaking_character} speaking to Elsie")
-        return True, "direct_address"
-    
-    # 4. Multi-character Scene Handling
-    if len(participants) > 1:
-        # In multi-character scenes, only respond when directly involved
-        if speaking_character and speaking_character.lower() == 'elsie':
-            print(f"   👥 MULTI-CHARACTER: Elsie directly addressed")
-            return True, "multi_character_direct"
-        
-        print(f"   👂 MULTI-CHARACTER: Characters talking to each other")
-        return False, "multi_character_listening"
-    
-    # 5. Single Character Scene Handling
-    if len(participants) == 1:
-        # In single character scenes, be more responsive
-        if word_count >= 3:  # Lower threshold for single character
+    # 7. Single Character Scene - Be responsive
+    if len(participants) <= 1:
+        word_count = len(user_message.split())
+        if word_count >= 3:
             print(f"   👤 SINGLE CHARACTER: Substantial message")
             return True, "single_character_substantial"
     
-    # 6. Default to Listening Mode
-    print(f"   👂 Listening mode - no response needed")
+    # 8. Check for subtle bar interactions
+    if check_subtle_bar_interaction(user_message, rp_state):
+        print(f"   🥃 SUBTLE BAR SERVICE: Non-verbal drink order detected")
+        return True, "subtle_bar_service"
+    
+    # 9. Default to Listening Mode
+    print(f"   👂 LISTENING MODE: No response needed")
     return False, "listening"
+
+
+def _is_elsie_directly_addressed(user_message: str, speaking_character: str) -> bool:
+    """Check if Elsie is directly addressed in the message."""
+    # Check if Elsie is the speaking character (direct address)
+    if speaking_character and speaking_character.lower() == 'elsie':
+        return True
+    
+    # Check for explicit addressing patterns
+    elsie_patterns = [
+        r'\belsie\b', r'\bElsie\b', r'\[Elsie\]', r'\[ELSIE\]',
+        r'\bbartender\b', r'\bbarkeep\b', r'\bbarmaid\b'
+    ]
+    
+    for pattern in elsie_patterns:
+        if re.search(pattern, user_message):
+            return True
+    
+    return False
+
+
+def _check_explicit_redirection(user_message: str, participants: List[str]) -> str:
+    """
+    Check if the message explicitly redirects conversation to another character.
+    Returns the character name if redirection found, empty string otherwise.
+    """
+    # Direct addressing patterns
+    addressing_patterns = [
+        r'^([A-Z][a-z]+),\s+',  # "Name, ..."
+        r'^(?:hey|hi|hello)\s+([A-Z][a-z]+)[,\s]',  # "Hey Name,"
+        r'([A-Z][a-z]+),?\s+(?:what do you think|your thoughts|what about you)',  # "Name, what do you think"
+        r'(?:what do you think|your thoughts|what about you),?\s+([A-Z][a-z]+)',  # "What do you think, Name"
+        r'\*[^*]*(?:turns? to|looks? at|speaks? to|addresses?|faces?)\s+([A-Z][a-z]+)[^*]*\*',  # Emote addressing
+    ]
+    
+    for pattern in addressing_patterns:
+        match = re.search(pattern, user_message, re.IGNORECASE)
+        if match:
+            addressed_name = match.group(1)
+            # Check if this is a known participant and not Elsie
+            if (addressed_name in participants and 
+                addressed_name.lower() not in ['elsie', 'elise', 'elsy', 'els']):
+                return addressed_name
+    
+    return ""
+
+
+def _check_walk_away_emote(user_message: str) -> bool:
+    """Check if the message contains walk-away emotes that break conversation."""
+    walk_away_patterns = [
+        r'\*[^*]*(?:walks? away|leaves?|exits?|departs?|turns? and walks?|heads? (?:to|for|toward))[^*]*\*',
+        r'\*[^*]*(?:storms? (?:off|out)|stalks? (?:off|away)|hurries? (?:off|away))[^*]*\*',
+        r'\*[^*]*(?:moves? away|steps? away|backs? away|retreats?)[^*]*\*'
+    ]
+    
+    for pattern in walk_away_patterns:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            return True
+    
+    return False
 
 
 def check_subtle_bar_interaction(user_message: str, rp_state: 'RoleplayStateManager') -> bool:

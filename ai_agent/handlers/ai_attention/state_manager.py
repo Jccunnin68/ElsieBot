@@ -201,49 +201,68 @@ class RoleplayStateManager:
     
     def is_simple_implicit_response(self, current_turn: int, user_message: str) -> bool:
         """
-        SIMPLE implicit response logic:
-        - If the response comes from the last character Elsie addressed
-        - AND Elsie spoke on the previous turn (not necessarily the last in history)
-        - UNLESS the message contains other character names (redirecting conversation)
+        Enhanced implicit response logic for the two pathways:
+        
+        Pathway 1 (Single Character): Always respond if character continues conversation
+        Pathway 2 (Multi-Character): Respond if character Elsie addressed continues conversation
+        
+        Key conditions:
+        - Character speaking is the one Elsie last addressed
+        - No explicit redirection to other characters
+        - No walk-away emotes
         """
-        # Check if we have any turn history
-        if not self.turn_history:
+        print(f"   🔍 CHECKING IMPLICIT RESPONSE:")
+        print(f"      - Last character Elsie addressed: {self.last_character_elsie_addressed}")
+        print(f"      - Turn history: {self.turn_history[-5:] if len(self.turn_history) >= 5 else self.turn_history}")
+        
+        # Must have someone that Elsie previously addressed
+        if not self.last_character_elsie_addressed:
+            print(f"      ❌ No previous character addressed by Elsie")
             return False
         
-        # Find the most recent turn where Elsie spoke
+        # Extract character name from current message
+        current_character = extract_current_speaker(user_message)
+        if not current_character:
+            print(f"      ❌ No speaking character detected in current message")
+            return False
+        
+        print(f"      - Current speaker: {current_character}")
+        
+        # Check if this character is the one Elsie last addressed
+        if current_character.lower() != self.last_character_elsie_addressed.lower():
+            print(f"      ❌ Current speaker ({current_character}) is not who Elsie addressed ({self.last_character_elsie_addressed})")
+            return False
+        
+        # Check if Elsie has spoken to this character recently (more flexible timing)
+        # Look for Elsie's last turn in history
         elsie_last_turn = None
         for turn_num, speaker in reversed(self.turn_history):
             if speaker == "Elsie":
                 elsie_last_turn = turn_num
                 break
         
-        # Check if Elsie spoke recently (within 2 turns of current)
-        if not elsie_last_turn or current_turn - elsie_last_turn > 2:
+        if not elsie_last_turn:
+            print(f"      ❌ Elsie hasn't spoken yet in this session")
             return False
         
-        # Extract character name from current message
-        current_character = extract_current_speaker(user_message)
-        if not current_character:
+        # More flexible timing check - allow up to 5 turns for 80/20 system
+        turns_since_elsie = current_turn - elsie_last_turn
+        if turns_since_elsie > 5:
+            print(f"      ❌ Too many turns since Elsie spoke ({turns_since_elsie} turns)")
             return False
         
-        # Check if this character is the one Elsie last addressed
-        if (self.last_character_elsie_addressed and 
-            current_character.lower() == self.last_character_elsie_addressed.lower()):
-            
-            # Check if the message contains other character names (redirecting)
-            if self._message_contains_other_character_names(user_message):
-                print(f"   🎯 Message contains other character names - not an implicit response")
-                return False
-            
-            print(f"   💬 SIMPLE IMPLICIT RESPONSE DETECTED:")
-            print(f"      - Elsie last addressed: {self.last_character_elsie_addressed}")
-            print(f"      - Current speaker: {current_character}")
-            print(f"      - Turn history: {self.turn_history[-3:] if len(self.turn_history) >= 3 else self.turn_history}")
-            print(f"      - This is a follow-up from the character Elsie was addressing")
-            
-            return True
+        # Check if the message contains explicit redirection to other characters
+        if self._message_contains_other_character_names(user_message):
+            print(f"      ❌ Message contains redirection to other characters")
+            return False
         
-        return False
+        print(f"      ✅ IMPLICIT RESPONSE DETECTED:")
+        print(f"         - Character: {current_character}")
+        print(f"         - Last addressed by Elsie: {self.last_character_elsie_addressed}")
+        print(f"         - Turns since Elsie spoke: {turns_since_elsie}")
+        print(f"         - This is a continuation of the conversation chain")
+        
+        return True
     
     def _message_contains_other_character_names(self, user_message: str) -> bool:
         """

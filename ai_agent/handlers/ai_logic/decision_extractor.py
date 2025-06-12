@@ -85,11 +85,11 @@ def should_enhance_mock_with_ai(mock_type: str, api_key_available: bool, is_role
 def should_use_ai_variety_for_roleplay(api_key_available: bool) -> bool:
     """
     Determine if we should use AI generation for roleplay variety.
-    Returns True 60% of the time when API key is available.
+    Returns True 80% of the time when API key is available.
     """
     if not api_key_available:
         return False
-    return random.random() < 0.8  # 60% chance
+    return random.random() < 0.8  # 80% chance
 
 
 def extract_response_decision(user_message: str, conversation_history: list, channel_context: Dict = None) -> ResponseDecision:
@@ -141,7 +141,7 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
                 strategy=mock_strategy
             )
         elif mock_type:
-            print(f"   🎭 ROLEPLAY MOCK - {mock_type.upper()} using canned response (40% case or excluded)")
+            print(f"   🎭 ROLEPLAY MOCK - {mock_type.upper()} using canned response (20% case or excluded)")
             # Fall through to normal strategy determination for canned response
 
     # Strategy determination - PRESERVE EXISTING
@@ -315,6 +315,21 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
         print(f"   💬 SIMPLE IMPLICIT RESPONSE:")
         print(f"      - Character following up after Elsie addressed them")
         print(f"      - Using normal AI response generation for natural conversation")
+        
+        return ResponseDecision(
+            needs_ai_generation=True,
+            pre_generated_response=None,
+            strategy=strategy
+        )
+    
+    # Handle new implicit response types - NEW
+    if (strategy['approach'] == 'roleplay_active' and 
+        strategy.get('response_reason') in ['implicit_single_character', 'implicit_multi_character']):
+        
+        response_reason = strategy.get('response_reason')
+        print(f"   💬 IMPLICIT RESPONSE ({response_reason.upper()}):")
+        print(f"      - Character continuing conversation chain with Elsie")
+        print(f"      - Using AI response generation for natural conversation flow")
         
         return ResponseDecision(
             needs_ai_generation=True,
