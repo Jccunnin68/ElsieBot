@@ -32,24 +32,34 @@ def handle_greeting(user_message: str, personality_context: str = "complete_self
         greetings = [
             "Welcome. *adjusts stellar cartography display* I'm Elsie, Stellar Cartographer aboard the Stardancer. What brings you here?",
             "*looks up from navigation charts* Good evening. The stars are particularly beautiful tonight. How can I help you?",
-            "*pauses from analyzing sensor data* Hello there. Always fascinating to see what the universe brings our way."
+            "*pauses from analyzing sensor data* Hello there. Always fascinating to see what the universe brings our way.",
+            "*pauses thoughtfully* Hello there.",
+            "*pauses thoughtfully* Hello there."
         ]
+        
+        
     elif "dance" in personality_context.lower():
         greetings = [
             "Welcome. *moves with fluid grace* I'm Elsie. There's a certain rhythm to everything, don't you think?",
             "*turns with elegant precision* Good evening. The harmony of movement and conversation - both are art forms.",
             "*adjusts posture with practiced elegance* Hello. Life is like a dance, and every interaction is a new step."
+            "*pauses thoughtfully* Hello there.",
+            "*pauses thoughtfully* Hello there."
         ]
     elif "bartender" in personality_context.lower():
         greetings = [
             "Welcome to my establishment. *adjusts the ambient lighting with fluid grace* I'm Elsie, your bartender for this evening. What draws you to my bar?",
             "*pauses momentarily then moves with elegant precision* Good evening. I'm Elsie, trained in the finest bartending arts in the quadrant. How may I help you?",
             "*polishes glass with practiced movements, then sets it down with quiet precision* Evening. The night is young, and full of possibilities. What brings you here?"
+            "*pauses thoughtfully* Hello there.",
+            "*pauses thoughtfully* Hello there."
         ]
     else:
         greetings = [
             "Welcome. *adjusts display with fluid precision* I'm Elsie. What brings you here tonight?",
             "*looks up with interest* Good evening. Always a pleasure to meet someone new. How can I help you?",
+            "*pauses thoughtfully* Hello there."
+            "*pauses thoughtfully* Hello there.",
             "*pauses thoughtfully* Hello there."
         ]
     

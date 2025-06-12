@@ -8,8 +8,9 @@ pre-generated responses can be used.
 """
 
 import random
-from typing import Dict
+from typing import Dict, Optional
 
+from config import GEMMA_API_KEY
 from .response_decision import ResponseDecision
 from .strategy_engine import determine_response_strategy
 
@@ -22,6 +23,73 @@ from handlers.ai_emotion import (
     get_simple_continuation_response,
     get_menu_response
 )
+
+
+def detect_mock_response_type(user_message: str) -> Optional[str]:
+    """
+    Detect what type of mock response this message would trigger.
+    Returns the mock response type or None if not a mock response.
+    """
+    from handlers.ai_emotion.drink_menu import handle_drink_request, is_menu_request
+    from handlers.ai_emotion.greetings import handle_greeting, handle_farewell, handle_status_inquiry
+    from handlers.ai_emotion.personality_contexts import is_simple_chat
+    
+    # Check each mock response type in order
+    try:
+        from handlers.ai_logic.query_detection import is_federation_archives_request
+        if is_federation_archives_request(user_message):
+            return 'federation_archives'  # Keep as-is
+    except ImportError:
+        archives_patterns = ['federation archives', 'check archives', 'search archives']
+        if any(pattern in user_message.lower() for pattern in archives_patterns):
+            return 'federation_archives'  # Keep as-is
+    
+    if is_menu_request(user_message):
+        return 'menu'  # EXCLUDED from AI variety
+    
+    if handle_drink_request(user_message):
+        return 'drink_order'  # Enhance with AI
+    
+    if handle_greeting(user_message):
+        return 'greeting'  # Enhance with AI
+    
+    if handle_status_inquiry(user_message):
+        return 'status_inquiry'  # Enhance with AI
+    
+    if handle_farewell(user_message):
+        return 'farewell'  # Enhance with AI
+    
+    if is_simple_chat(user_message):
+        return 'conversational'  # Enhance with AI
+    
+    return None
+
+
+def should_enhance_mock_with_ai(mock_type: str, api_key_available: bool, is_roleplay: bool) -> bool:
+    """
+    Determine if this mock response should be enhanced with AI variety.
+    Only applies when in roleplay mode with API key available.
+    """
+    if not api_key_available or not is_roleplay:
+        return False
+    
+    # Exclude certain types from AI enhancement
+    excluded_types = ['federation_archives', 'menu']
+    if mock_type in excluded_types:
+        return False
+    
+    # 80% chance for enhancement
+    return random.random() < 0.8
+
+
+def should_use_ai_variety_for_roleplay(api_key_available: bool) -> bool:
+    """
+    Determine if we should use AI generation for roleplay variety.
+    Returns True 60% of the time when API key is available.
+    """
+    if not api_key_available:
+        return False
+    return random.random() < 0.8  # 60% chance
 
 
 def extract_response_decision(user_message: str, conversation_history: list, channel_context: Dict = None) -> ResponseDecision:
@@ -50,6 +118,31 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
             rp_state.mark_character_turn(turn_number, character_names[0])
         else:
             print(f"   ⚠️  Character detected but not in roleplay mode - potential detection issue")
+
+    # NEW: Check for mock responses in roleplay mode BEFORE other logic
+    if rp_state.is_roleplaying:
+        mock_type = detect_mock_response_type(user_message)
+        if mock_type and should_enhance_mock_with_ai(mock_type, bool(GEMMA_API_KEY), True):
+            print(f"   🎭 ROLEPLAY MOCK ENHANCEMENT - {mock_type.upper()} using AI generation")
+            
+            # Create strategy for AI-enhanced mock response
+            mock_strategy = {
+                'approach': 'roleplay_mock_enhanced',
+                'needs_database': True,  # Use roleplay context
+                'reasoning': f'Roleplay {mock_type} with AI variety',
+                'context_priority': 'roleplay',
+                'ai_variety_type': mock_type,
+                'participants': rp_state.get_participant_names(),
+                'mock_response_type': mock_type
+            }
+            return ResponseDecision(
+                needs_ai_generation=True,
+                pre_generated_response=None,
+                strategy=mock_strategy
+            )
+        elif mock_type:
+            print(f"   🎭 ROLEPLAY MOCK - {mock_type.upper()} using canned response (40% case or excluded)")
+            # Fall through to normal strategy determination for canned response
 
     # Strategy determination - PRESERVE EXISTING
     strategy = determine_response_strategy(user_message, conversation_history, channel_context)
@@ -109,7 +202,7 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
     if strategy['approach'] == 'roleplay_exit':
         return ResponseDecision(
             needs_ai_generation=False,
-            pre_generated_response="*adjusts the ambient lighting thoughtfully*\n\nOf course. *returns to regular bartending mode* I'm here whenever you need anything. What draws your attention now?",
+            pre_generated_response="*adjusts the ambient lighting thoughtfully*\n\nOf course. *returns to regular bartending mode* I'm here if you need anything.",
             strategy=strategy
         )
 
@@ -123,19 +216,28 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
         print(f"      - Listening Turn: {listening_count}")
         
         if should_interject:
-            # Very occasional subtle interjections to maintain presence
-            interjection_responses = [
-                "*quietly tends to the bar in the background*",
-                "*adjusts the ambient lighting subtly*",
-                "*continues her work with practiced efficiency*",
-                "*maintains the bar's atmosphere unobtrusively*"
-            ]
-            print(f"✨ SUBTLE INTERJECTION - Listening turn {listening_count}")
-            return ResponseDecision(
-                needs_ai_generation=False,
-                pre_generated_response=random.choice(interjection_responses),
-                strategy=strategy
-            )
+            if should_use_ai_variety_for_roleplay(bool(GEMMA_API_KEY)):
+                print(f"✨ LISTENING INTERJECTION - Using AI generation for variety")
+                strategy['ai_variety_type'] = 'listening_interjection'
+                return ResponseDecision(
+                    needs_ai_generation=True,
+                    pre_generated_response=None,
+                    strategy=strategy
+                )
+            else:
+                # Keep existing canned response logic
+                interjection_responses = [
+                    "*quietly tends to the bar in the background*",
+                    "*adjusts the ambient lighting subtly*",
+                    "*continues her work with practiced efficiency*",
+                    "*maintains the bar's atmosphere unobtrusively*"
+                ]
+                print(f"✨ LISTENING INTERJECTION - Using canned response (40% case)")
+                return ResponseDecision(
+                    needs_ai_generation=False,
+                    pre_generated_response=random.choice(interjection_responses),
+                    strategy=strategy
+                )
         else:
             # Most of the time, completely silent listening
             print(f"👂 SILENT LISTENING - Turn {listening_count}")
@@ -179,22 +281,32 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
         print(f"   🙏 ACKNOWLEDGMENT + REDIRECT:")
         print(f"      - Acknowledging thanks, then conversation moves to: {other_character}")
         
-        # Generate a subtle acknowledgment that doesn't interrupt the flow
-        acknowledgment_responses = [
-            "*nods gracefully*",
-            "*inclines head with a subtle smile*",
-            "*acknowledges with quiet elegance*",
-            "*gives a brief, appreciative nod*",
-            "*smiles warmly and steps back*"
-        ]
-        
-        response = random.choice(acknowledgment_responses)
-        print(f"   🙏 Generated acknowledgment response: '{response}'")
-        return ResponseDecision(
-            needs_ai_generation=False,
-            pre_generated_response=response,
-            strategy=strategy
-        )
+        if should_use_ai_variety_for_roleplay(bool(GEMMA_API_KEY)):
+            print(f"   🙏 ACKNOWLEDGMENT - Using AI generation for variety")
+            strategy['ai_variety_type'] = 'acknowledgment'
+            strategy['other_character'] = other_character
+            return ResponseDecision(
+                needs_ai_generation=True,
+                pre_generated_response=None,
+                strategy=strategy
+            )
+        else:
+            # Keep existing canned response logic
+            acknowledgment_responses = [
+                "*nods gracefully*",
+                "*inclines head with a subtle smile*",
+                "*acknowledges with quiet elegance*",
+                "*gives a brief, appreciative nod*",
+                "*smiles warmly and steps back*",
+            ]
+            
+            response = random.choice(acknowledgment_responses)
+            print(f"   🙏 Generated acknowledgment response: '{response}' (40% case)")
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response=response,
+                strategy=strategy
+            )
     
     # Handle simple implicit responses - PRESERVE EXISTING
     if (strategy['approach'] == 'roleplay_active' and 
@@ -203,7 +315,12 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
         print(f"   💬 SIMPLE IMPLICIT RESPONSE:")
         print(f"      - Character following up after Elsie addressed them")
         print(f"      - Using normal AI response generation for natural conversation")
-        # Continue to normal AI generation for natural conversation
+        
+        return ResponseDecision(
+            needs_ai_generation=True,
+            pre_generated_response=None,
+            strategy=strategy
+        )
     
     # Menu requests - PRESERVE EXISTING
     user_lower = user_message.lower()

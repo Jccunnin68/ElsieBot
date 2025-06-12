@@ -86,6 +86,38 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
         response_style_note = """
 **ACTIVE RESPONSE MODE**: You are directly involved in this interaction. Respond naturally and engage with the roleplay.
 """
+
+    # Special instructions for AI variety cases
+    ai_variety_type = strategy.get('ai_variety_type')
+    if ai_variety_type == 'greeting':
+        response_style_note += """
+**AI VARIETY - ROLEPLAY GREETING**: Generate a contextual greeting response that establishes your presence in the roleplay scene. Be welcoming but stay in character. Keep it conversational and engaging (1-3 sentences max).
+"""
+    elif ai_variety_type == 'farewell':
+        response_style_note += """
+**AI VARIETY - ROLEPLAY FAREWELL**: Generate a contextual farewell response that maintains your character while gracefully ending the interaction. Keep it warm but in-character (2-3 sentences max).
+"""
+    elif ai_variety_type == 'drink_order':
+        response_style_note += """
+**AI VARIETY - DRINK SERVICE**: Generate a contextual drink service response. Acknowledge the order and provide service with your personality. Include appropriate emotes and keep it conversational (1-3 sentences max).
+"""
+    elif ai_variety_type == 'status_inquiry':
+        response_style_note += """
+**AI VARIETY - STATUS RESPONSE**: Generate a response to "how are you" type questions. Show your personality and current state in the roleplay context. Keep it conversational and engaging (1-3 sentences max).
+"""
+    elif ai_variety_type == 'conversational':
+        response_style_note += """
+**AI VARIETY - CONVERSATIONAL**: Generate a contextual conversational response that shows your personality while staying in the roleplay scene. Be natural and engaging (2-3 sentences max).
+"""
+    elif ai_variety_type == 'listening_interjection':
+        response_style_note += """
+**AI VARIETY - SUBTLE INTERJECTION**: Generate a very brief (1 sentence max), subtle background presence response. Be minimally intrusive but add personality variety to your subtle actions.
+"""
+    elif ai_variety_type == 'acknowledgment':
+        other_character = strategy.get('other_character', 'someone')
+        response_style_note += f"""
+**AI VARIETY - ACKNOWLEDGMENT**: Generate a brief, natural acknowledgment response that shows personality while gracefully redirecting attention to {other_character}. Don't interrupt the flow.
+"""
     
     # Special DGM session instructions
     dgm_instructions = ""

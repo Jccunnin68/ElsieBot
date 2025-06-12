@@ -122,6 +122,13 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
                 wiki_info = context 
                 context = "" # Reset context to be built in the default block
         
+        # Special handling for roleplay mock enhanced responses
+        elif strategy['approach'] == 'roleplay_mock_enhanced':
+            mock_type = strategy.get('mock_response_type', 'unknown')
+            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with roleplay context")
+            from handlers.ai_wisdom.roleplay_contexts import get_roleplay_context
+            context = get_roleplay_context(strategy, user_message)
+        
         # Generate context for simple chat (no database search needed)
         else:
             print(f"💬 SIMPLE CHAT MODE - No database search needed")
@@ -274,6 +281,35 @@ Stay helpful and informative. When providing database information, be thorough a
             print(f"      - Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
             print(f"      - Turn History: {rp_state.turn_history}")
             print(f"      - Current Turn: {turn_number}")
+        
+        # Handle roleplay mock enhanced responses with same tracking
+        elif strategy['approach'] == 'roleplay_mock_enhanced':
+            # Convert first-person emotes to third-person for consistent roleplay perspective
+            response_text = convert_to_third_person_emotes(response_text)
+            
+            rp_state = get_roleplay_state()
+            turn_number = len(conversation_history) + 1
+            mock_type = strategy.get('mock_response_type', 'unknown')
+            
+            # For drink orders, try to detect who was served
+            if mock_type == 'drink_order':
+                from handlers.ai_attention.character_tracking import extract_character_names_from_emotes
+                character_names = extract_character_names_from_emotes(user_message)
+                if character_names:
+                    rp_state.set_last_character_addressed(character_names[0])
+                    print(f"   📝 TRACKING UPDATE: Elsie served {character_names[0]} (AI-enhanced drink service)")
+            
+            # For other mock types, try general addressing detection
+            else:
+                addressed_character = detect_who_elsie_addressed(response_text, user_message)
+                if addressed_character:
+                    rp_state.set_last_character_addressed(addressed_character)
+                    print(f"   📝 TRACKING UPDATE: Elsie addressed {addressed_character} (AI-enhanced {mock_type})")
+            
+            # Ensure Elsie's response is tracked in turn history
+            if not rp_state.turn_history or rp_state.turn_history[-1][1] != "Elsie":
+                rp_state.mark_response_turn(turn_number)
+                print(f"   📝 ENSURED: Elsie's response turn tracked (AI-enhanced {mock_type})")
         
         print(f"✅ Response generated successfully ({len(response_text)} characters)")
         return response_text
