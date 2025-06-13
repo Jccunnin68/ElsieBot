@@ -1,43 +1,47 @@
 """
-AI Logic - Decision Logic Package
-============================================
+AI Logic - Decision Logic Package (REFACTORED)
+==============================================
 
-This package handles response decision-making logic, determining when and how
-Elsie should respond to different types of messages. It extracts the strategy
-and decision logic from ai_handler.py.
+This package handles response decision-making with clean mode separation:
 
-Components:
-- strategy_engine.py: Core strategy determination logic
-- response_decision.py: ResponseDecision dataclass and decision extraction
-- context_detection.py: Personality and context detection logic
+NEW ARCHITECTURE:
+- response_router.py: Main entry point - routes by roleplay mode
+- roleplay_handler.py: ALL roleplay mode responses (character-aware, bar service)
+- non_roleplay_handler.py: ALL non-roleplay mode responses (simple, factual)
+- response_decision.py: ResponseDecision dataclass
+- decision_extractor.py: Simplified entry point (just calls router)
+
+LEGACY (kept for compatibility):
+- strategy_engine.py: Legacy strategy logic (being phased out)
+- context_detection.py: Legacy context detection
 
 Usage:
     from handlers.ai_logic import extract_response_decision, ResponseDecision
     
     decision = extract_response_decision(message, history, channel_context)
-    if decision.needs_ai_generation:
-        # Proceed with AI generation
-    else:
-        # Use pre-generated response
-        return decision.pre_generated_response
+    # Router automatically handles roleplay vs non-roleplay mode
 """
 
 from .response_decision import ResponseDecision
-from .strategy_engine import determine_response_strategy
-from .context_detection import detect_general_personality_context, detect_who_elsie_addressed
 from .decision_extractor import extract_response_decision
+from .response_router import route_message_to_handler
+
+# Legacy imports (for compatibility)
+try:
+    from .strategy_engine import determine_response_strategy
+    from .context_detection import detect_general_personality_context, detect_who_elsie_addressed
+except ImportError:
+    # Handle missing legacy modules gracefully
+    pass
 
 __all__ = [
-    # Core decision classes
+    # NEW ARCHITECTURE - Main entry points
     'ResponseDecision',
+    'extract_response_decision', 
+    'route_message_to_handler',
     
-    # Strategy determination
+    # Legacy (for compatibility)
     'determine_response_strategy',
-    
-    # Context detection
     'detect_general_personality_context',
     'detect_who_elsie_addressed',
-    
-    # Decision extraction
-    'extract_response_decision'
 ] 
