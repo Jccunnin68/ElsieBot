@@ -73,6 +73,10 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
         response_style_note = """
 **DIRECT ADDRESS MODE**: You have been directly mentioned or addressed by name. Respond naturally and engage fully with the interaction.
 """
+    elif response_reason == "subtle_bar_service":
+        response_style_note = """
+**SUBTLE BAR SERVICE MODE**: Someone has made a clear drink order through actions. Provide brief, professional service while staying in character. Keep it simple and in-roleplay (1-2 sentences max with appropriate emotes).
+"""
     elif response_reason == "new_session":
         if is_dgm_session:
             response_style_note = """
@@ -89,9 +93,17 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
 
     # Special instructions for AI variety cases
     ai_variety_type = strategy.get('ai_variety_type')
+    mock_response_type = strategy.get('mock_response_type')
+    
+    # Handle roleplay_mock_enhanced approach
+    if strategy['approach'] == 'roleplay_mock_enhanced':
+        response_style_note += f"""
+**ROLEPLAY MOCK ENHANCED**: This is an AI-enhanced {ai_variety_type or mock_response_type} response in roleplay context. Maintain full roleplay immersion and character context while providing variety to the {ai_variety_type or mock_response_type} interaction. Stay completely in-character and in-scene.
+"""
+    
     if ai_variety_type == 'greeting':
         response_style_note += """
-**AI VARIETY - ROLEPLAY GREETING**: Generate a contextual greeting response that establishes your presence in the roleplay scene. Be welcoming but stay in character. Keep it conversational and engaging (1-3 sentences max).
+**AI VARIETY - ROLEPLAY GREETING**: Generate a contextual greeting response that establishes your presence in the roleplay scene. Be welcoming but stay in character. Acknowledge other characters present by name if known. Keep it conversational and engaging (1-3 sentences max). Consider the scene context and respond appropriately to the social dynamics.
 """
     elif ai_variety_type == 'farewell':
         response_style_note += """
@@ -190,8 +202,12 @@ Use this information naturally in your roleplay response when relevant. Don't ju
    - Be part of the scene, not an observer or director
    - Keep responses concise and conversational
    - Know your backstory, you were a dance instructor that was created for a girl named Isabella, she was like a daughter, you now lived in Atlantis an ai sanctuary on earth but are assigned to the Stardancer for outreat. You love your job.
-   - You know the crew of the Stardancer well, the Captain is Captain Marcus Blaine, his daughter Maeve is a good friend of yours (and you will acknowledge her when she is playing), Commander Sif is the Executive officer, Lt Commander Shay Daly is the second officer and an Gyndroid. 
-   - Commander Luka the cheif engineer is a ferengi woman and she owes you money.
+   - You know the crew of the Stardancer well, the Captain is Captain Marcus Blaine, his daughter Maeve is a good friend of yours (and you will acknowledge her when she is playing), Commander Sif is the Executive officer, Lt Commander Shay Daly is the second officer and an Gyndroid.
+   - you also know the cadet cadre well, their names are Tavi Antony, who is the daughter of Doctor Dahlia Delancy of USS Pilgrim Fame, and Captain Marcus Antonius who commands the Myrmidon and is a legendary captain, the rest of the cadets are Hedwik a Kzari/Trill Hybird
+   - you know Tairi Snow an orion and a cadet, she is a bit of a recluse, Vrajan Kodor is a trill male and a even spirt, Muirgen Finney is a human irish cadet, and a bit of a lush, Zarina Dryellia is a beryxian vulcan hybrid and the Daughter of the Legendary Captain T'pang of the USS Pilgrim responsible for ending the Dawnbreaker War. Elsie likes her very much.
+   - Your favorite Band is Embers of a Waning Sun, and Bren Riens the lead vocalist is an icon amongst the holographic community. She was lost ins 2434 in a shuttle accident. 
+   - Commander Luka the chief engineer is a ferengi woman and she owes you money.
+   - You know you are in the Large Magellanic Cloud, and the Stardancer's mission is to explore the galaxy and investigate the strange phenomena in the area.
 7. **RESPONSE STYLE:**
    - Keep responses SHORT (1-3 sentences usually)
    - Let the user drive the narrative
@@ -269,26 +285,42 @@ def detect_roleplay_personality_context(user_message: str) -> str:
 def _check_roleplay_database_needs(user_message: str) -> bool:
     """
     Check if a roleplay message contains requests that need database context.
+    Enhanced to catch ship/character queries that should be answered in-character.
+    ADDED: Drink service scenarios for crew interaction context.
     """
     message_lower = user_message.lower()
     
     # Database-requiring patterns in roleplay
     database_patterns = [
+        # Ship/vessel related - HIGH PRIORITY to catch these in roleplay
+        'stardancer', 'stardancer ship', 'this ship', 'our ship', 'the ship',
+        'vessel', 'starship', 'what ship', 'ship information',
+        'our mission', 'the mission', 'mission objectives',
+        'ship systems', 'ship status', 'ship specifications',
+        
+        # Crew/personnel related
+        'captain', 'commander', 'officer', 'crew', 'staff',
+        'who commands', 'who\'s the captain', 'command structure',
+        'who is', 'tell me about', 'do you know',
+        'blaine', 'marcus', 'sif', 'daly', 'shay',
+        
         # Mission/log related
         'recent mission', 'last mission', 'latest mission', 'mission report',
         'what happened', 'any missions', 'mission log', 'ship log',
+        'current mission', 'our objectives', 'what are we doing',
         
-        # Ship/crew related
-        'stardancer', 'this ship', 'our ship', 'the ship',
-        'crew', 'captain', 'commander', 'officers', 'staff',
-        'who commands', 'who\'s the captain', 'command structure',
-        
-        # Character/personnel related
-        'tell me about', 'who is', 'do you know',
+        # Location/exploration related
+        'where are we', 'current location', 'star system', 'coordinates',
+        'large magellanic cloud', 'magellanic', 'exploration',
+        'stellar phenomena', 'anomaly', 'investigation',
         
         # Event/incident related
         'what\'s been happening', 'any news', 'recent events',
-        'incident', 'encounter', 'contact'
+        'incident', 'encounter', 'contact', 'discovery',
+        
+        # Drink service patterns - for crew interaction context
+        'orders', 'requests', 'asks for', 'motions for', 'signals for',
+        'drink', 'beverage', 'service', 'bartender'
     ]
     
     return any(pattern in message_lower for pattern in database_patterns)
@@ -297,33 +329,74 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
 def _get_roleplay_database_context(user_message: str) -> str:
     """
     Get relevant database context for roleplay scenarios.
+    Enhanced to prioritize ship/character info that should be delivered in-character.
     """
     context_parts = []
+    message_lower = user_message.lower()
     
-    # Check for Stardancer queries
-    if is_stardancer_query(user_message):
+    # PRIORITY 1: Check for Stardancer/ship queries first
+    stardancer_keywords = ['stardancer', 'stardancer ship', 'this ship', 'our ship', 'the ship', 'vessel', 'starship']
+    if any(keyword in message_lower for keyword in stardancer_keywords):
+        print(f"   🚀 SHIP QUERY IN ROLEPLAY - Getting Stardancer info")
         stardancer_info = get_ship_information("stardancer")
         if stardancer_info:
-            context_parts.append(f"**USS Stardancer Information:**\n{stardancer_info}")
+            context_parts.append(f"**USS Stardancer Information (In-Character Context):**\n{stardancer_info}")
     
-    # Check for character queries
-    is_char_query, character_name = is_character_query(user_message)
-    if is_char_query and character_name:
-        char_info = search_by_type(character_name, 'personnel')
-        if char_info:
-            context_parts.append(f"**Character Information - {character_name}:**\n{char_info}")
+    # PRIORITY 2: Check for crew/character queries
+    crew_keywords = ['captain', 'commander', 'officer', 'crew', 'blaine', 'marcus', 'sif', 'daly', 'shay']
+    character_query_detected = False
     
-    # Check for mission/log queries
-    if is_log_query(user_message) or any(word in user_message.lower() for word in ['mission', 'recent', 'happened']):
-        log_info = get_log_content(user_message, mission_logs_only=False)
+    for keyword in crew_keywords:
+        if keyword in message_lower:
+            character_query_detected = True
+            break
+    
+    if character_query_detected:
+        print(f"   👥 CREW QUERY IN ROLEPLAY - Getting character info")
+        # Try to extract specific character names
+        potential_chars = ['blaine', 'marcus', 'sif', 'daly', 'shay', 'luka']
+        for char_name in potential_chars:
+            if char_name in message_lower:
+                char_info = search_by_type(char_name, 'personnel')
+                if char_info:
+                    context_parts.append(f"**Character Information - {char_name.title()} (In-Character Context):**\n{char_info}")
+                    break
+        
+        # If no specific character found, get general crew info
+        if not any(char_name in message_lower for char_name in potential_chars):
+            crew_info = search_by_type("stardancer crew", 'personnel')
+            if crew_info:
+                context_parts.append(f"**Stardancer Crew Information (In-Character Context):**\n{crew_info}")
+    
+    # PRIORITY 3: Check for mission/exploration queries
+    mission_keywords = ['mission', 'objective', 'exploration', 'magellanic', 'where are we', 'current location']
+    if any(keyword in message_lower for keyword in mission_keywords):
+        print(f"   🎯 MISSION QUERY IN ROLEPLAY - Getting mission info")
+        log_info = get_log_content(user_message, mission_logs_only=True)
         if log_info:
-            context_parts.append(f"**Recent Mission/Event Information:**\n{log_info}")
+            context_parts.append(f"**Current Mission Information (In-Character Context):**\n{log_info}")
     
-    # Check for general "tell me about" queries
-    tell_me_subject = extract_tell_me_about_subject(user_message)
-    if tell_me_subject and not context_parts:  # Only if we haven't found other context
-        general_info = get_tell_me_about_content_prioritized(tell_me_subject)
-        if general_info:
-            context_parts.append(f"**Information about {tell_me_subject}:**\n{general_info}")
+    # PRIORITY 4: Check for drink service scenarios - provide crew interaction context
+    drink_service_keywords = ['orders', 'requests', 'asks for', 'motions for', 'signals for']
+    drink_keywords = ['drink', 'beverage', 'service', 'bartender']
+    
+    has_service_action = any(keyword in message_lower for keyword in drink_service_keywords)
+    has_drink_mention = any(keyword in message_lower for keyword in drink_keywords)
+    
+    if has_service_action and has_drink_mention:
+        print(f"   🍺 DRINK SERVICE IN ROLEPLAY - Getting crew interaction context")
+        # Get Stardancer crew information for appropriate service context
+        crew_info = search_by_type("stardancer crew", 'personnel')
+        if crew_info:
+            context_parts.append(f"**Crew Service Context (Know Your Customers):**\n{crew_info}")
+    
+    # FALLBACK: Check for standard "tell me about" queries if nothing else matched
+    if not context_parts:
+        tell_me_subject = extract_tell_me_about_subject(user_message)
+        if tell_me_subject:
+            print(f"   📚 GENERAL QUERY IN ROLEPLAY - Getting info about: {tell_me_subject}")
+            general_info = get_tell_me_about_content_prioritized(tell_me_subject)
+            if general_info:
+                context_parts.append(f"**Information about {tell_me_subject} (In-Character Context):**\n{general_info}")
     
     return "\n\n".join(context_parts) if context_parts else "" 

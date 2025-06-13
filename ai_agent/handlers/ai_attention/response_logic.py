@@ -18,12 +18,17 @@ if TYPE_CHECKING:
 def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayStateManager', current_turn: int) -> Tuple[bool, str]:
     """
     Determine if Elsie should actively respond during roleplay or just listen.
-    Enhanced for better followup dialogue detection in ongoing sessions.
-    Now includes better recognition of when dialogue is directed at other characters.
-    STRICT GUARDRAILS: In multi-character scenes, only respond when directly involved.
-    SPECIAL DGM MODE: In DGM-initiated sessions, be even more passive until directly addressed.
+    
+    CRITICAL: This function should ONLY be called when rp_state.is_roleplaying = True
+    Implicit responses and roleplay logic don't apply outside roleplay sessions.
+    
     Returns (should_respond, reason)
     """
+    # SAFETY CHECK: This function should only be called in roleplay mode
+    if not rp_state.is_roleplaying:
+        print(f"   ⚠️  WARNING: should_elsie_respond_in_roleplay called when NOT in roleplay mode!")
+        return False, "not_in_roleplay"
+    
     message_lower = user_message.lower().strip()
     participants = rp_state.get_participant_names()
     is_dgm_session = rp_state.is_dgm_session()
@@ -31,65 +36,195 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     
     print(f"   🎭 ROLEPLAY RESPONSE CHECK:")
     print(f"      - Participants: {participants}")
-    print(f"      - Multi-character scene: {len(participants) > 1}")
     print(f"      - DGM Session: {is_dgm_session}")
     print(f"      - Thread Session: {is_thread_session}")
     
-    # AUTO-DETECT: Check if this message contains a speaking character (for DGM sessions)
-    # Look for [Character Name] format or character names speaking
     from .character_tracking import extract_current_speaker
     speaking_character = extract_current_speaker(user_message)
     
-    # 1. DGM Session Special Handling
-    if is_dgm_session:
-        # In DGM sessions, only respond when directly addressed
-        if speaking_character and speaking_character.lower() == 'elsie':
-            print(f"   🎭 DGM SESSION: Directly addressed by {speaking_character}")
-            return True, "dgm_direct_address"
-        
-        # Track speaking character in DGM session
-        if speaking_character:
-            rp_state.add_speaking_character(speaking_character, current_turn)
-        
-        print(f"   👂 DGM SESSION: Passive listening mode")
-        return False, "dgm_passive_listening"
+    # Universal speaker tracking for all RP messages
+    if speaking_character:
+        rp_state.add_speaking_character(speaking_character, current_turn)
     
-    # 2. Thread Session Special Handling
-    if is_thread_session:
-        # In thread sessions, be more responsive to substantial messages
-        word_count = len(user_message.split())
-        if word_count >= 10:  # Substantial message threshold
-            # Check if it's not clearly OOC or technical
-            non_rp_indicators = ['ooc', 'debug', 'error', 'code', 'script', 'function']
-            if not any(indicator in message_lower for indicator in non_rp_indicators):
-                print(f"   🧵 THREAD: Substantial message detected ({word_count} words)")
-                return True, "thread_substantial_message"
-    
-    # 3. Direct Address Detection
+    # 1. Check for clear reasons to LISTEN FIRST
+    # This prevents Elsie from responding to her own posts.
     if speaking_character and speaking_character.lower() == 'elsie':
-        print(f"   🎭 DIRECT ADDRESS: {speaking_character} speaking to Elsie")
-        return True, "direct_address"
+        print(f"   👂 LISTENING: Elsie is the speaker in this post.")
+        return False, "elsie_is_speaker"
+
+    # 2. ENHANCED: Check if other character is addressed FIRST (before implicit response check)
+    # This prevents false positives when characters are talking to each other
+    other_character_addressed = check_if_other_character_addressed(user_message, rp_state)
+    if other_character_addressed:
+        print(f"   👂 LISTENING: Message directed at '{other_character_addressed}', not Elsie.")
+        print(f"      - Character conversation detected: {speaking_character} → {other_character_addressed}")
+        return False, "other_character_addressed"
+
+    # 3. Check for DIRECT ADDRESSING of Elsie
+    if _is_elsie_directly_addressed(user_message):
+        print(f"   🗣️ DIRECT ADDRESSING: Elsie is directly mentioned or addressed.")
+        return True, "elsie_directly_addressed"
+
+    # 4. Check for IMPLICIT RESPONSE scenarios (character following up after Elsie addressed them)
+    # This is now much more restrictive and accurate
+    if rp_state.is_simple_implicit_response(current_turn, user_message):
+        print(f"   🗣️ IMPLICIT RESPONSE: Following up on conversation with Elsie.")
+        return True, "implicit_response"
     
-    # 4. Multi-character Scene Handling
-    if len(participants) > 1:
-        # In multi-character scenes, only respond when directly involved
-        if speaking_character and speaking_character.lower() == 'elsie':
-            print(f"   👥 MULTI-CHARACTER: Elsie directly addressed")
-            return True, "multi_character_direct"
+    # 5. Check for SUBTLE BAR SERVICE scenarios (drink requests, etc.)
+    if _is_subtle_bar_service_needed(user_message):
+        print(f"   🍺 SUBTLE BAR SERVICE: Service request detected.")
+        return True, "subtle_bar_service"
+    
+    # 6. DEFAULT TO LISTENING for everything else
+    # This is the key change - we no longer respond to "substantial messages" just because they exist
+    # Elsie should be passive and only respond when directly involved
+    print(f"   👂 LISTENING: No direct involvement detected - passive monitoring.")
+    return False, "passive_listening"
+
+
+def _is_elsie_directly_addressed(user_message: str) -> bool:
+    """
+    Check if Elsie is directly addressed or mentioned by name in the message.
+    Enhanced to detect group addressing (everyone, you all, etc.).
+    """
+    # Patterns for Elsie being addressed directly
+    elsie_patterns = [
+        r'\belsie\b',              # "Elsie" as a word
+        r'\bElsie\b',              # "Elsie" capitalized  
+        r'\bbartender\b',          # "bartender"
+        r'\bBartender\b',          # "Bartender"
+        r'\bhey\s+elsie\b',        # "hey Elsie"
+        r'\bhi\s+elsie\b',         # "hi Elsie"
+        r'\bhello\s+elsie\b',      # "hello Elsie"
+        r'elsie,',                 # "Elsie," with comma
+        r'Elsie,',                 # "Elsie," capitalized
+        r'"[^"]*elsie[^"]*"',      # Elsie mentioned in dialogue
+        r'"[^"]*Elsie[^"]*"',      # Elsie mentioned in dialogue (capitalized)
+    ]
+    
+    # Check for direct Elsie addressing
+    for pattern in elsie_patterns:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            return True
+    
+    # NEW: Group addressing patterns (includes Elsie as part of "everyone")
+    group_patterns = [
+        r'\beveryone\b',           # "everyone"
+        r'\bEveryone\b',           # "Everyone"
+        r'\beverybody\b',          # "everybody"  
+        r'\bEverybody\b',          # "Everybody"
+        r'\byou all\b',            # "you all"
+        r'\bYou all\b',            # "You all"
+        r'\by\'?all\b',            # "y'all" or "yall"
+        r'\bY\'?all\b',            # "Y'all" or "Yall"
+        r'\byou guys\b',           # "you guys"
+        r'\bYou guys\b',           # "You guys"
+        r'\bhey everyone\b',       # "hey everyone"
+        r'\bhello everyone\b',     # "hello everyone"
+        r'\bhello all\b',          # "hello all"
+        r'\bhi everyone\b',        # "hi everyone"
+        r'\bhi all\b',             # "hi all"
+        r'\bgood morning everyone\b',  # "good morning everyone"
+        r'\bgood evening everyone\b',  # "good evening everyone"
+    ]
+    
+    for pattern in group_patterns:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            print(f"   👥 GROUP ADDRESSING detected: Pattern '{pattern}' matches")
+            return True
+    
+    # Check for emotes addressing Elsie
+    emote_addressing_patterns = [
+        r'\*[^*]*(?:turns? to|looks? at|speaks? to|addresses?|faces?)\s+(?:the\s+)?(?:bartender|elsie)[^*]*\*',
+        r'\*[^*]*(?:approaches?|walks? (?:up )?to|goes? to)\s+(?:the\s+)?(?:bar|bartender|elsie)[^*]*\*',
+    ]
+    
+    for pattern in emote_addressing_patterns:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            return True
+    
+    return False
+
+
+def _is_subtle_bar_service_needed(user_message: str) -> bool:
+    """
+    Check if this message contains a subtle bar service request that should get a response.
+    Only responds to clear drink ORDERING actions, not consumption actions.
+    FIXED: More specific patterns to avoid false positives from consumption.
+    """
+    # Only check emotes (actions in asterisks)
+    emote_pattern = r'\*([^*]+)\*'
+    emotes = re.findall(emote_pattern, user_message)
+    
+    if not emotes:
+        return False
+    
+    # Check if there's any dialogue in the message (quotes)
+    has_dialogue = bool(re.search(r'[""\'"]([^""\'"])+[""\'"]', user_message))
+    if has_dialogue:
+        return False  # Don't do subtle responses if there's dialogue
+    
+    # Look for drink ordering patterns in emotes
+    for emote in emotes:
+        emote_lower = emote.lower()
         
-        print(f"   👂 MULTI-CHARACTER: Characters talking to each other")
-        return False, "multi_character_listening"
+        # FIRST: Check for consumption patterns - exclude these explicitly
+        consumption_patterns = [
+            r'drinking\s+',           # "*drinking water*"
+            r'sips?\s+',             # "*sips his drink*" 
+            r'takes?\s+a\s+drink',   # "*takes a drink*"
+            r'finishes?\s+drinking', # "*finishes drinking*"
+            r'gulps?\s+',            # "*gulps down*"
+            r'swallows?\s+',         # "*swallows*"
+            r'drinks?\s+(?:his|her|the|some)', # "*drinks his beer*"
+            r'consuming\s+',         # "*consuming*"
+            r'enjoying\s+(?:a|his|her|the)\s+drink', # "*enjoying a drink*"
+            
+            # ENHANCED: Roleplay consumption actions that were causing false positives
+            r'fills?\s+.*glass.*drinking',      # "*fills a holographic glass to appear to be drinking*"
+            r'appears?\s+to\s+be\s+drinking',   # "*appears to be drinking*"
+            r'seems?\s+to\s+be\s+drinking',     # "*seems to be drinking*"
+            r'pretends?\s+to\s+drink',          # "*pretends to drink*"
+            r'mimics?\s+drinking',              # "*mimics drinking*"
+            r'holographic.*drinking',           # "*holographic glass to appear to be drinking*"
+            r'to\s+appear.*drinking',           # "*to appear to be drinking*"
+            r'fills.*(?:glass|cup|mug).*(?:appear|seem).*drink', # Complex fills patterns
+        ]
+        
+        # If consumption pattern detected, this is NOT a service request
+        for pattern in consumption_patterns:
+            if re.search(pattern, emote_lower):
+                print(f"   🚫 CONSUMPTION DETECTED: '{pattern}' in '{emote}' - not a service request")
+                return False
+        
+        # SECOND: Check for clear ORDERING patterns only
+        ordering_patterns = [
+            # Clear ordering verbs with specific drinks
+            r'orders?\s+(?:a\s+)?(?:drink|beer|ale|whiskey|wine|cocktail|beverage)',
+            r'asks?\s+for\s+(?:a\s+)?(?:drink|beer|ale|whiskey|wine|cocktail|beverage)', 
+            r'requests?\s+(?:a\s+)?(?:drink|beer|ale|whiskey|wine|cocktail|beverage)',
+            
+            # Service-seeking gestures (must be explicit about wanting service)
+            r'signals?\s+(?:for\s+)?(?:a\s+)?(?:drink|service|bartender)',
+            r'motions?\s+(?:for\s+)?(?:a\s+)?(?:drink|service|bartender)',
+            r'gestures?\s+(?:for\s+)?(?:a\s+)?(?:drink|service|bartender)',
+            r'waves?\s+(?:to\s+)?(?:the\s+)?(?:bartender|bar)',
+            r'calls?\s+(?:for\s+)?(?:service|bartender)',
+            
+            # Bar interaction patterns (seeking service)
+            r'taps?\s+(?:the\s+)?bar(?:\s+for\s+service)?',
+            r'slides?\s+credits?\s+across',
+            r'approaches?\s+(?:the\s+)?bar(?:\s+for\s+service)?',
+            r'walks?\s+(?:up\s+)?to\s+(?:the\s+)?bar',
+        ]
+        
+        for pattern in ordering_patterns:
+            if re.search(pattern, emote_lower):
+                print(f"   🍺 ORDERING PATTERN DETECTED: '{pattern}' in '{emote}' - service request")
+                return True
     
-    # 5. Single Character Scene Handling
-    if len(participants) == 1:
-        # In single character scenes, be more responsive
-        if word_count >= 3:  # Lower threshold for single character
-            print(f"   👤 SINGLE CHARACTER: Substantial message")
-            return True, "single_character_substantial"
-    
-    # 6. Default to Listening Mode
-    print(f"   👂 Listening mode - no response needed")
-    return False, "listening"
+    return False
 
 
 def check_subtle_bar_interaction(user_message: str, rp_state: 'RoleplayStateManager') -> bool:
@@ -161,10 +296,52 @@ def check_subtle_bar_interaction(user_message: str, rp_state: 'RoleplayStateMana
 def check_if_other_character_addressed(user_message: str, rp_state: 'RoleplayStateManager') -> str:
     """
     Check if the message is clearly directed at another character (not Elsie).
+    Enhanced to detect conversation flow between characters.
     Returns the character name if found, empty string if not directed at anyone specific.
     """
     # Get list of known participants (excluding Elsie)
     participants = rp_state.get_participant_names()
+    
+    # ENHANCED: Check for conversation flow context
+    # If this character is responding immediately after another character spoke,
+    # they're likely talking to that character
+    from .character_tracking import extract_current_speaker
+    current_speaker = extract_current_speaker(user_message)
+    
+    if current_speaker:
+        # Get the last speaker from turn history
+        last_turn_info = rp_state.get_last_turn_info()
+        if last_turn_info and last_turn_info.get('speaker'):
+            last_speaker = last_turn_info['speaker']
+            
+            # If different characters and last speaker wasn't Elsie, likely talking to each other
+            if (last_speaker != current_speaker and 
+                last_speaker.lower() not in ['elsie', 'elise', 'elsy', 'els'] and
+                current_speaker.lower() not in ['elsie', 'elise', 'elsy', 'els']):
+                
+                # Check if this seems like a response/conversation continuation
+                conversation_indicators = [
+                    # Direct responses
+                    r'\bi\s+(?:still\s+)?(?:fail\s+to\s+see|don\'?t\s+understand|think|believe)',
+                    r'\bthat\'?s\s+(?:not|why|how|what)',
+                    r'\byou\s+(?:said|mentioned|asked|told)',
+                    r'\bwhat\s+you\s+(?:said|mean|did)',
+                    
+                    # Conversation flow indicators
+                    r'\b(?:yes|no|sure|maybe|perhaps|well),?\s',
+                    r'\b(?:but|however|although|still),?\s',
+                    r'\bi\s+(?:agree|disagree|know|understand)',
+                    r'\bthat\'?s\s+(?:true|false|right|wrong|funny|interesting)',
+                    
+                    # Emotional responses
+                    r'\*(?:laughs?|sighs?|smiles?|nods?|shakes?\s+head)\*',
+                    r'\*she\s+(?:laughs?|sighs?|smiles?|nods?)',
+                ]
+                
+                message_lower = user_message.lower()
+                if any(re.search(pattern, message_lower) for pattern in conversation_indicators):
+                    print(f"   💬 CONVERSATION FLOW: {current_speaker} responding to {last_speaker}")
+                    return last_speaker
     
     # Check for direct addressing patterns with known characters
     addressing_patterns = [

@@ -128,22 +128,31 @@ def is_valid_character_name(name: str) -> bool:
     """
     Check if a potential name is valid.
     Enhanced to handle Nordic, Icelandic, and special characters.
-    Now with stricter filtering to avoid common words.
+    Now with stricter filtering to avoid common words and meta tags.
     """
     if not name or len(name) < 2:
         return False
-    
+        
     # Remove brackets before validation as a safeguard
     name = name.replace('[', '').replace(']', '').strip()
     if not name or len(name) < 2:
         return False
         
-    # Convert to lowercase for comparison
+    # Create a lowercase version for all checks
     name_lower = name.lower()
-    
-    # Check against excluded words (case-insensitive)
+
+    # Check against meta tags first (DGM, GM, OOC, etc.)
+    meta_tags = {
+        'dgm', 'gm', 'ooc', 'end', 'scene', 'start', 'begin', 'stop', 'pause', 'resume',
+        'scenario', 'act', 'chapter', 'part', 'fade', 'cut'
+    }
+    if name_lower in meta_tags:
+        return False
+
+    # Check against excluded words (case-insensitive) by splitting the name
     excluded_lower = {word.lower() for word in ROLEPLAY_EXCLUDED_WORDS}
-    if name_lower in excluded_lower or name_lower in ['you', 'me', 'us', 'them', 'everyone', 'anyone', 'someone']:
+    words_in_name = name_lower.split()
+    if any(word in excluded_lower for word in words_in_name):
         return False
     
     # Check if name contains any valid characters
@@ -209,8 +218,30 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
     Uses Named Entity Recognition patterns and validation.
     Enhanced to detect [Character Name] format for multi-character play.
     Supports Nordic and Icelandic characters.
+    FIXED: Excludes DGM and other meta tags from character detection.
     """
     character_names = []
+    
+    # Names to be excluded from participant tracking
+    EXCLUDED_PARTICIPANTS = {
+        'Elsie', 'Club', 'Dizzy', 'Lizzy',
+        'DGM', 'Dgm', 'dgm',  # Game Master tags
+        'GM', 'Gm', 'gm',     # Generic Game Master
+        'OOC', 'Ooc', 'ooc',  # Out of Character
+        'END', 'End', 'end',  # Scene end markers
+        'Scene', 'scene', 'SCENE',  # Scene markers
+        'Scenario', 'scenario', 'SCENARIO',  # Scenario markers
+        'Act', 'act', 'ACT',  # Act markers
+        'Chapter', 'chapter', 'CHAPTER',  # Chapter markers
+        'Part', 'part', 'PART',  # Part markers
+        'Fade', 'fade', 'FADE',  # Fade markers
+        'Cut', 'cut', 'CUT',  # Cut markers
+        'Start', 'start', 'START',  # Start markers
+        'Begin', 'begin', 'BEGIN',  # Begin markers
+        'Stop', 'stop', 'STOP',  # Stop markers
+        'Pause', 'pause', 'PAUSE',  # Pause markers
+        'Resume', 'resume', 'RESUME'  # Resume markers
+    }
     
     # Extract character names from [Character Name] brackets
     bracket_pattern = f'\\[({VALID_CHAR_PATTERN})\\]'
@@ -218,9 +249,15 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
     
     for name in bracket_matches:
         name = name.strip()
+        
+        # Skip DGM and meta tags explicitly
+        if name in EXCLUDED_PARTICIPANTS:
+            print(f"   🚫 EXCLUDED META TAG: '{name}' not added as character")
+            continue
+            
         if is_valid_character_name(name):
             name_normalized = normalize_character_name(name)
-            if name_normalized not in character_names:
+            if name_normalized not in character_names and name_normalized not in EXCLUDED_PARTICIPANTS:
                 character_names.append(name_normalized)
     
     # Extract text within emotes
@@ -232,9 +269,13 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
         potential_names = re.findall(f'\\b({VALID_CHAR_PATTERN})\\b', emote)
         
         for name in potential_names:
+            # Skip meta tags
+            if name in EXCLUDED_PARTICIPANTS:
+                continue
+                
             if is_valid_character_name(name):
                 name_normalized = normalize_character_name(name)
-                if name_normalized not in character_names:
+                if name_normalized not in character_names and name_normalized not in EXCLUDED_PARTICIPANTS:
                     character_names.append(name_normalized)
     
     return character_names

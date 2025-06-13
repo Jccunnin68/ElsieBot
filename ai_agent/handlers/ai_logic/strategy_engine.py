@@ -40,7 +40,7 @@ from handlers.ai_attention.roleplay_detection import detect_roleplay_triggers
 from handlers.ai_attention.exit_conditions import detect_roleplay_exit_conditions
 from handlers.ai_attention.roleplay_strategy import process_roleplay_strategy
 from handlers.ai_attention.state_manager import get_roleplay_state
-from handlers.ai_attention.dgm_handler import check_dgm_post as _check_dgm_post
+from handlers.ai_attention.dgm_handler import check_dgm_post as _check_dgm_post, check_dgm_post
 
 # Import shared roleplay types
 from handlers.ai_attention.roleplay_types import (
@@ -53,7 +53,7 @@ from handlers.ai_attention.roleplay_types import (
 def determine_response_strategy(user_message: str, conversation_history: list, channel_context: Optional[Dict] = None) -> Dict[str, any]:
     """
     Elsie's inner monologue to determine the best response strategy.
-    Enhanced with channel restrictions and passive listening for roleplay.
+    Enhanced with strict roleplay session isolation and DGM-only exit control.
     Returns a strategy dict with approach, needs_database, and reasoning.
     """
     user_lower = user_message.lower().strip()
@@ -70,55 +70,105 @@ def determine_response_strategy(user_message: str, conversation_history: list, c
         'context_priority': CONTEXT_PRIORITIES['none']
     }
     
-    # PRIORITY 1: Check for roleplay exit conditions if already in RP mode
+    # PRIORITY 0: Channel validation when in roleplay mode - FIXED to prevent DM short-circuiting
     if rp_state.is_roleplaying:
-        should_exit, exit_reason = detect_roleplay_exit_conditions(user_message)
-        
-        if should_exit:
-            rp_state.end_roleplay_session(exit_reason)
+        if not rp_state.is_message_from_roleplay_channel(channel_context):
+            # FIXED: External messages should NEVER trigger auto-exit here
+            # This logic was allowing DMs to short-circuit roleplay sessions
+            # Always return busy response for external messages, preserving roleplay state
+            channel_info = rp_state.get_roleplay_channel_info()
+            busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. Please try again later or join that thread."
+            
+            # Check if this is a DM
+            if channel_context and channel_context.get('type', '').lower() in ['dm', 'group_dm']:
+                busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. DM interactions are paused during roleplay sessions."
+            
+            print(f"   🚫 CROSS-CHANNEL BUSY: Returning busy signal, preserving roleplay state")
             strategy.update({
-                'approach': APPROACH_TYPES['roleplay_exit'],
+                'approach': 'cross_channel_busy',
                 'needs_database': False,
-                'reasoning': f'Exiting roleplay mode due to: {exit_reason}',
+                'reasoning': f'Cross-channel message while roleplaying in {channel_info["channel_name"]}',
+                'context_priority': CONTEXT_PRIORITIES['none'],
+                'busy_message': busy_message,
+                'roleplay_channel': channel_info['channel_name']
+            })
+            return strategy
+    
+    # PRIORITY 1: Check for DGM-only roleplay exit conditions if already in RP mode
+    if rp_state.is_roleplaying:
+        # Only check for DGM scene end - remove all other exit conditions
+        is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
+        
+        if TRIGGER_TYPES['dgm_scene_end'] in triggers:
+            print(f"   🎬 DGM SCENE END DETECTED - Ending roleplay session")
+            rp_state.end_roleplay_session(EXIT_CONDITIONS['dgm_scene_end'])
+            strategy.update({
+                'approach': APPROACH_TYPES['dgm_scene_end'],
+                'needs_database': False,
+                'reasoning': 'DGM scene end - end roleplay session',
                 'context_priority': CONTEXT_PRIORITIES['none']
             })
             return strategy
         
-        # Check for sustained topic shift
-        is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
-        rp_state.update_confidence(confidence_score)
-        
-        if not is_roleplay:
-            rp_state.increment_exit_condition()
-            if rp_state.should_exit_from_sustained_shift():
-                rp_state.end_roleplay_session(EXIT_CONDITIONS['sustained_topic_shift'])
-                strategy.update({
-                    'approach': APPROACH_TYPES['general'],
-                    'needs_database': False,
-                    'reasoning': 'Sustained topic shift detected - exiting roleplay mode',
-                    'context_priority': CONTEXT_PRIORITIES['none']
-                })
-                return strategy
+        # REMOVED: All automatic exit logic (sustained topic shift, etc.)
+        # Roleplay sessions are now locked until DGM explicitly ends them
+        print(f"   🔒 ROLEPLAY LOCKED: Only DGM can end this session (topic shifts ignored)")
     
     # Process main strategy logic
     return _process_main_strategy_logic(user_message, conversation_history, channel_context, strategy, user_lower, rp_state, turn_number)
 
 def _process_main_strategy_logic(user_message: str, conversation_history: list, channel_context: Dict, strategy: Dict, user_lower: str, rp_state, turn_number: int) -> Dict[str, any]:
-    """Process the main strategy determination logic including roleplay and standard approaches."""
+    """Process the main strategy determination logic with ROLEPLAY-FIRST priority."""
     
-    # PRIORITY 2: Enhanced Roleplay detection and continuation with passive listening
+    # PRIORITY 1: If we're in roleplay, handle EVERYTHING through roleplay strategy
+    # This ensures no query detection (ship, character, etc.) can override roleplay context
+    if rp_state.is_roleplaying:
+        print(f"   🎭 IN ROLEPLAY MODE - Routing ALL messages through roleplay strategy")
+        
+        # MOVED: Auto-exit logic is now handled in decision_extractor.py for messages FROM the RP channel
+        # This prevents duplicate checking and ensures proper flow control
+        
+        is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
+        roleplay_strategy = process_roleplay_strategy(user_message, turn_number, channel_context, confidence_score, triggers)
+        
+        # Ensure roleplay context is preserved
+        if 'context_priority' not in roleplay_strategy or roleplay_strategy['context_priority'] == 'none':
+            roleplay_strategy['context_priority'] = 'roleplay'
+        
+        return roleplay_strategy
+    
+    # PRIORITY 2: Check for DGM posts (only when NOT in roleplay - these start new sessions)
     is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
+    
+    # Check for DGM posts blocked in DMs first
+    if "channel_restricted" in triggers and channel_context:
+        dgm_result = check_dgm_post(user_message)
+        if dgm_result['is_dgm']:
+            channel_type = channel_context.get('type', 'unknown')
+            is_dm = channel_context.get('is_dm', False) or channel_type.lower() in ['dm', 'group_dm']
+            
+            if is_dm:
+                strategy.update({
+                    'approach': 'dgm_dm_blocked',
+                    'needs_database': False,
+                    'reasoning': 'DGM post blocked in DM',
+                    'context_priority': CONTEXT_PRIORITIES['none'],
+                    'helpful_message': "DGM posts are not allowed in DMs. Please use a thread or appropriate channel for roleplay scenes."
+                })
+                return strategy
     
     # Handle DGM posts
     strategy_dgm = _handle_dgm_posts(triggers, user_message, rp_state, turn_number, channel_context)
     if strategy_dgm:
         return strategy_dgm
     
-    # Handle ongoing roleplay or new roleplay detection
-    if is_roleplay or rp_state.is_roleplaying:
-        return process_roleplay_strategy(user_message, turn_number, channel_context, confidence_score, triggers)
+    # PRIORITY 3: Standard message types (only when NOT in roleplay)
+    print(f"   📝 NOT IN ROLEPLAY - Processing as standard message")
     
-    # If not roleplay, handle standard message types
+    # REMOVED: Auto-roleplay detection and blocking logic
+    # Roleplay is now ONLY initiated by DGM posts, not by pattern detection
+    # All non-DGM messages are treated as normal conversation regardless of patterns
+    
     return _handle_standard_message_types(user_message, user_lower, strategy, conversation_history)
 
 def _handle_dgm_posts(triggers: List[str], user_message: str, rp_state, turn_number: int, channel_context: Dict) -> Optional[Dict[str, any]]:
@@ -139,6 +189,9 @@ def _handle_dgm_posts(triggers: List[str], user_message: str, rp_state, turn_num
                 dgm_characters = dgm_result['characters']
             
             rp_state.start_roleplay_session(turn_number, triggers, channel_context, dgm_characters)
+        else:
+            # If already roleplaying, reset the activity timer to prevent edge case timeouts
+            rp_state.reset_activity_timer_for_dgm("dgm_scene_setting")
         
         return {
             'approach': APPROACH_TYPES['dgm_scene_setting'],
