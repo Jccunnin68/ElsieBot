@@ -191,7 +191,7 @@ def is_valid_character_name(name: str) -> bool:
             if not word[0].isupper():
                 return False
             # Each word should also not be a common word
-            if word.lower() in additional_excluded:
+            if word.lower() in excluded_lower:
                 return False
     
     return True
