@@ -97,6 +97,7 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
     """
     Extract the decision-making logic from get_gemma_response() without changing it.
     Preserves all existing guard rails and logic.
+    Enhanced with 20-minute auto-exit functionality.
     """
     
     # CRITICAL: Check for ANY DGM post FIRST - Elsie NEVER responds to DGM posts
@@ -135,6 +136,37 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
         print(f"   💬 Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
         print(f"   🗣️ Turn History: {rp_state.turn_history}")
 
+    # NEW: Handle 20-minute auto-exit logic - FIXED to prevent DM short-circuiting
+    if rp_state.is_roleplaying:
+        # Check if message is from roleplay channel
+        is_from_rp_channel = rp_state.is_message_from_roleplay_channel(channel_context)
+        
+        if is_from_rp_channel:
+            # Update activity timestamp for ANY message in roleplay channel
+            rp_state.update_roleplay_channel_activity()
+            print(f"   ⏰ ROLEPLAY CHANNEL MESSAGE - Activity timestamp updated")
+            # Messages from RP channel keep the session alive - no auto-exit check here
+        else:
+            # FIXED: External messages should trigger auto-exit check (after 20 minutes)
+            # Check if it's been > 20 minutes since last RP channel activity
+            if rp_state.should_auto_exit_roleplay():
+                print(f"   🕐 AUTO-EXIT TRIGGERED: 20+ minutes of inactivity, processing external message")
+                rp_state.auto_exit_roleplay("20_minute_timeout")
+                # Continue processing - now NOT in roleplay mode, message will be processed normally
+            else:
+                # < 20 minutes: return busy signal, preserve roleplay state
+                print(f"   🚫 CROSS-CHANNEL MESSAGE: Roleplay active, will return busy response (< 20 min)")
+                # MOVED: Immediate cross-channel busy response - happens BEFORE any content processing
+                strategy = determine_response_strategy(user_message, conversation_history, channel_context)
+                if strategy['approach'] == 'cross_channel_busy':
+                    busy_message = strategy.get('busy_message', "I am currently busy with another conversation. Please try again later.")
+                    print(f"   🚫 CROSS-CHANNEL BUSY: {busy_message}")
+                    return ResponseDecision(
+                        needs_ai_generation=False,
+                        pre_generated_response=busy_message,
+                        strategy=strategy
+                    )
+
     # UNIVERSAL CHARACTER TURN TRACKING - PRESERVE EXISTING
     character_names = extract_character_names_from_emotes(user_message)
     if character_names:
@@ -154,19 +186,33 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
 
     # NEW: Check for mock responses in roleplay mode BEFORE other logic
     if rp_state.is_roleplaying:
+        # Get the strategy first to have roleplay context available
+        strategy = determine_response_strategy(user_message, conversation_history, channel_context)
+        
         mock_type = detect_mock_response_type(user_message)
         if mock_type and should_enhance_mock_with_ai(mock_type, bool(GEMMA_API_KEY), True):
             print(f"   🎭 ROLEPLAY MOCK ENHANCEMENT - {mock_type.upper()} using AI generation")
             
-            # Create strategy for AI-enhanced mock response
+            # CRITICAL: Create strategy that maintains FULL roleplay context
+            # This ensures roleplay context is preserved, not bypassed by mock response logic
             mock_strategy = {
                 'approach': 'roleplay_mock_enhanced',
-                'needs_database': True,  # Use roleplay context
-                'reasoning': f'Roleplay {mock_type} with AI variety',
-                'context_priority': 'roleplay',
+                'needs_database': True,  # Enable database for roleplay context
+                'reasoning': f'Roleplay {mock_type} with AI variety (maintaining full RP context)',
+                'context_priority': 'roleplay',  # CRITICAL: Maintain roleplay context priority
                 'ai_variety_type': mock_type,
                 'participants': rp_state.get_participant_names(),
-                'mock_response_type': mock_type
+                'mock_response_type': mock_type,
+                # PRESERVE all roleplay strategy elements to maintain context
+                'roleplay_confidence': strategy.get('roleplay_confidence', 0.8),
+                'roleplay_triggers': strategy.get('roleplay_triggers', []),
+                'new_characters': strategy.get('new_characters', []),
+                'addressed_characters': strategy.get('addressed_characters', []),
+                'response_reason': strategy.get('response_reason', f'mock_{mock_type}_enhanced'),
+                'elsie_mentioned': strategy.get('elsie_mentioned', False),
+                # ENHANCED: Preserve character knowledge for greetings
+                'preserve_character_knowledge': True,
+                'use_full_roleplay_context': True
             }
             return ResponseDecision(
                 needs_ai_generation=True,
@@ -175,30 +221,158 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
             )
         elif mock_type:
             print(f"   🎭 ROLEPLAY MOCK - {mock_type.upper()} using canned response (20% case or excluded)")
-            # Fall through to normal strategy determination for canned response
+            # Fall through to use the strategy we already determined
+    else:
+        # Strategy determination for non-roleplay - PRESERVE EXISTING
+        strategy = determine_response_strategy(user_message, conversation_history, channel_context)
 
-    # Strategy determination - PRESERVE EXISTING
-    strategy = determine_response_strategy(user_message, conversation_history, channel_context)
+    # Log monitoring decisions for non-roleplay approaches
+    if rp_state.is_roleplaying:
+        print(f"   ⚠️  IN ROLEPLAY BUT NOT RP APPROACH - This should not happen after refactor!")
+    
+    # Strategy logging - PRESERVE EXISTING
     print(f"\n🧠 ELSIE'S INNER MONOLOGUE:")
     print(f"   💭 Reasoning: {strategy['reasoning']}")
     print(f"   📋 Approach: {strategy['approach']}")
     print(f"   🔍 Needs Database: {strategy['needs_database']}")
     print(f"   🎯 Context Priority: {strategy['context_priority']}")
-    
-    # Log monitoring decisions - PRESERVE EXISTING
+
+    # PRIORITY 1: Handle ALL roleplay approaches FIRST before any other logic
+    # This ensures roleplay context is never overridden by query detection
     if strategy['approach'].startswith('roleplay'):
-        print(f"   🎭 ROLEPLAY MONITORING ACTIVE:")
-        print(f"      - Approach: {strategy['approach']}")
-        if 'response_reason' in strategy:
-            print(f"      - Response Reason: {strategy['response_reason']}")
-        if 'participants' in strategy:
-            print(f"      - Tracked Participants: {strategy['participants']}")
-        if 'should_interject' in strategy:
-            print(f"      - Should Interject: {strategy['should_interject']}")
-    elif rp_state.is_roleplaying:
-        print(f"   ⚠️  IN ROLEPLAY BUT NOT RP APPROACH - Potential Issue!")
+        print(f"   🎭 ROLEPLAY APPROACH DETECTED - Handling with roleplay priority")
+        
+        # Handle roleplay listening mode - provide subtle presence responses
+        if strategy['approach'] == 'roleplay_listening':
+            should_interject = strategy.get('should_interject', False)
+            listening_count = strategy.get('listening_turn_count', 0)
+            
+            print(f"   👂 LISTENING MODE RESPONSE:")
+            print(f"      - Should Interject: {should_interject}")
+            print(f"      - Listening Turn: {listening_count}")
+            
+            if should_interject:
+                if should_use_ai_variety_for_roleplay(bool(GEMMA_API_KEY)):
+                    print(f"✨ LISTENING INTERJECTION - Using AI generation for variety")
+                    strategy['ai_variety_type'] = 'listening_interjection'
+                    return ResponseDecision(
+                        needs_ai_generation=True,
+                        pre_generated_response=None,
+                        strategy=strategy
+                    )
+                else:
+                    # Keep existing canned response logic
+                    interjection_responses = [
+                        "*quietly tends to the bar in the background*",
+                        "*adjusts the ambient lighting subtly*",
+                        "*continues her work with practiced efficiency*",
+                        "*maintains the bar's atmosphere unobtrusively*"
+                    ]
+                    print(f"✨ LISTENING INTERJECTION - Using canned response (40% case)")
+                    return ResponseDecision(
+                        needs_ai_generation=False,
+                        pre_generated_response=random.choice(interjection_responses),
+                        strategy=strategy
+                    )
+            else:
+                # Most of the time, completely silent listening
+                print(f"👂 SILENT LISTENING - Turn {listening_count}")
+                return ResponseDecision(
+                    needs_ai_generation=False,
+                    pre_generated_response="NO_RESPONSE",
+                    strategy=strategy
+                )
+        
+        # Handle active roleplay responses
+        elif strategy['approach'] == 'roleplay_active':
+            response_reason = strategy.get('response_reason', 'unknown')
+            print(f"   🎭 ACTIVE ROLEPLAY - Reason: {response_reason}")
+            
+            # Handle subtle bar service responses
+            if response_reason == 'subtle_bar_service':
+                # FIXED: ALL AI responses in roleplay mode must preserve roleplay context
+                # Don't break out of roleplay strategy - maintain full context
+                if rp_state.is_roleplaying:
+                    print(f"   🍺 DRINK ORDER IN ROLEPLAY: Preserving full roleplay context")
+                    # Keep the roleplay strategy intact - don't bypass roleplay context
+                    # The strategy already has roleplay context and should maintain it
+                    return ResponseDecision(
+                        needs_ai_generation=True,
+                        pre_generated_response=None,
+                        strategy=strategy  # This maintains the roleplay strategy completely
+                    )
+                else:
+                    # Only use canned responses when NOT in roleplay mode
+                    print(f"   🍺 DRINK ORDER OUTSIDE ROLEPLAY: Using canned response")
+                    # Extract the drink and character name for canned response
+                    drink = _extract_drink_from_emote(user_message)
+                    character_names = extract_character_names_from_emotes(user_message)
+                    character = character_names[0] if character_names else "the customer"
+                    
+                    # Generate a simple service response
+                    if drink == 'drink':
+                        response = f"*gets a drink for {character}*"
+                    else:
+                        response = f"*gets a {drink} for {character}*"
+                    
+                    print(f"   🍺 Generated subtle service response: '{response}'")
+                    return ResponseDecision(
+                        needs_ai_generation=False,
+                        pre_generated_response=response,
+                        strategy=strategy
+                    )
+            
+            # All other active roleplay responses use AI generation
+            return ResponseDecision(
+                needs_ai_generation=True,
+                pre_generated_response=None,
+                strategy=strategy
+            )
+        
+        # Handle roleplay exit
+        elif strategy['approach'] == 'roleplay_exit':
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response="*adjusts the ambient lighting thoughtfully*\n\nOf course. *returns to regular bartending mode* I'm here if you need anything.",
+                strategy=strategy
+            )
+        
+        # Handle auto-exit from roleplay due to timeout
+        elif strategy['approach'] == 'roleplay_auto_exit':
+            timeout_message = strategy.get('timeout_message', "*notices the lounge has grown quiet*\n\nIt seems the conversation has moved on. I'll return to my regular duties. Feel free to let me know if you need anything!")
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response=timeout_message,
+                strategy=strategy
+            )
     
-    # Handle special cases that don't need AI processing - PRESERVE EXISTING
+    # PRIORITY 2: Cross-channel busy responses (MOVED to early check above)
+    
+    # REMOVED: Handle blocked roleplay attempts  
+    # Auto-roleplay detection has been removed - roleplay only initiated by DGM posts
+    
+    # NEW: Handle blocked DGM posts in DMs
+    if strategy['approach'] == 'dgm_dm_blocked':
+        helpful_message = strategy.get('helpful_message', "DGM posts are not allowed in DMs. Please use a thread or appropriate channel for roleplay scenes.")
+        print(f"   🚫 DGM POST BLOCKED IN DM: {helpful_message}")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=helpful_message,
+            strategy=strategy
+        )
+    
+    # Log monitoring decisions for non-roleplay approaches
+    if rp_state.is_roleplaying:
+        print(f"   ⚠️  IN ROLEPLAY BUT NOT RP APPROACH - This should not happen after refactor!")
+    
+    # Strategy logging - PRESERVE EXISTING
+    print(f"\n🧠 ELSIE'S INNER MONOLOGUE:")
+    print(f"   💭 Reasoning: {strategy['reasoning']}")
+    print(f"   📋 Approach: {strategy['approach']}")
+    print(f"   🔍 Needs Database: {strategy['needs_database']}")
+    print(f"   🎯 Context Priority: {strategy['context_priority']}")
+
+    # PRIORITY 3: Handle special cases that don't need AI processing
     if strategy['approach'] == 'reset':
         return ResponseDecision(
             needs_ai_generation=False,
@@ -243,156 +417,6 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
         return ResponseDecision(
             needs_ai_generation=False,
             pre_generated_response="NO_RESPONSE",
-            strategy=strategy
-        )
-    
-    # Handle roleplay exit - PRESERVE EXISTING
-    if strategy['approach'] == 'roleplay_exit':
-        return ResponseDecision(
-            needs_ai_generation=False,
-            pre_generated_response="*adjusts the ambient lighting thoughtfully*\n\nOf course. *returns to regular bartending mode* I'm here if you need anything.",
-            strategy=strategy
-        )
-
-    # CRITICAL FIX: Check for implicit responses BEFORE handling listening mode
-    # The strategy engine may have set 'roleplay_listening' but we need to double-check
-    # if this should actually be an implicit response
-    if strategy['approach'] == 'roleplay_listening':
-        # Re-check if this should be an implicit response
-       
-        
-        # Use the already imported get_roleplay_state and existing rp_state
-        turn_number = len(conversation_history) + 1
-        should_respond, response_reason = should_elsie_respond_in_roleplay(user_message, rp_state, turn_number)
-        
-        print(f"   🔍 DOUBLE-CHECKING IMPLICIT RESPONSE:")
-        print(f"      - Should Respond: {should_respond}")
-        print(f"      - Response Reason: {response_reason}")
-        
-        # If implicit response detected, override the listening strategy
-        if should_respond and response_reason in ['implicit_single_character', 'implicit_multi_character']:
-            print(f"   💬 OVERRIDING LISTENING MODE - Implicit response detected: {response_reason}")
-            strategy['approach'] = 'roleplay_active'
-            strategy['response_reason'] = response_reason
-            return ResponseDecision(
-                needs_ai_generation=True,
-                pre_generated_response=None,
-                strategy=strategy
-            )
-        
-        # Otherwise, proceed with listening mode logic
-        should_interject = strategy.get('should_interject', False)
-        listening_count = strategy.get('listening_turn_count', 0)
-        
-        print(f"   👂 LISTENING MODE RESPONSE:")
-        print(f"      - Should Interject: {should_interject}")
-        print(f"      - Listening Turn: {listening_count}")
-        
-        if should_interject:
-            if should_use_ai_variety_for_roleplay(bool(GEMMA_API_KEY)):
-                print(f"✨ LISTENING INTERJECTION - Using AI generation for variety")
-                strategy['ai_variety_type'] = 'listening_interjection'
-                return ResponseDecision(
-                    needs_ai_generation=True,
-                    pre_generated_response=None,
-                    strategy=strategy
-                )
-            else:
-                # Keep existing canned response logic
-                interjection_responses = [
-                    "*quietly tends to the bar in the background*",
-                    "*adjusts the ambient lighting subtly*",
-                    "*continues her work with practiced efficiency*",
-                    "*maintains the bar's atmosphere unobtrusively*"
-                ]
-                print(f"✨ LISTENING INTERJECTION - Using canned response (40% case)")
-                return ResponseDecision(
-                    needs_ai_generation=False,
-                    pre_generated_response=random.choice(interjection_responses),
-                    strategy=strategy
-                )
-        else:
-            # Most of the time, completely silent listening
-            print(f"👂 SILENT LISTENING - Turn {listening_count}")
-            return ResponseDecision(
-                needs_ai_generation=False,
-                pre_generated_response="NO_RESPONSE",
-                strategy=strategy
-            )
-    
-    # Handle subtle bar service responses - PRESERVE EXISTING
-    if strategy['approach'] == 'roleplay_active' and strategy.get('response_reason') == 'subtle_bar_service':
-        # Extract the drink and character name
-        drink = _extract_drink_from_emote(user_message)
-        character_names = extract_character_names_from_emotes(user_message)
-        character = character_names[0] if character_names else "the customer"
-        
-        print(f"   🥃 SUBTLE BAR SERVICE:")
-        print(f"      - Drink: {drink}")
-        print(f"      - Character: {character}")
-        
-        # Generate a simple service response
-        if drink == 'drink':
-            response = f"*gets a drink for {character}*"
-        else:
-            response = f"*gets a {drink} for {character}*"
-        
-        print(f"   🍺 Generated subtle service response: '{response}'")
-        return ResponseDecision(
-            needs_ai_generation=False,
-            pre_generated_response=response,
-            strategy=strategy
-        )
-    
-    # Handle acknowledgment + redirect responses - PRESERVE EXISTING
-    if (strategy['approach'] == 'roleplay_active' and 
-        strategy.get('response_reason', '').startswith('acknowledgment_then_redirect_to_')):
-        
-        # Extract the character being redirected to
-        other_character = strategy['response_reason'].replace('acknowledgment_then_redirect_to_', '')
-        
-        print(f"   🙏 ACKNOWLEDGMENT + REDIRECT:")
-        print(f"      - Acknowledging thanks, then conversation moves to: {other_character}")
-        
-        if should_use_ai_variety_for_roleplay(bool(GEMMA_API_KEY)):
-            print(f"   🙏 ACKNOWLEDGMENT - Using AI generation for variety")
-            strategy['ai_variety_type'] = 'acknowledgment'
-            strategy['other_character'] = other_character
-            return ResponseDecision(
-                needs_ai_generation=True,
-                pre_generated_response=None,
-                strategy=strategy
-            )
-        else:
-            # Keep existing canned response logic
-            acknowledgment_responses = [
-                "*nods gracefully*",
-                "*inclines head with a subtle smile*",
-                "*acknowledges with quiet elegance*",
-                "*gives a brief, appreciative nod*",
-                "*smiles warmly and steps back*",
-            ]
-            
-            response = random.choice(acknowledgment_responses)
-            print(f"   🙏 Generated acknowledgment response: '{response}' (40% case)")
-            return ResponseDecision(
-                needs_ai_generation=False,
-                pre_generated_response=response,
-                strategy=strategy
-            )
-    
-    # Handle new implicit response types - NEW
-    if (strategy['approach'] == 'roleplay_active' and 
-        strategy.get('response_reason') in ['implicit_single_character', 'implicit_multi_character']):
-        
-        response_reason = strategy.get('response_reason')
-        print(f"   💬 IMPLICIT RESPONSE ({response_reason.upper()}):")
-        print(f"      - Character continuing conversation chain with Elsie")
-        print(f"      - Using AI response generation for natural conversation flow")
-        
-        return ResponseDecision(
-            needs_ai_generation=True,
-            pre_generated_response=None,
             strategy=strategy
         )
     

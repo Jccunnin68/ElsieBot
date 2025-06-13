@@ -28,12 +28,19 @@ def detect_roleplay_triggers(user_message: str, channel_context: Optional[Dict] 
     triggers = []
     confidence_score = 0.0
     
-    # Check for DGM posts first - they override all restrictions
+    # Check for DGM posts first - but check channel restrictions for DGM in DMs
     dgm_result = check_dgm_post(user_message)
     if dgm_result['is_dgm']:
         print(f"   🎬 DGM POST DETECTED - Adding DGM trigger: {dgm_result['action']}")
         triggers.extend(dgm_result['triggers'])
         confidence_score = 1.0  # Maximum confidence for DGM posts
+        
+        # NEW: Check if DGM post is allowed in this channel (blocks DGM in DMs)
+        if not is_roleplay_allowed_channel(channel_context, user_message):
+            print(f"   🚫 DGM POST BLOCKED - Channel restrictions apply even to DGM posts")
+            triggers.append("channel_restricted")
+            return False, 0.0, triggers
+        
         return True, confidence_score, triggers
     
     # Check for roleplay indicators

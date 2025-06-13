@@ -19,6 +19,11 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
     """
     Process roleplay response logic and determine if Elsie should respond.
     Returns strategy dictionary for roleplay handling.
+    
+    SIMPLIFIED: Only responds when:
+    1. Directly mentioned/addressed by name
+    2. Implicit response scenarios (following up after addressing someone)
+    3. Specific service scenarios
     """
     rp_state = get_roleplay_state()
     
@@ -72,33 +77,23 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
     # Update confidence tracking
     rp_state.update_confidence(confidence_score)
     
-    # Determine response style based on context
+    # Determine response style based on context - SIMPLIFIED LOGIC
     should_respond, response_reason = should_elsie_respond_in_roleplay(user_message, rp_state, turn_number)
     
-    # Check if this is a new session (first post in roleplay)
-    is_new_session = rp_state.session_start_turn == turn_number
-    is_dgm_session = rp_state.is_dgm_session()
-    
-    # Enhanced name detection for Elsie
+    # Enhanced name detection for Elsie (direct addressing)
     elsie_mentioned = _detect_elsie_mentioned(user_message)
     
-    # Respond if:
-    # 1. Normal response logic says to respond
-    # 2. Elsie is mentioned by name
-    # 3. New session AND not a DGM session (regular roleplay should have Elsie greet)
-    should_respond_new_session = is_new_session and not is_dgm_session
-    
-    if should_respond or elsie_mentioned or should_respond_new_session:
-        # Active response - preserve subtle_bar_service reason
-        if response_reason == "subtle_bar_service":
-            reason_priority = response_reason
-        else:
-            reason_priority = (
-                "mentioned_by_name" if elsie_mentioned else
-                "new_session" if should_respond_new_session else
-                response_reason
-            )
+    # SIMPLIFIED: Only respond if directly involved
+    # No more permissive "new session" or other broad triggers
+    if should_respond or elsie_mentioned:
         
+        # Prioritize the reason for the response
+        if elsie_mentioned:
+            reason_priority = "mentioned_by_name"
+        else:
+            # Use the reason from the response logic function
+            reason_priority = response_reason
+
         rp_state.set_listening_mode(False, reason_priority)
         rp_state.mark_response_turn(turn_number)
         
@@ -137,11 +132,47 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
         }
 
 def _detect_elsie_mentioned(user_message: str) -> bool:
-    """Check if Elsie is mentioned in the message."""
+    """
+    Check if Elsie is mentioned in the message.
+    Enhanced to detect group addressing (everyone, you all, etc.).
+    """
+    # Direct Elsie mentions
     elsie_patterns = [
         r'\belsie\b',
         r'\bElsie\b',
         r'\[Elsie\]',
-        r'\[ELSIE\]'
+        r'\[ELSIE\]',
+        r'\bbartender\b',
+        r'\bBartender\b'
     ]
-    return any(re.search(pattern, user_message) for pattern in elsie_patterns) 
+    
+    # Check direct mentions first
+    for pattern in elsie_patterns:
+        if re.search(pattern, user_message):
+            return True
+    
+    # NEW: Group addressing patterns (Elsie is part of "everyone")
+    group_patterns = [
+        r'\beveryone\b',           # "everyone"
+        r'\bEveryone\b',           # "Everyone"
+        r'\beverybody\b',          # "everybody"  
+        r'\bEverybody\b',          # "Everybody"
+        r'\byou all\b',            # "you all"
+        r'\bYou all\b',            # "You all"
+        r'\by\'?all\b',            # "y'all" or "yall"
+        r'\bY\'?all\b',            # "Y'all" or "Yall"
+        r'\byou guys\b',           # "you guys"
+        r'\bYou guys\b',           # "You guys"
+        r'\bhey everyone\b',       # "hey everyone"
+        r'\bhello everyone\b',     # "hello everyone"
+        r'\bhello all\b',          # "hello all"
+        r'\bhi everyone\b',        # "hi everyone"
+        r'\bhi all\b',             # "hi all"
+    ]
+    
+    for pattern in group_patterns:
+        if re.search(pattern, user_message):
+            print(f"   👥 GROUP MENTION detected: Pattern '{pattern}' - treating as Elsie mentioned")
+            return True
+    
+    return False 

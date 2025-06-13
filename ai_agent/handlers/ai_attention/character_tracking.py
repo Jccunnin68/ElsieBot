@@ -128,46 +128,31 @@ def is_valid_character_name(name: str) -> bool:
     """
     Check if a potential name is valid.
     Enhanced to handle Nordic, Icelandic, and special characters.
-    Now with stricter filtering to avoid common words.
+    Now with stricter filtering to avoid common words and meta tags.
     """
     if not name or len(name) < 2:
         return False
-    
+        
     # Remove brackets before validation as a safeguard
     name = name.replace('[', '').replace(']', '').strip()
     if not name or len(name) < 2:
         return False
         
-    # Convert to lowercase for comparison
+    # Create a lowercase version for all checks
     name_lower = name.lower()
-    
-    # Check against excluded words (case-insensitive)
-    excluded_lower = {word.lower() for word in ROLEPLAY_EXCLUDED_WORDS}
-    if name_lower in excluded_lower or name_lower in ['you', 'me', 'us', 'them', 'everyone', 'anyone', 'someone']:
-        return False
-    
-    # Additional common words that slip through and aren't character names
-    additional_excluded = {
-        'bar', 'walks', 'walk', 'runs', 'run', 'sits', 'sit', 'stands', 'stand',
-        'comes', 'come', 'goes', 'go', 'enters', 'enter', 'exits', 'exit',
-        'approaches', 'approach', 'leaves', 'leave', 'returns', 'return',
-        'moves', 'move', 'steps', 'step', 'turns', 'turn', 'looks', 'look',
-        'smiles', 'smile', 'laughs', 'laugh', 'nods', 'nod', 'waves', 'wave',
-        'drinks', 'drink', 'orders', 'order', 'asks', 'ask', 'says', 'say',
-        'speaks', 'speak', 'tells', 'tell', 'replies', 'reply', 'responds', 'respond',
-        'up', 'down', 'over', 'under', 'around', 'through', 'across', 'along',
-        'into', 'onto', 'upon', 'within', 'without', 'toward', 'towards',
-        'behind', 'beside', 'between', 'among', 'during', 'before', 'after',
-        'since', 'until', 'while', 'whereas', 'although', 'though', 'unless',
-        'because', 'however', 'therefore', 'moreover', 'furthermore', 'nevertheless',
-        'meanwhile', 'otherwise', 'instead', 'besides', 'indeed', 'certainly',
-        'perhaps', 'probably', 'possibly', 'definitely', 'absolutely', 'completely',
-        'entirely', 'totally', 'quite', 'rather', 'fairly', 'pretty', 'very',
-        'extremely', 'incredibly', 'amazingly', 'surprisingly', 'unfortunately',
-        'fortunately', 'obviously', 'clearly', 'apparently', 'evidently'
+
+    # Check against meta tags first (DGM, GM, OOC, etc.)
+    meta_tags = {
+        'dgm', 'gm', 'ooc', 'end', 'scene', 'start', 'begin', 'stop', 'pause', 'resume',
+        'scenario', 'act', 'chapter', 'part', 'fade', 'cut'
     }
-    
-    if name_lower in additional_excluded:
+    if name_lower in meta_tags:
+        return False
+
+    # Check against excluded words (case-insensitive) by splitting the name
+    excluded_lower = {word.lower() for word in ROLEPLAY_EXCLUDED_WORDS}
+    words_in_name = name_lower.split()
+    if any(word in excluded_lower for word in words_in_name):
         return False
     
     # Check if name contains any valid characters
@@ -247,13 +232,32 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
     Extracts from both [Character Name] format AND emotes with enhanced filtering.
     Enhanced to detect [Character Name] format for multi-character play.
     Supports Nordic and Icelandic characters.
+    FIXED: Excludes DGM and other meta tags from character detection.
     """
     character_names = []
     
-    print(f"      🔍 extract_character_names_from_emotes DEBUG:")
-    print(f"         - Message: '{user_message}'")
+    # Names to be excluded from participant tracking
+    EXCLUDED_PARTICIPANTS = {
+        'Elsie', 'Club', 'Dizzy', 'Lizzy',
+        'DGM', 'Dgm', 'dgm',  # Game Master tags
+        'GM', 'Gm', 'gm',     # Generic Game Master
+        'OOC', 'Ooc', 'ooc',  # Out of Character
+        'END', 'End', 'end',  # Scene end markers
+        'Scene', 'scene', 'SCENE',  # Scene markers
+        'Scenario', 'scenario', 'SCENARIO',  # Scenario markers
+        'Act', 'act', 'ACT',  # Act markers
+        'Chapter', 'chapter', 'CHAPTER',  # Chapter markers
+        'Part', 'part', 'PART',  # Part markers
+        'Fade', 'fade', 'FADE',  # Fade markers
+        'Cut', 'cut', 'CUT',  # Cut markers
+        'Start', 'start', 'START',  # Start markers
+        'Begin', 'begin', 'BEGIN',  # Begin markers
+        'Stop', 'stop', 'STOP',  # Stop markers
+        'Pause', 'pause', 'PAUSE',  # Pause markers
+        'Resume', 'resume', 'RESUME'  # Resume markers
+    }
     
-    # 1. Extract character names from [Character Name] brackets - most reliable
+    # Extract character names from [Character Name] brackets
     bracket_pattern = f'\\[({VALID_CHAR_PATTERN})\\]'
     bracket_matches = re.findall(bracket_pattern, user_message)
     
@@ -261,10 +265,15 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
     
     for name in bracket_matches:
         name = name.strip()
-        print(f"         - Checking bracket name: '{name}'")
+        
+        # Skip DGM and meta tags explicitly
+        if name in EXCLUDED_PARTICIPANTS:
+            print(f"   🚫 EXCLUDED META TAG: '{name}' not added as character")
+            continue
+            
         if is_valid_character_name(name):
             name_normalized = normalize_character_name(name)
-            if name_normalized not in character_names:
+            if name_normalized not in character_names and name_normalized not in EXCLUDED_PARTICIPANTS:
                 character_names.append(name_normalized)
                 print(f"         - ✅ Added valid bracket character: '{name_normalized}'")
             else:
@@ -286,10 +295,13 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
         print(f"         - Potential names in emote: {potential_names}")
         
         for name in potential_names:
-            print(f"         - Checking emote name: '{name}'")
+            # Skip meta tags
+            if name in EXCLUDED_PARTICIPANTS:
+                continue
+                
             if is_valid_character_name(name):
                 name_normalized = normalize_character_name(name)
-                if name_normalized not in character_names:
+                if name_normalized not in character_names and name_normalized not in EXCLUDED_PARTICIPANTS:
                     character_names.append(name_normalized)
                     print(f"         - ✅ Added valid emote character: '{name_normalized}'")
                 else:

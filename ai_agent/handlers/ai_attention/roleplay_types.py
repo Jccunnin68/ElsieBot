@@ -79,6 +79,7 @@ MIN_THREAD_CONFIDENCE = 0.3
 
 # Roleplay channel restrictions
 ALLOWED_CHANNEL_TYPES = [
+    'GUILD_TEXT',  # 0 - General public channels (DGM-only roleplay)
     'GUILD_PUBLIC_THREAD',  # 7
     'GUILD_PRIVATE_THREAD',  # 8
     'GUILD_NEWS_THREAD',  # 6
@@ -87,13 +88,12 @@ ALLOWED_CHANNEL_TYPES = [
 ]
 
 RESTRICTED_CHANNEL_TYPES = [
-    'GUILD_TEXT',  # 0
-    'GUILD_VOICE',  # 2
-    'GUILD_STAGE_VOICE',  # 9
-    'GUILD_CATEGORY',  # 4
-    'GUILD_DIRECTORY',  # 10
-    'DM',  # 1
-    'GROUP_DM'  # 3
+    'GUILD_VOICE',  # 2 - Voice channels
+    'GUILD_STAGE_VOICE',  # 9 - Stage voice channels
+    'GUILD_CATEGORY',  # 4 - Category containers
+    'GUILD_DIRECTORY',  # 10 - Directory channels
+    'DM',  # 1 - Direct messages (DGM blocked)
+    'GROUP_DM'  # 3 - Group direct messages (DGM blocked)
 ]
 
 # Roleplay response priorities
@@ -139,7 +139,11 @@ TRIGGER_TYPES = {
 APPROACH_TYPES = {
     'roleplay_active': 'roleplay_active',
     'roleplay_listening': 'roleplay_listening',
+    'roleplay_mock_enhanced': 'roleplay_mock_enhanced',
     'roleplay_exit': 'roleplay_exit',
+    'roleplay_auto_exit': 'roleplay_auto_exit',
+    'cross_channel_busy': 'cross_channel_busy',
+    'dgm_dm_blocked': 'dgm_dm_blocked',
     'dgm_scene_setting': 'dgm_scene_setting',
     'dgm_scene_end': 'dgm_scene_end',
     'dgm_controlled_elsie': 'dgm_controlled_elsie',
@@ -164,7 +168,8 @@ EXIT_CONDITIONS = {
     'sustained_topic_shift': 'sustained_topic_shift',
     'explicit_exit': 'explicit_exit',
     'dgm_scene_end': 'dgm_scene_end',
-    'channel_restriction': 'channel_restriction'
+    'channel_restriction': 'channel_restriction',
+    'auto_exit_20_minute_timeout': 'auto_exit_20_minute_timeout'
 }
 
 # Roleplay response reasons

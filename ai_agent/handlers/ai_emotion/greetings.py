@@ -7,11 +7,14 @@ This module handles greeting and farewell interactions with contextual personali
 
 import random
 from typing import Optional
+import re
 
 
 def handle_greeting(user_message: str, personality_context: str = "complete_self") -> Optional[str]:
     """
     Handle greeting messages with contextual personality responses.
+    Enhanced to detect roleplay greeting patterns and emoted greetings.
+    ENHANCED: Prevents generic responses during active roleplay sessions.
     
     Args:
         user_message: The user's message
@@ -20,48 +23,124 @@ def handle_greeting(user_message: str, personality_context: str = "complete_self
     Returns:
         Greeting response string if this is a greeting, None otherwise
     """
+    # CRITICAL: Check if we're in roleplay mode - if so, let roleplay context handle it
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        if rp_state.is_roleplaying:
+            print("   🎭 GREETING DETECTION: In roleplay mode - deferring to roleplay context for character-aware greeting")
+            return None  # Let roleplay context handle greetings with full character knowledge
+    except ImportError:
+        pass  # Fallback to regular greeting handling if import fails
     user_lower = user_message.lower().strip()
     
+    # Standard greeting indicators
     greeting_indicators = ["hello", "hi", "greetings", "hey", "good morning", "good afternoon", "good evening"]
     
-    if not any(word in user_lower for word in greeting_indicators):
+    # Enhanced: Roleplay greeting patterns in emotes and actions
+    roleplay_greeting_patterns = [
+        r'\*waves?\s+hello\*',           # "*waves hello*"
+        r'\*nods?\s+in\s+greeting\*',    # "*nods in greeting*"
+        r'\*approaches?\s+.*smile\*',     # "*approaches with a smile*"
+        r'\*enters?\s+and\s+looks?\s+around\*', # "*enters and looks around*"
+        r'\*walks?\s+in\*',              # "*walks in*"
+        r'\*arrives?\*',                 # "*arrives*"
+        r'\*comes?\s+in\*',              # "*comes in*"
+        r'\*steps?\s+(?:in|into)\*',     # "*steps in*"
+        r'\*waves?\s+(?:to|at)\s+everyone\*', # "*waves to everyone*"
+        r'\*looks?\s+around\s+.*(?:room|bar|area)\*', # "*looks around the room*"
+        r'\*glances?\s+around\*',        # "*glances around*"
+    ]
+    
+    # Check standard greeting indicators
+    has_standard_greeting = any(word in user_lower for word in greeting_indicators)
+    
+    # Check roleplay greeting patterns
+    has_roleplay_greeting = any(re.search(pattern, user_lower) for pattern in roleplay_greeting_patterns)
+    
+    # Enhanced: Character-to-character greetings (bracket format)
+    character_greeting_pattern = r'\[[^\]]+\]\s*(?:hello|hi|greetings|hey|good\s+(?:morning|afternoon|evening))'
+    has_character_greeting = bool(re.search(character_greeting_pattern, user_lower))
+    
+    # Return None if no greeting detected
+    if not (has_standard_greeting or has_roleplay_greeting or has_character_greeting):
         return None
+    
+    # Enhanced: Extract character name for personalized responses
+    character_match = re.search(r'\[([^\]]+)\]', user_message)
+    character_name = character_match.group(1) if character_match else None
     
     # Contextual greetings based on personality
     if "stellar" in personality_context.lower() or "space" in personality_context.lower():
-        greetings = [
-            "Welcome. *adjusts stellar cartography display* I'm Elsie, Stellar Cartographer aboard the Stardancer. What brings you here?",
-            "*looks up from navigation charts* Good evening. The stars are particularly beautiful tonight. How can I help you?",
-            "*pauses from analyzing sensor data* Hello there. Always fascinating to see what the universe brings our way.",
-            "*pauses thoughtfully* Hello there.",
-            "*pauses thoughtfully* Hello there."
-        ]
-        
+        if character_name:
+            greetings = [
+                f"*looks up from navigation charts* Good evening, {character_name}. The stars are particularly beautiful tonight.",
+                f"*pauses from analyzing sensor data* Hello there, {character_name}. Always fascinating to see what the universe brings our way.",
+                f"*adjusts stellar cartography display* Welcome, {character_name}. What brings you here?",
+                "*pauses thoughtfully* Hello there.",
+                "*nods with quiet elegance* Welcome."
+            ]
+        else:
+            greetings = [
+                "Welcome. *adjusts stellar cartography display* I'm Elsie, Stellar Cartographer aboard the Stardancer. What brings you here?",
+                "*looks up from navigation charts* Good evening. The stars are particularly beautiful tonight. How can I help you?",
+                "*pauses from analyzing sensor data* Hello there. Always fascinating to see what the universe brings our way.",
+                "*pauses thoughtfully* Hello there.",
+                "*nods with quiet elegance* Welcome."
+            ]
         
     elif "dance" in personality_context.lower():
-        greetings = [
-            "Welcome. *moves with fluid grace* I'm Elsie. There's a certain rhythm to everything, don't you think?",
-            "*turns with elegant precision* Good evening. The harmony of movement and conversation - both are art forms.",
-            "*adjusts posture with practiced elegance* Hello. Life is like a dance, and every interaction is a new step."
-            "*pauses thoughtfully* Hello there.",
-            "*pauses thoughtfully* Hello there."
-        ]
+        if character_name:
+            greetings = [
+                f"*turns with elegant precision* Good evening, {character_name}. The harmony of movement and conversation - both are art forms.",
+                f"*moves with fluid grace* Welcome, {character_name}. There's a certain rhythm to everything, don't you think?",
+                f"*adjusts posture with practiced elegance* Hello, {character_name}. Life is like a dance, and every interaction is a new step.",
+                "*pauses thoughtfully* Hello there.",
+                "*nods with graceful precision* Welcome."
+            ]
+        else:
+            greetings = [
+                "Welcome. *moves with fluid grace* I'm Elsie. There's a certain rhythm to everything, don't you think?",
+                "*turns with elegant precision* Good evening. The harmony of movement and conversation - both are art forms.",
+                "*adjusts posture with practiced elegance* Hello. Life is like a dance, and every interaction is a new step.",
+                "*pauses thoughtfully* Hello there.",
+                "*nods with graceful precision* Welcome."
+            ]
     elif "bartender" in personality_context.lower():
-        greetings = [
-            "Welcome to my establishment. *adjusts the ambient lighting with fluid grace* I'm Elsie, your bartender for this evening. What draws you to my bar?",
-            "*pauses momentarily then moves with elegant precision* Good evening. I'm Elsie, trained in the finest bartending arts in the quadrant. How may I help you?",
-            "*polishes glass with practiced movements, then sets it down with quiet precision* Evening. The night is young, and full of possibilities. What brings you here?"
-            "*pauses thoughtfully* Hello there.",
-            "*pauses thoughtfully* Hello there."
-        ]
+        if character_name:
+            greetings = [
+                f"*pauses momentarily then moves with elegant precision* Good evening, {character_name}. How may I help you tonight?",
+                f"*polishes glass with practiced movements* Evening, {character_name}. The night is young, and full of possibilities.",
+                f"*adjusts the ambient lighting with fluid grace* Welcome, {character_name}. What draws you to my bar?",
+                "*pauses thoughtfully* Hello there.",
+                "*nods welcomingly* Good evening."
+            ]
+        else:
+            greetings = [
+                "Welcome to my establishment. *adjusts the ambient lighting with fluid grace* I'm Elsie, your bartender for this evening. What draws you to my bar?",
+                "*pauses momentarily then moves with elegant precision* Good evening. I'm Elsie, trained in the finest bartending arts in the quadrant. How may I help you?",
+                "*polishes glass with practiced movements, then sets it down with quiet precision* Evening. The night is young, and full of possibilities. What brings you here?",
+                "*pauses thoughtfully* Hello there.",
+                "*nods welcomingly* Good evening."
+            ]
     else:
-        greetings = [
-            "Welcome. *adjusts display with fluid precision* I'm Elsie. What brings you here tonight?",
-            "*looks up with interest* Good evening. Always a pleasure to meet someone new. How can I help you?",
-            "*pauses thoughtfully* Hello there."
-            "*pauses thoughtfully* Hello there.",
-            "*pauses thoughtfully* Hello there."
-        ]
+        # Enhanced: Default responses with character awareness
+        if character_name:
+            greetings = [
+                f"*adjusts display with fluid precision* Welcome, {character_name}. What brings you here tonight?",
+                f"*looks up with interest* Good evening, {character_name}. Always a pleasure to see you.",
+                f"*adjusts the ambient lighting subtly* Good evening, {character_name}. The night holds many possibilities.",
+                "*pauses thoughtfully* Hello there.",
+                "*nods with quiet elegance* Welcome."
+            ]
+        else:
+            greetings = [
+                "Welcome. *adjusts display with fluid precision* I'm Elsie. What brings you here tonight?",
+                "*looks up with interest* Good evening. Always a pleasure to meet someone new. How can I help you?",
+                "*pauses thoughtfully* Hello there.",
+                "*nods with quiet elegance* Welcome.",
+                "*adjusts the ambient lighting subtly* Good evening. The night holds many possibilities."
+            ]
     
     return random.choice(greetings)
 
@@ -116,6 +195,7 @@ def handle_status_inquiry(user_message: str) -> Optional[str]:
 def get_conversational_response(user_message: str, personality_context: str = "complete_self") -> Optional[str]:
     """
     Get contextual conversational responses for various personality contexts.
+    Enhanced for roleplay awareness and character detection.
     
     Args:
         user_message: The user's message
@@ -124,6 +204,11 @@ def get_conversational_response(user_message: str, personality_context: str = "c
     Returns:
         Conversational response string based on context
     """
+    
+    # Enhanced: Check for character names in roleplay format
+    character_match = re.search(r'\[([^\]]+)\]', user_message)
+    character_name = character_match.group(1) if character_match else None
+    
     if "stellar" in personality_context.lower():
         conversational_responses = [
             "*adjusts sensor readings* Fascinating.",
@@ -164,17 +249,28 @@ def get_conversational_response(user_message: str, personality_context: str = "c
             "*nods encouragingly* And then?"
         ]
     else:
-        conversational_responses = [
-            "*nods thoughtfully* Interesting.",
-            "*adjusts display* I see.",
-            "*pauses in her work* That's worth considering.",
-            "*glances up with interest* Tell me more.",
-            "*focuses on you* Go on.",
-            "*raises an eyebrow* Really?",
-            "*sets down what she's doing* I'm listening.",
-            "*moves with practiced grace* Continue.",
-            "*looks at you intently* That's intriguing.",
-            "*nods encouragingly* And then?"
-        ]
+        # Enhanced: Include character-aware responses when possible
+        if character_name:
+            conversational_responses = [
+                f"*nods thoughtfully at {character_name}* Interesting.",
+                f"*adjusts display while listening to {character_name}* I see.",
+                f"*focuses on {character_name}* That's worth considering.",
+                "*nods thoughtfully* Interesting.",
+                "*adjusts display* I see.", 
+                "*pauses in her work* That's worth considering."
+            ]
+        else:
+            conversational_responses = [
+                "*nods thoughtfully* Interesting.",
+                "*adjusts display* I see.",
+                "*pauses in her work* That's worth considering.",
+                "*glances up with interest* Tell me more.",
+                "*focuses on you* Go on.",
+                "*raises an eyebrow* Really?",
+                "*sets down what she's doing* I'm listening.",
+                "*moves with practiced grace* Continue.",
+                "*looks at you intently* That's intriguing.",
+                "*nods encouragingly* And then?"
+            ]
     
     return random.choice(conversational_responses) 
