@@ -102,7 +102,7 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     # 7. Single Character Scene - Be responsive
     if len(participants) <= 1:
         word_count = len(user_message.split())
-        if word_count >= 3:
+        if word_count >= 1:
             print(f"   👤 SINGLE CHARACTER: Substantial message")
             return True, "single_character_substantial"
     

@@ -114,7 +114,15 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
     character_names = extract_character_names_from_emotes(user_message)
     if character_names:
         print(f"   📝 UNIVERSAL TRACKING: Character speaking: {character_names[0]} (Turn {turn_number})")
+        print(f"   📝 ALL DETECTED CHARACTERS: {character_names}")
+        
+        # DEBUG: Check if Elsie is being detected as a character
+        for char in character_names:
+            if char.lower() in ['elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid']:
+                print(f"   ⚠️  WARNING: Elsie detected as character: '{char}' - This should not happen!")
+        
         if rp_state.is_roleplaying:
+            print(f"   📝 ADDING CHARACTER TO ROLEPLAY: {character_names[0]}")
             rp_state.mark_character_turn(turn_number, character_names[0])
         else:
             print(f"   ⚠️  Character detected but not in roleplay mode - potential detection issue")
@@ -307,20 +315,6 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
                 pre_generated_response=response,
                 strategy=strategy
             )
-    
-    # Handle simple implicit responses - PRESERVE EXISTING
-    if (strategy['approach'] == 'roleplay_active' and 
-        strategy.get('response_reason') == 'simple_implicit_response'):
-        
-        print(f"   💬 SIMPLE IMPLICIT RESPONSE:")
-        print(f"      - Character following up after Elsie addressed them")
-        print(f"      - Using normal AI response generation for natural conversation")
-        
-        return ResponseDecision(
-            needs_ai_generation=True,
-            pre_generated_response=None,
-            strategy=strategy
-        )
     
     # Handle new implicit response types - NEW
     if (strategy['approach'] == 'roleplay_active' and 
