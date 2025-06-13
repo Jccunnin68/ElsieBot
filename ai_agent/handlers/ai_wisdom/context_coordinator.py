@@ -15,6 +15,8 @@ from .database_contexts import (
     get_tell_me_about_context,
     get_federation_archives_context,
     get_stardancer_info_context,
+    get_stardancer_command_context,
+    get_stardancer_roleplay_context,
     get_ship_logs_context,
     get_general_with_context,
     get_focused_continuation_context
@@ -45,6 +47,14 @@ def get_context_for_strategy(strategy: Dict[str, Any], user_message: str) -> str
         return get_tell_me_about_context(user_message)
     elif approach == 'stardancer_info':
         return get_stardancer_info_context(user_message, strategy)
+    elif approach == 'stardancer_command':
+        # Route to appropriate context based on roleplay state
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        if rp_state.is_roleplaying:
+            return get_stardancer_roleplay_context(user_message, strategy)
+        else:
+            return get_stardancer_command_context(user_message, strategy)
     elif approach == 'ship_logs':
         return get_ship_logs_context(user_message)
     elif approach == 'ooc':

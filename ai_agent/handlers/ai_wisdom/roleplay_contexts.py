@@ -15,10 +15,7 @@ from handlers.ai_wisdom.content_retrieval_db import (
     get_ship_information
 )
 from handlers.ai_logic.query_detection import (
-    is_stardancer_query,
-    is_character_query,
     extract_tell_me_about_subject,
-    is_log_query
 )
 
 
@@ -305,9 +302,11 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
         'our mission', 'the mission', 'mission objectives',
         'ship systems', 'ship status', 'ship specifications',
         
-        # Crew/personnel related
+        # Crew/personnel related (enhanced for command staff)
         'captain', 'commander', 'officer', 'crew', 'staff',
         'who commands', 'who\'s the captain', 'command structure',
+        'command staff', 'senior staff', 'bridge crew', 'command team',
+        'first officer', 'xo', 'executive officer',
         'who is', 'tell me about', 'do you know',
         'blaine', 'marcus', 'sif', 'daly', 'shay',
         
@@ -335,19 +334,34 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
 
 def _get_roleplay_database_context(user_message: str) -> str:
     """
-    Get relevant database context for roleplay scenarios.
-    Enhanced to prioritize ship/character info that should be delivered in-character.
+    Get relevant database context for roleplay scenarios with temporal awareness.
+    Enhanced to use unified information retrieval and apply Elsie's sentience timeline.
     """
+    # Import the new unified functions
+    from .database_contexts import _get_comprehensive_information, _create_roleplay_context
+    
     context_parts = []
     message_lower = user_message.lower()
     
-    # PRIORITY 1: Check for Stardancer/ship queries first
+    # PRIORITY 1: Check for Stardancer command staff queries first
+    command_keywords = ['command staff', 'senior staff', 'bridge crew', 'command team', 'first officer', 'xo', 'executive officer']
     stardancer_keywords = ['stardancer', 'stardancer ship', 'this ship', 'our ship', 'the ship', 'vessel', 'starship']
-    if any(keyword in message_lower for keyword in stardancer_keywords):
-        print(f"   🚀 SHIP QUERY IN ROLEPLAY - Getting Stardancer info")
-        stardancer_info = get_ship_information("stardancer")
-        if stardancer_info:
-            context_parts.append(f"**USS Stardancer Information (In-Character Context):**\n{stardancer_info}")
+    
+    is_stardancer_query = any(keyword in message_lower for keyword in stardancer_keywords)
+    is_command_query = any(keyword in message_lower for keyword in command_keywords)
+    
+    if is_stardancer_query and is_command_query:
+        print(f"   🚀🎖️ STARDANCER COMMAND STAFF QUERY IN ROLEPLAY - Using unified search with temporal awareness")
+        info_result = _get_comprehensive_information(user_message, 'stardancer_command')
+        if info_result['has_information']:
+            roleplay_context = _create_roleplay_context(info_result, 'command staff', 'USS Stardancer command staff')
+            context_parts.append(roleplay_context)
+    elif is_stardancer_query:
+        print(f"   🚀 SHIP QUERY IN ROLEPLAY - Getting general Stardancer info with temporal awareness")
+        info_result = _get_comprehensive_information("stardancer", 'ship')
+        if info_result['has_information']:
+            roleplay_context = _create_roleplay_context(info_result, 'ship', 'USS Stardancer')
+            context_parts.append(roleplay_context)
     
     # PRIORITY 2: Check for crew/character queries
     crew_keywords = ['captain', 'commander', 'officer', 'crew', 'blaine', 'marcus', 'sif', 'daly', 'shay']
@@ -359,29 +373,32 @@ def _get_roleplay_database_context(user_message: str) -> str:
             break
     
     if character_query_detected:
-        print(f"   👥 CREW QUERY IN ROLEPLAY - Getting character info")
+        print(f"   👥 CREW QUERY IN ROLEPLAY - Getting character info with temporal awareness")
         # Try to extract specific character names
         potential_chars = ['blaine', 'marcus', 'sif', 'daly', 'shay', 'luka']
         for char_name in potential_chars:
             if char_name in message_lower:
-                char_info = search_by_type(char_name, 'personnel')
-                if char_info:
-                    context_parts.append(f"**Character Information - {char_name.title()} (In-Character Context):**\n{char_info}")
+                info_result = _get_comprehensive_information(char_name, 'character')
+                if info_result['has_information']:
+                    roleplay_context = _create_roleplay_context(info_result, 'character', char_name)
+                    context_parts.append(roleplay_context)
                     break
         
         # If no specific character found, get general crew info
         if not any(char_name in message_lower for char_name in potential_chars):
-            crew_info = search_by_type("stardancer crew", 'personnel')
-            if crew_info:
-                context_parts.append(f"**Stardancer Crew Information (In-Character Context):**\n{crew_info}")
+            info_result = _get_comprehensive_information("stardancer crew", 'character')
+            if info_result['has_information']:
+                roleplay_context = _create_roleplay_context(info_result, 'crew', 'Stardancer crew')
+                context_parts.append(roleplay_context)
     
     # PRIORITY 3: Check for mission/exploration queries
     mission_keywords = ['mission', 'objective', 'exploration', 'magellanic', 'where are we', 'current location']
     if any(keyword in message_lower for keyword in mission_keywords):
-        print(f"   🎯 MISSION QUERY IN ROLEPLAY - Getting mission info")
-        log_info = get_log_content(user_message, mission_logs_only=True)
-        if log_info:
-            context_parts.append(f"**Current Mission Information (In-Character Context):**\n{log_info}")
+        print(f"   🎯 MISSION QUERY IN ROLEPLAY - Getting mission info with temporal awareness")
+        info_result = _get_comprehensive_information(user_message, 'log')
+        if info_result['has_information']:
+            roleplay_context = _create_roleplay_context(info_result, 'mission', 'current mission')
+            context_parts.append(roleplay_context)
     
     # PRIORITY 4: Check for drink service scenarios - provide crew interaction context
     drink_service_keywords = ['orders', 'requests', 'asks for', 'motions for', 'signals for']
@@ -391,19 +408,20 @@ def _get_roleplay_database_context(user_message: str) -> str:
     has_drink_mention = any(keyword in message_lower for keyword in drink_keywords)
     
     if has_service_action and has_drink_mention:
-        print(f"   🍺 DRINK SERVICE IN ROLEPLAY - Getting crew interaction context")
-        # Get Stardancer crew information for appropriate service context
-        crew_info = search_by_type("stardancer crew", 'personnel')
-        if crew_info:
-            context_parts.append(f"**Crew Service Context (Know Your Customers):**\n{crew_info}")
+        print(f"   🍺 DRINK SERVICE IN ROLEPLAY - Getting crew interaction context with temporal awareness")
+        info_result = _get_comprehensive_information("stardancer crew", 'character')
+        if info_result['has_information']:
+            roleplay_context = _create_roleplay_context(info_result, 'crew service', 'crew members')
+            context_parts.append(roleplay_context)
     
     # FALLBACK: Check for standard "tell me about" queries if nothing else matched
     if not context_parts:
         tell_me_subject = extract_tell_me_about_subject(user_message)
         if tell_me_subject:
-            print(f"   📚 GENERAL QUERY IN ROLEPLAY - Getting info about: {tell_me_subject}")
-            general_info = get_tell_me_about_content_prioritized(tell_me_subject)
-            if general_info:
-                context_parts.append(f"**Information about {tell_me_subject} (In-Character Context):**\n{general_info}")
+            print(f"   📚 GENERAL QUERY IN ROLEPLAY - Getting info about: {tell_me_subject} with temporal awareness")
+            info_result = _get_comprehensive_information(tell_me_subject, 'general')
+            if info_result['has_information']:
+                roleplay_context = _create_roleplay_context(info_result, 'general', tell_me_subject)
+                context_parts.append(roleplay_context)
     
     return "\n\n".join(context_parts) if context_parts else "" 
