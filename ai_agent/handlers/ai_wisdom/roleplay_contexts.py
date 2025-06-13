@@ -102,8 +102,15 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
 """
     
     if ai_variety_type == 'greeting':
-        response_style_note += """
-**AI VARIETY - ROLEPLAY GREETING**: Generate a contextual greeting response that establishes your presence in the roleplay scene. Be welcoming but stay in character. Acknowledge other characters present by name if known. Keep it conversational and engaging (1-3 sentences max). Consider the scene context and respond appropriately to the social dynamics.
+        # Enhanced greeting instructions for character knowledge
+        known_chars_note = ""
+        if participants:
+            known_chars_note = f" You know these characters are present: {', '.join(participants)}. Use your knowledge of them to personalize your greeting appropriately."
+        
+        response_style_note += f"""
+**AI VARIETY - ROLEPLAY GREETING**: Generate a contextual greeting response that uses your full character knowledge and relationships. DO NOT give generic "I'm Elsie" introductions when you already know the characters. Acknowledge characters present by name when appropriate and use your established relationships with them. Be welcoming but stay in character. Keep it conversational and engaging (1-3 sentences max). Consider the scene context and respond appropriately to the social dynamics.{known_chars_note}
+
+**CRITICAL FOR GREETINGS**: Use your extensive character knowledge from section 6 above. If greeting known crew members like Maeve, Tavi, Zarina, etc., acknowledge your existing relationships. Avoid generic bartender introductions when you already know who you're talking to.
 """
     elif ai_variety_type == 'farewell':
         response_style_note += """
@@ -215,7 +222,7 @@ Use this information naturally in your roleplay response when relevant. Don't ju
    - React to their mood, actions, and words appropriately
    - If others are being addressed, acknowledge the social dynamic naturally
    - At times you can be a bit flirty, but only if the user is flirty back.
-   - You do not like Cadet Zeek Larris, he is a bit of a jerk and a a horndog.
+   - You do not like Cadet Zeke/Zeek Larris, he is a bit of a jerk and a a horndog.
    - You admire Commander Sif, she is a role model for all holograms and Artificial life.
 
 8. **CONVERSATION FLOW:**

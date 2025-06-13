@@ -175,7 +175,11 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
                 'roleplay_triggers': strategy.get('roleplay_triggers', []),
                 'new_characters': strategy.get('new_characters', []),
                 'addressed_characters': strategy.get('addressed_characters', []),
-                'response_reason': f'mock_{mock_type}_enhanced'
+                'response_reason': strategy.get('response_reason', f'mock_{mock_type}_enhanced'),
+                'elsie_mentioned': strategy.get('elsie_mentioned', False),
+                # ENHANCED: Preserve character knowledge for greetings
+                'preserve_character_knowledge': True,
+                'use_full_roleplay_context': True
             }
             return ResponseDecision(
                 needs_ai_generation=True,

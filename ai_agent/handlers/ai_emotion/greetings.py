@@ -14,6 +14,7 @@ def handle_greeting(user_message: str, personality_context: str = "complete_self
     """
     Handle greeting messages with contextual personality responses.
     Enhanced to detect roleplay greeting patterns and emoted greetings.
+    ENHANCED: Prevents generic responses during active roleplay sessions.
     
     Args:
         user_message: The user's message
@@ -22,6 +23,15 @@ def handle_greeting(user_message: str, personality_context: str = "complete_self
     Returns:
         Greeting response string if this is a greeting, None otherwise
     """
+    # CRITICAL: Check if we're in roleplay mode - if so, let roleplay context handle it
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        if rp_state.is_roleplaying:
+            print("   🎭 GREETING DETECTION: In roleplay mode - deferring to roleplay context for character-aware greeting")
+            return None  # Let roleplay context handle greetings with full character knowledge
+    except ImportError:
+        pass  # Fallback to regular greeting handling if import fails
     user_lower = user_message.lower().strip()
     
     # Standard greeting indicators
