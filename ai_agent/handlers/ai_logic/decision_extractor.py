@@ -23,6 +23,7 @@ from handlers.ai_emotion import (
     get_simple_continuation_response,
     get_menu_response
 )
+from handlers.ai_attention.response_logic import should_elsie_respond_in_roleplay
 
 
 def detect_mock_response_type(user_message: str) -> Optional[str]:
@@ -188,6 +189,21 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
             strategy=strategy
         )
     
+    # CRITICAL: Double-check for DGM posts before any other processing
+    from handlers.ai_attention.dgm_handler import check_dgm_post
+    dgm_check = check_dgm_post(user_message)
+    if dgm_check['is_dgm']:
+        print(f"   🚨 CRITICAL DGM CHECK - DGM POST DETECTED:")
+        print(f"      - Action: {dgm_check['action']}")
+        print(f"      - Strategy Approach: {strategy['approach']}")
+        print(f"      - DGM Controlled Elsie: {dgm_check['dgm_controlled_elsie']}")
+        print(f"   🎬 FORCING NO_RESPONSE FOR DGM POST")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy=strategy
+        )
+
     # Handle DGM posts - never respond - PRESERVE EXISTING
     if strategy['approach'] in ['dgm_scene_setting', 'dgm_scene_end']:
         print(f"   🎬 DGM POST - No response generated")
@@ -214,8 +230,33 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
             strategy=strategy
         )
 
-    # Handle roleplay listening mode - provide subtle presence responses - PRESERVE EXISTING
+    # CRITICAL FIX: Check for implicit responses BEFORE handling listening mode
+    # The strategy engine may have set 'roleplay_listening' but we need to double-check
+    # if this should actually be an implicit response
     if strategy['approach'] == 'roleplay_listening':
+        # Re-check if this should be an implicit response
+       
+        
+        # Use the already imported get_roleplay_state and existing rp_state
+        turn_number = len(conversation_history) + 1
+        should_respond, response_reason = should_elsie_respond_in_roleplay(user_message, rp_state, turn_number)
+        
+        print(f"   🔍 DOUBLE-CHECKING IMPLICIT RESPONSE:")
+        print(f"      - Should Respond: {should_respond}")
+        print(f"      - Response Reason: {response_reason}")
+        
+        # If implicit response detected, override the listening strategy
+        if should_respond and response_reason in ['implicit_single_character', 'implicit_multi_character']:
+            print(f"   💬 OVERRIDING LISTENING MODE - Implicit response detected: {response_reason}")
+            strategy['approach'] = 'roleplay_active'
+            strategy['response_reason'] = response_reason
+            return ResponseDecision(
+                needs_ai_generation=True,
+                pre_generated_response=None,
+                strategy=strategy
+            )
+        
+        # Otherwise, proceed with listening mode logic
         should_interject = strategy.get('should_interject', False)
         listening_count = strategy.get('listening_turn_count', 0)
         

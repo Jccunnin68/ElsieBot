@@ -49,35 +49,44 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
     print(f"      - Last Character Elsie Addressed: {rp_state.last_character_elsie_addressed}")
     print(f"      - Turn History: {rp_state.turn_history[-3:] if len(rp_state.turn_history) >= 3 else rp_state.turn_history}")
     
-    # 1. DGM Session Special Handling (unchanged)
+    print(f"\n   🔍 === RESPONSE LOGIC FLOW DEBUG ===")
+    
+    # 1. DGM Session Special Handling - ALLOW IMPLICIT RESPONSES
     if is_dgm_session:
+        print(f"   1️⃣ CHECKING DGM SESSION...")
         if speaking_character and speaking_character.lower() == 'elsie':
             print(f"   🎭 DGM SESSION: Directly addressed by {speaking_character}")
             return True, "dgm_direct_address"
         
         if speaking_character:
+            print(f"   👤 ADDING SPEAKING CHARACTER: {speaking_character}")
             rp_state.add_speaking_character(speaking_character, current_turn)
         
-        print(f"   👂 DGM SESSION: Passive listening mode")
-        return False, "dgm_passive_listening"
+        # In DGM sessions, we still need to check for implicit responses
+        # Don't immediately return passive listening - let the logic continue
+        print(f"   🎬 DGM SESSION: Checking for implicit responses before defaulting to passive listening")
     
     # 2. Direct Address Detection (always respond)
+    print(f"   2️⃣ CHECKING DIRECT ADDRESS...")
     if _is_elsie_directly_addressed(user_message, speaking_character):
         print(f"   🎭 DIRECT ADDRESS: Elsie directly addressed")
         return True, "direct_address"
     
     # 3. Check for explicit redirection (breaks implicit chain)
+    print(f"   3️⃣ CHECKING EXPLICIT REDIRECTION...")
     redirection_target = _check_explicit_redirection(user_message, participants)
     if redirection_target:
         print(f"   🔄 EXPLICIT REDIRECTION: Conversation redirected to {redirection_target}")
         return False, "explicit_redirection"
     
     # 4. Check for walk-away emotes (breaks implicit chain)
+    print(f"   4️⃣ CHECKING WALK-AWAY EMOTES...")
     if _check_walk_away_emote(user_message):
         print(f"   🚶 WALK AWAY: Character walking away detected")
         return False, "character_walking_away"
     
-    # 5. IMPLICIT RESPONSE LOGIC - The core fix
+    # 5. IMPLICIT RESPONSE LOGIC - The core fix (MOVED TO TOP PRIORITY)
+    print(f"   5️⃣ CHECKING IMPLICIT RESPONSE LOGIC...")
     is_implicit = rp_state.is_simple_implicit_response(current_turn, user_message)
     if is_implicit:
         # Pathway 1: Single Character - Always respond
@@ -90,7 +99,10 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
             print(f"   💬 PATHWAY 2 (MULTI): Implicit response - continuing conversation chain")
             return True, "implicit_multi_character"
     
+    print(f"   ❌ No implicit response detected, continuing to other checks...")
+    
     # 6. Thread Session Special Handling
+    print(f"   6️⃣ CHECKING THREAD SESSION...")
     if is_thread_session:
         word_count = len(user_message.split())
         if word_count >= 10:
@@ -99,19 +111,33 @@ def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayState
                 print(f"   🧵 THREAD: Substantial message detected ({word_count} words)")
                 return True, "thread_substantial_message"
     
-    # 7. Single Character Scene - Be responsive
+    # 7. Single Character Scene - Be responsive (ALWAYS RESPOND IN SINGLE CHARACTER)
+    print(f"   7️⃣ CHECKING SINGLE CHARACTER SCENE...")
     if len(participants) <= 1:
         word_count = len(user_message.split())
-        if word_count >= 1:
-            print(f"   👤 SINGLE CHARACTER: Substantial message")
+        # In single character scenes, always respond to maintain conversation flow
+        if word_count >= 1:  # Back to 1+ words - always respond in single character
+            print(f"   👤 SINGLE CHARACTER: Always respond ({word_count} words)")
             return True, "single_character_substantial"
+        else:
+            print(f"   👤 SINGLE CHARACTER: Empty message - listening mode")
+    else:
+        print(f"   👥 MULTI-CHARACTER: Skipping single character check ({len(participants)} participants)")
     
     # 8. Check for subtle bar interactions
+    print(f"   8️⃣ CHECKING SUBTLE BAR INTERACTIONS...")
     if check_subtle_bar_interaction(user_message, rp_state):
         print(f"   🥃 SUBTLE BAR SERVICE: Non-verbal drink order detected")
         return True, "subtle_bar_service"
     
     # 9. Default to Listening Mode
+    print(f"   9️⃣ DEFAULT TO LISTENING MODE")
+    
+    # Special handling for DGM sessions - ultra-passive unless implicit response
+    if is_dgm_session:
+        print(f"   🎬 DGM SESSION: Ultra-passive listening mode")
+        return False, "dgm_passive_listening"
+    
     print(f"   👂 LISTENING MODE: No response needed")
     return False, "listening"
 
