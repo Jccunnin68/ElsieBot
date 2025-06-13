@@ -99,6 +99,7 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
     # Check for scene end indicators - multiple patterns
     scene_end_patterns = [
         r'\[DGM\]\s*\[END\]',  # [DGM][END]
+        r'\[DGM\]\s+END\b',  # [DGM] END (the missing pattern!)
         r'\[DGM\]\s*\*end\s+scene\*',  # [DGM] *end scene*
         r'\[DGM\]\s*\*scene\s+ends?\*',  # [DGM] *scene ends*
         r'\[DGM\]\s*\*fade\s+to\s+black\*',  # [DGM] *fade to black*

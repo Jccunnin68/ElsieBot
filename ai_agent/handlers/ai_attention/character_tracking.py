@@ -180,6 +180,20 @@ def is_valid_character_name(name: str) -> bool:
     if name_lower in ['to', 'at', 'in', 'on', 'by', 'for', 'with', 'from', 'of', 'as', 'is', 'it']:
         return False
     
+    # Reject multi-word phrases that aren't proper names
+    words = name.split()
+    if len(words) > 3:  # Names shouldn't be more than 3 words typically
+        return False
+    
+    # If it's multiple words, each word should be capitalized (proper noun)
+    if len(words) > 1:
+        for word in words:
+            if not word[0].isupper():
+                return False
+            # Each word should also not be a common word
+            if word.lower() in additional_excluded:
+                return False
+    
     return True
 
 def extract_current_speaker(user_message: str) -> Optional[str]:
@@ -215,7 +229,7 @@ def extract_current_speaker(user_message: str) -> Optional[str]:
 def extract_character_names_from_emotes(user_message: str) -> List[str]:
     """
     Extract character names from emotes for speaker permanence.
-    Uses Named Entity Recognition patterns and validation.
+    Extracts from both [Character Name] format AND emotes with enhanced filtering.
     Enhanced to detect [Character Name] format for multi-character play.
     Supports Nordic and Icelandic characters.
     FIXED: Excludes DGM and other meta tags from character detection.
@@ -247,6 +261,8 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
     bracket_pattern = f'\\[({VALID_CHAR_PATTERN})\\]'
     bracket_matches = re.findall(bracket_pattern, user_message)
     
+    print(f"         - Bracket matches found: {bracket_matches}")
+    
     for name in bracket_matches:
         name = name.strip()
         
@@ -259,14 +275,24 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
             name_normalized = normalize_character_name(name)
             if name_normalized not in character_names and name_normalized not in EXCLUDED_PARTICIPANTS:
                 character_names.append(name_normalized)
+                print(f"         - ✅ Added valid bracket character: '{name_normalized}'")
+            else:
+                print(f"         - ⚠️  Duplicate bracket character: '{name_normalized}'")
+        else:
+            print(f"         - ❌ Invalid bracket character name: '{name}'")
     
-    # Extract text within emotes
+    # 2. Extract character names from emotes with enhanced filtering
     emote_pattern = r'\*([^*]+)\*'
     emotes = re.findall(emote_pattern, user_message)
     
+    print(f"         - Emotes found: {emotes}")
+    
     for emote in emotes:
+        print(f"         - Processing emote: '{emote}'")
         # Enhanced pattern to catch names with Nordic/Icelandic characters
         potential_names = re.findall(f'\\b({VALID_CHAR_PATTERN})\\b', emote)
+        
+        print(f"         - Potential names in emote: {potential_names}")
         
         for name in potential_names:
             # Skip meta tags
@@ -277,7 +303,13 @@ def extract_character_names_from_emotes(user_message: str) -> List[str]:
                 name_normalized = normalize_character_name(name)
                 if name_normalized not in character_names and name_normalized not in EXCLUDED_PARTICIPANTS:
                     character_names.append(name_normalized)
+                    print(f"         - ✅ Added valid emote character: '{name_normalized}'")
+                else:
+                    print(f"         - ⚠️  Duplicate emote character: '{name_normalized}'")
+            else:
+                print(f"         - ❌ Invalid emote character name: '{name}' (filtered by enhanced validation)")
     
+    print(f"         - Final character names: {character_names}")
     return character_names
 
 def extract_addressed_characters(user_message: str) -> List[str]:

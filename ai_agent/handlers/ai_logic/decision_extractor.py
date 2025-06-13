@@ -23,6 +23,7 @@ from handlers.ai_emotion import (
     get_simple_continuation_response,
     get_menu_response
 )
+from handlers.ai_attention.response_logic import should_elsie_respond_in_roleplay
 
 
 def detect_mock_response_type(user_message: str) -> Optional[str]:
@@ -85,11 +86,11 @@ def should_enhance_mock_with_ai(mock_type: str, api_key_available: bool, is_role
 def should_use_ai_variety_for_roleplay(api_key_available: bool) -> bool:
     """
     Determine if we should use AI generation for roleplay variety.
-    Returns True 60% of the time when API key is available.
+    Returns True 80% of the time when API key is available.
     """
     if not api_key_available:
         return False
-    return random.random() < 0.8  # 60% chance
+    return random.random() < 0.8  # 80% chance
 
 
 def extract_response_decision(user_message: str, conversation_history: list, channel_context: Dict = None) -> ResponseDecision:
@@ -98,6 +99,30 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
     Preserves all existing guard rails and logic.
     Enhanced with 20-minute auto-exit functionality.
     """
+    
+    # CRITICAL: Check for ANY DGM post FIRST - Elsie NEVER responds to DGM posts
+    import re
+    if re.search(r'^\s*\[DGM\]', user_message, re.IGNORECASE):
+        print(f"   🎬 DGM POST DETECTED - NEVER RESPOND")
+        print(f"   🚫 Message starts with [DGM]: '{user_message[:100]}{'...' if len(user_message) > 100 else ''}'")
+        
+        # Still need to process the DGM post for roleplay state management
+        from handlers.ai_attention.dgm_handler import check_dgm_post
+        dgm_result = check_dgm_post(user_message)
+        
+        # Create a minimal strategy for DGM handling
+        dgm_strategy = {
+            'approach': f"dgm_{dgm_result.get('action', 'post')}",
+            'needs_database': False,
+            'reasoning': f"DGM post detected - {dgm_result.get('action', 'unknown')} - NEVER RESPOND",
+            'context_priority': 'none'
+        }
+        
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy=dgm_strategy
+        )
     
     # Get roleplay state and log current status - PRESERVE EXISTING
     rp_state = get_roleplay_state()
@@ -146,7 +171,15 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
     character_names = extract_character_names_from_emotes(user_message)
     if character_names:
         print(f"   📝 UNIVERSAL TRACKING: Character speaking: {character_names[0]} (Turn {turn_number})")
+        print(f"   📝 ALL DETECTED CHARACTERS: {character_names}")
+        
+        # DEBUG: Check if Elsie is being detected as a character
+        for char in character_names:
+            if char.lower() in ['elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid']:
+                print(f"   ⚠️  WARNING: Elsie detected as character: '{char}' - This should not happen!")
+        
         if rp_state.is_roleplaying:
+            print(f"   📝 ADDING CHARACTER TO ROLEPLAY: {character_names[0]}")
             rp_state.mark_character_turn(turn_number, character_names[0])
         else:
             print(f"   ⚠️  Character detected but not in roleplay mode - potential detection issue")
@@ -354,6 +387,21 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
             strategy=strategy
         )
     
+    # CRITICAL: Double-check for DGM posts before any other processing
+    from handlers.ai_attention.dgm_handler import check_dgm_post
+    dgm_check = check_dgm_post(user_message)
+    if dgm_check['is_dgm']:
+        print(f"   🚨 CRITICAL DGM CHECK - DGM POST DETECTED:")
+        print(f"      - Action: {dgm_check['action']}")
+        print(f"      - Strategy Approach: {strategy['approach']}")
+        print(f"      - DGM Controlled Elsie: {dgm_check['dgm_controlled_elsie']}")
+        print(f"   🎬 FORCING NO_RESPONSE FOR DGM POST")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy=strategy
+        )
+
     # Handle DGM posts - never respond - PRESERVE EXISTING
     if strategy['approach'] in ['dgm_scene_setting', 'dgm_scene_end']:
         print(f"   🎬 DGM POST - No response generated")

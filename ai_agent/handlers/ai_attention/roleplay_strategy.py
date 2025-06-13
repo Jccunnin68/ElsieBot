@@ -27,26 +27,51 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
     """
     rp_state = get_roleplay_state()
     
+    print(f"\n🎭 === ROLEPLAY STRATEGY PROCESSING DEBUG ===")
+    print(f"   📋 Turn: {turn_number}")
+    print(f"   📝 Message: '{user_message}'")
+    print(f"   🎭 Already roleplaying: {rp_state.is_roleplaying}")
+    print(f"   👤 Current participants: {rp_state.get_participant_names()}")
+    
     # Extract character names for speaker permanence
     character_names = extract_character_names_from_emotes(user_message)
+    print(f"   🎭 Extracted character names: {character_names}")
+    
+    # DEBUG: Check if Elsie is in the extracted names
+    for char in character_names:
+        if char.lower() in ['elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid']:
+            print(f"   ⚠️  WARNING: Elsie in character_names: '{char}' - This will be filtered out!")
     
     # Extract addressed characters (those being spoken to)
     addressed_characters = extract_addressed_characters(user_message)
+    print(f"   👋 Addressed characters: {addressed_characters}")
+    
+    # DEBUG: Check if Elsie is in the addressed characters
+    for char in addressed_characters:
+        if char.lower() in ['elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid']:
+            print(f"   ⚠️  WARNING: Elsie in addressed_characters: '{char}' - This will be filtered out!")
     
     # Start new session if not already roleplaying
     if not rp_state.is_roleplaying:
+        print(f"   🚀 Starting new roleplay session...")
         rp_state.start_roleplay_session(turn_number, triggers, channel_context)
     
     # Add new participants and addressed characters
+    print(f"   👤 Adding participants...")
     for name in character_names:
+        print(f"      Adding character name: '{name}' as 'user'")
         rp_state.add_participant(name, "user", turn_number)
     
     for name in addressed_characters:
+        print(f"      Adding addressed character: '{name}' as 'addressed'")
         rp_state.add_participant(name, "addressed", turn_number)
+    
+    print(f"   📊 Final participants: {rp_state.get_participant_names()} (Count: {len(rp_state.get_participant_names())})")
     
     # Track character turn for simple implicit response logic
     if character_names:
         # Use the first detected character as the speaker
+        print(f"   📝 Marking character turn: {character_names[0]}")
         rp_state.mark_character_turn(turn_number, character_names[0])
     
     # Update confidence tracking

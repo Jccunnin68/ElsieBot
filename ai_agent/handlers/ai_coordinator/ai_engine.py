@@ -114,7 +114,20 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         wiki_info = ""
         
         # Generate context based on strategy
-        if strategy['needs_database']:
+        if strategy['approach'] == 'roleplay_active':
+            # ALL roleplay_active responses should use roleplay context
+            print(f"🎭 ROLEPLAY ACTIVE - Using roleplay context generation")
+            from handlers.ai_wisdom.roleplay_contexts import get_roleplay_context
+            context = get_roleplay_context(strategy, user_message)
+        
+        elif strategy['approach'] == 'roleplay_mock_enhanced':
+            # Roleplay mock enhanced responses also use roleplay context
+            mock_type = strategy.get('mock_response_type', 'unknown')
+            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with roleplay context")
+            from handlers.ai_wisdom.roleplay_contexts import get_roleplay_context
+            context = get_roleplay_context(strategy, user_message)
+        
+        elif strategy['needs_database']:
             print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")
             context = get_context_for_strategy(strategy, user_message)
             # general_with_context from get_context_for_strategy returns just the wiki info
@@ -122,17 +135,10 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
                 wiki_info = context 
                 context = "" # Reset context to be built in the default block
         
-        # Special handling for roleplay mock enhanced responses
-        elif strategy['approach'] == 'roleplay_mock_enhanced':
-            mock_type = strategy.get('mock_response_type', 'unknown')
-            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with roleplay context")
-            from handlers.ai_wisdom.roleplay_contexts import get_roleplay_context
-            context = get_roleplay_context(strategy, user_message)
-        
         # Generate context for simple chat (no database search needed)
         else:
             print(f"💬 SIMPLE CHAT MODE - No database search needed")
-            
+        
         # Set default context for simple chats and cases without specific context
         if not context:
             stardancer_mentioned = is_stardancer_query(user_message) or (wiki_info and 'stardancer' in wiki_info.lower())

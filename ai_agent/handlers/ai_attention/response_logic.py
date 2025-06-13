@@ -8,7 +8,7 @@ passive listening behavior.
 """
 
 import re
-from typing import Tuple, Optional, TYPE_CHECKING
+from typing import Tuple, Optional, TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from .state_manager import RoleplayStateManager

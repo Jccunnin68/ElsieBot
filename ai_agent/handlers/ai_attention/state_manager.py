@@ -115,6 +115,12 @@ class RoleplayStateManager:
         # Normalize the name for comparison (handle case variations)
         name_normalized = name.strip()
         
+        # FILTER OUT ELSIE - She should never be a participant
+        elsie_names = {'elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid', 'server', 'waitress'}
+        if name_normalized.lower() in elsie_names:
+            print(f"   🚫 FILTERED OUT ELSIE: '{name_normalized}' - Elsie should not be a participant")
+            return
+        
         # Check if participant already exists (case-insensitive)
         for participant in self.participants:
             if participant['name'].lower() == name_normalized.lower():
@@ -135,6 +141,7 @@ class RoleplayStateManager:
         print(f"      - Source: {source}")
         print(f"      - Turn: {turn_number}")
         print(f"      - Total Tracked: {len(self.participants)}")
+        print(f"      - All Participants: {[p['name'] for p in self.participants]}")
         print(f"      - DGM Session: {self.dgm_initiated}")
     
     def add_addressed_characters(self, character_names: List[str], turn_number: int):
@@ -233,7 +240,7 @@ class RoleplayStateManager:
     def set_last_character_addressed(self, character_name: str):
         """Set who Elsie last addressed."""
         self.last_character_elsie_addressed = character_name
-        print(f"   👋 ELSIE ADDRESSED: {character_name}")
+        print(f"   👤 ELSIE ADDRESSED: {character_name}")
     
     def is_simple_implicit_response(self, current_turn: int, user_message: str) -> bool:
         """
@@ -298,18 +305,26 @@ class RoleplayStateManager:
         it's directed at someone other than Elsie.
         NOTE: Ignores speaker brackets [Character Name] since those indicate who is speaking, not being addressed.
         """
+        print(f"      🔍 _message_contains_other_character_names DEBUG:")
+        print(f"         - Message: '{user_message}'")
+        
         # Import here to avoid circular imports
         from .character_tracking import extract_character_names_from_emotes, extract_addressed_characters
         
         # Extract speaker from bracket format [Character Name] - this should be ignored
         speaker_from_bracket = extract_current_speaker(user_message)
+        print(f"         - Speaker from bracket: '{speaker_from_bracket}'")
         
         # Check for character names in emotes and addressing patterns
         character_names = extract_character_names_from_emotes(user_message)
         addressed_characters = extract_addressed_characters(user_message)
         
+        print(f"         - Character names from emotes: {character_names}")
+        print(f"         - Addressed characters: {addressed_characters}")
+        
         # Combine all detected character names
         all_detected_names = set(character_names + addressed_characters)
+        print(f"         - All detected names: {all_detected_names}")
         
         # Filter out Elsie's names (these are fine for implicit responses)
         elsie_names = {'elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid', 'server', 'waitress'}
@@ -320,10 +335,14 @@ class RoleplayStateManager:
                                    is_valid_character_name(name) and
                                    name.lower() != speaker_from_bracket.lower())]
         
+        print(f"         - After filtering Elsie names: {[name for name in all_detected_names if name.lower() not in elsie_names]}")
+        print(f"         - After filtering speaker '{speaker_from_bracket}': {other_character_names}")
+        
         if other_character_names:
-            print(f"      🎯 Other character names detected (excluding speaker '{speaker_from_bracket}'): {other_character_names}")
+            print(f"      🎯 OTHER CHARACTER NAMES DETECTED: {other_character_names}")
             return True
         
+        print(f"      ✅ No other character names detected")
         return False
     
     def get_participant_names(self) -> List[str]:
