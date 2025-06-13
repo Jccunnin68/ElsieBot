@@ -99,6 +99,30 @@ def extract_response_decision(user_message: str, conversation_history: list, cha
     Preserves all existing guard rails and logic.
     """
     
+    # CRITICAL: Check for ANY DGM post FIRST - Elsie NEVER responds to DGM posts
+    import re
+    if re.search(r'^\s*\[DGM\]', user_message, re.IGNORECASE):
+        print(f"   🎬 DGM POST DETECTED - NEVER RESPOND")
+        print(f"   🚫 Message starts with [DGM]: '{user_message[:100]}{'...' if len(user_message) > 100 else ''}'")
+        
+        # Still need to process the DGM post for roleplay state management
+        from handlers.ai_attention.dgm_handler import check_dgm_post
+        dgm_result = check_dgm_post(user_message)
+        
+        # Create a minimal strategy for DGM handling
+        dgm_strategy = {
+            'approach': f"dgm_{dgm_result.get('action', 'post')}",
+            'needs_database': False,
+            'reasoning': f"DGM post detected - {dgm_result.get('action', 'unknown')} - NEVER RESPOND",
+            'context_priority': 'none'
+        }
+        
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy=dgm_strategy
+        )
+    
     # Get roleplay state and log current status - PRESERVE EXISTING
     rp_state = get_roleplay_state()
     turn_number = len(conversation_history) + 1
