@@ -146,6 +146,30 @@ def is_valid_character_name(name: str) -> bool:
     if name_lower in excluded_lower or name_lower in ['you', 'me', 'us', 'them', 'everyone', 'anyone', 'someone']:
         return False
     
+    # Additional common words that slip through and aren't character names
+    additional_excluded = {
+        'bar', 'walks', 'walk', 'runs', 'run', 'sits', 'sit', 'stands', 'stand',
+        'comes', 'come', 'goes', 'go', 'enters', 'enter', 'exits', 'exit',
+        'approaches', 'approach', 'leaves', 'leave', 'returns', 'return',
+        'moves', 'move', 'steps', 'step', 'turns', 'turn', 'looks', 'look',
+        'smiles', 'smile', 'laughs', 'laugh', 'nods', 'nod', 'waves', 'wave',
+        'drinks', 'drink', 'orders', 'order', 'asks', 'ask', 'says', 'say',
+        'speaks', 'speak', 'tells', 'tell', 'replies', 'reply', 'responds', 'respond',
+        'up', 'down', 'over', 'under', 'around', 'through', 'across', 'along',
+        'into', 'onto', 'upon', 'within', 'without', 'toward', 'towards',
+        'behind', 'beside', 'between', 'among', 'during', 'before', 'after',
+        'since', 'until', 'while', 'whereas', 'although', 'though', 'unless',
+        'because', 'however', 'therefore', 'moreover', 'furthermore', 'nevertheless',
+        'meanwhile', 'otherwise', 'instead', 'besides', 'indeed', 'certainly',
+        'perhaps', 'probably', 'possibly', 'definitely', 'absolutely', 'completely',
+        'entirely', 'totally', 'quite', 'rather', 'fairly', 'pretty', 'very',
+        'extremely', 'incredibly', 'amazingly', 'surprisingly', 'unfortunately',
+        'fortunately', 'obviously', 'clearly', 'apparently', 'evidently'
+    }
+    
+    if name_lower in additional_excluded:
+        return False
+    
     # Check if name contains any valid characters
     if not re.match(f"^{VALID_CHAR_PATTERN}$", name):
         return False
@@ -170,6 +194,20 @@ def is_valid_character_name(name: str) -> bool:
     # Avoid obvious non-names like "To", "At", etc. that might be capitalized
     if name_lower in ['to', 'at', 'in', 'on', 'by', 'for', 'with', 'from', 'of', 'as', 'is', 'it']:
         return False
+    
+    # Reject multi-word phrases that aren't proper names
+    words = name.split()
+    if len(words) > 3:  # Names shouldn't be more than 3 words typically
+        return False
+    
+    # If it's multiple words, each word should be capitalized (proper noun)
+    if len(words) > 1:
+        for word in words:
+            if not word[0].isupper():
+                return False
+            # Each word should also not be a common word
+            if word.lower() in additional_excluded:
+                return False
     
     return True
 
@@ -206,37 +244,60 @@ def extract_current_speaker(user_message: str) -> Optional[str]:
 def extract_character_names_from_emotes(user_message: str) -> List[str]:
     """
     Extract character names from emotes for speaker permanence.
-    Uses Named Entity Recognition patterns and validation.
+    Extracts from both [Character Name] format AND emotes with enhanced filtering.
     Enhanced to detect [Character Name] format for multi-character play.
     Supports Nordic and Icelandic characters.
     """
     character_names = []
     
-    # Extract character names from [Character Name] brackets
+    print(f"      🔍 extract_character_names_from_emotes DEBUG:")
+    print(f"         - Message: '{user_message}'")
+    
+    # 1. Extract character names from [Character Name] brackets - most reliable
     bracket_pattern = f'\\[({VALID_CHAR_PATTERN})\\]'
     bracket_matches = re.findall(bracket_pattern, user_message)
     
+    print(f"         - Bracket matches found: {bracket_matches}")
+    
     for name in bracket_matches:
         name = name.strip()
+        print(f"         - Checking bracket name: '{name}'")
         if is_valid_character_name(name):
             name_normalized = normalize_character_name(name)
             if name_normalized not in character_names:
                 character_names.append(name_normalized)
+                print(f"         - ✅ Added valid bracket character: '{name_normalized}'")
+            else:
+                print(f"         - ⚠️  Duplicate bracket character: '{name_normalized}'")
+        else:
+            print(f"         - ❌ Invalid bracket character name: '{name}'")
     
-    # Extract text within emotes
+    # 2. Extract character names from emotes with enhanced filtering
     emote_pattern = r'\*([^*]+)\*'
     emotes = re.findall(emote_pattern, user_message)
     
+    print(f"         - Emotes found: {emotes}")
+    
     for emote in emotes:
+        print(f"         - Processing emote: '{emote}'")
         # Enhanced pattern to catch names with Nordic/Icelandic characters
         potential_names = re.findall(f'\\b({VALID_CHAR_PATTERN})\\b', emote)
         
+        print(f"         - Potential names in emote: {potential_names}")
+        
         for name in potential_names:
+            print(f"         - Checking emote name: '{name}'")
             if is_valid_character_name(name):
                 name_normalized = normalize_character_name(name)
                 if name_normalized not in character_names:
                     character_names.append(name_normalized)
+                    print(f"         - ✅ Added valid emote character: '{name_normalized}'")
+                else:
+                    print(f"         - ⚠️  Duplicate emote character: '{name_normalized}'")
+            else:
+                print(f"         - ❌ Invalid emote character name: '{name}' (filtered by enhanced validation)")
     
+    print(f"         - Final character names: {character_names}")
     return character_names
 
 def extract_addressed_characters(user_message: str) -> List[str]:

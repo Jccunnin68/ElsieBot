@@ -90,6 +90,12 @@ class RoleplayStateManager:
         # Normalize the name for comparison (handle case variations)
         name_normalized = name.strip()
         
+        # FILTER OUT ELSIE - She should never be a participant
+        elsie_names = {'elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid', 'server', 'waitress'}
+        if name_normalized.lower() in elsie_names:
+            print(f"   🚫 FILTERED OUT ELSIE: '{name_normalized}' - Elsie should not be a participant")
+            return
+        
         # Check if participant already exists (case-insensitive)
         for participant in self.participants:
             if participant['name'].lower() == name_normalized.lower():
@@ -110,6 +116,7 @@ class RoleplayStateManager:
         print(f"      - Source: {source}")
         print(f"      - Turn: {turn_number}")
         print(f"      - Total Tracked: {len(self.participants)}")
+        print(f"      - All Participants: {[p['name'] for p in self.participants]}")
         print(f"      - DGM Session: {self.dgm_initiated}")
     
     def add_addressed_characters(self, character_names: List[str], turn_number: int):
@@ -197,53 +204,110 @@ class RoleplayStateManager:
     def set_last_character_addressed(self, character_name: str):
         """Set who Elsie last addressed."""
         self.last_character_elsie_addressed = character_name
-        print(f"   👋 ELSIE ADDRESSED: {character_name}")
+        print(f"   👤 ELSIE ADDRESSED: {character_name}")
     
     def is_simple_implicit_response(self, current_turn: int, user_message: str) -> bool:
         """
-        SIMPLE implicit response logic:
-        - If the response comes from the last character Elsie addressed
-        - AND Elsie spoke on the previous turn (not necessarily the last in history)
-        - UNLESS the message contains other character names (redirecting conversation)
+        Enhanced implicit response logic for the two pathways:
+        
+        Pathway 1 (Single Character): Always respond if character continues conversation
+        Pathway 2 (Multi-Character): Respond if character Elsie addressed continues conversation
+        
+        Key conditions:
+        - Character speaking is the one Elsie last addressed
+        - No explicit redirection to other characters
+        - No walk-away emotes
         """
-        # Check if we have any turn history
-        if not self.turn_history:
+        print(f"\n🔍 === IMPLICIT RESPONSE DETECTION DEBUG ===")
+        print(f"   📋 Current Turn: {current_turn}")
+        print(f"   📝 Message: '{user_message}'")
+        print(f"   👤 Participants: {[p['name'] for p in self.participants]} (Count: {len(self.participants)})")
+        print(f"   👋 Last character Elsie addressed: {self.last_character_elsie_addressed}")
+        print(f"   📜 Turn history: {self.turn_history[-5:] if len(self.turn_history) >= 5 else self.turn_history}")
+        
+        # Must have someone that Elsie previously addressed
+        if not self.last_character_elsie_addressed:
+            print(f"   ❌ FAIL: No previous character addressed by Elsie")
             return False
         
-        # Find the most recent turn where Elsie spoke
+        # Extract character name from current message - WITH DEBUGGING
+        print(f"   🔍 EXTRACTING CURRENT SPEAKER...")
+        current_character = extract_current_speaker(user_message)
+        
+        # Add extra debugging for character extraction
+        import re
+        from handlers.ai_attention.character_tracking import VALID_CHAR_PATTERN
+        
+        # Check bracket pattern specifically
+        bracket_pattern = f'\\[({VALID_CHAR_PATTERN})\\]'
+        bracket_matches = re.findall(bracket_pattern, user_message)
+        print(f"      🔍 Bracket pattern matches: {bracket_matches}")
+        
+        # Check if any bracket matches are valid character names
+        for name in bracket_matches:
+            name = name.strip()
+            from handlers.ai_attention.character_tracking import is_valid_character_name, normalize_character_name
+            if is_valid_character_name(name):
+                normalized = normalize_character_name(name)
+                print(f"      ✅ Valid bracket character: '{name}' -> '{normalized}'")
+            else:
+                print(f"      ❌ Invalid bracket character: '{name}'")
+        
+        if not current_character:
+            print(f"   ❌ FAIL: No speaking character detected in current message")
+            print(f"      - Tried bracket pattern: {bracket_pattern}")
+            print(f"      - Found bracket matches: {bracket_matches}")
+            return False
+        
+        print(f"   ✅ Current speaker detected: '{current_character}'")
+        
+        # Check if this character is the one Elsie last addressed
+        if current_character.lower() != self.last_character_elsie_addressed.lower():
+            print(f"   ❌ FAIL: Speaker mismatch")
+            print(f"      - Current speaker: '{current_character}' (lower: '{current_character.lower()}')")
+            print(f"      - Elsie addressed: '{self.last_character_elsie_addressed}' (lower: '{self.last_character_elsie_addressed.lower()}')")
+            return False
+        
+        print(f"   ✅ Speaker matches who Elsie addressed!")
+        
+        # Check if Elsie has spoken to this character recently (more flexible timing)
+        # Look for Elsie's last turn in history
         elsie_last_turn = None
         for turn_num, speaker in reversed(self.turn_history):
             if speaker == "Elsie":
                 elsie_last_turn = turn_num
                 break
         
-        # Check if Elsie spoke recently (within 2 turns of current)
-        if not elsie_last_turn or current_turn - elsie_last_turn > 2:
+        if not elsie_last_turn:
+            print(f"   ❌ FAIL: Elsie hasn't spoken yet in this session")
             return False
         
-        # Extract character name from current message
-        current_character = extract_current_speaker(user_message)
-        if not current_character:
+        # More flexible timing check - allow up to 5 turns for 80/20 system
+        turns_since_elsie = current_turn - elsie_last_turn
+        print(f"   ⏰ Timing check: Elsie last spoke on turn {elsie_last_turn}, current turn {current_turn} ({turns_since_elsie} turns ago)")
+        
+        if turns_since_elsie > 5:
+            print(f"   ❌ FAIL: Too many turns since Elsie spoke ({turns_since_elsie} turns)")
             return False
         
-        # Check if this character is the one Elsie last addressed
-        if (self.last_character_elsie_addressed and 
-            current_character.lower() == self.last_character_elsie_addressed.lower()):
-            
-            # Check if the message contains other character names (redirecting)
-            if self._message_contains_other_character_names(user_message):
-                print(f"   🎯 Message contains other character names - not an implicit response")
-                return False
-            
-            print(f"   💬 SIMPLE IMPLICIT RESPONSE DETECTED:")
-            print(f"      - Elsie last addressed: {self.last_character_elsie_addressed}")
-            print(f"      - Current speaker: {current_character}")
-            print(f"      - Turn history: {self.turn_history[-3:] if len(self.turn_history) >= 3 else self.turn_history}")
-            print(f"      - This is a follow-up from the character Elsie was addressing")
-            
-            return True
+        print(f"   ✅ Timing is acceptable ({turns_since_elsie} turns)")
         
-        return False
+        # Check if the message contains explicit redirection to other characters
+        print(f"   🔍 Checking for redirection to other characters...")
+        if self._message_contains_other_character_names(user_message):
+            print(f"   ❌ FAIL: Message contains redirection to other characters")
+            return False
+        
+        print(f"   ✅ No redirection detected")
+        
+        print(f"   🎉 === IMPLICIT RESPONSE CONFIRMED ===")
+        print(f"      ✅ Character: {current_character}")
+        print(f"      ✅ Last addressed by Elsie: {self.last_character_elsie_addressed}")
+        print(f"      ✅ Turns since Elsie spoke: {turns_since_elsie}")
+        print(f"      ✅ Participant count: {len(self.participants)}")
+        print(f"      ✅ This is a continuation of the conversation chain")
+        
+        return True
     
     def _message_contains_other_character_names(self, user_message: str) -> bool:
         """
@@ -251,18 +315,26 @@ class RoleplayStateManager:
         it's directed at someone other than Elsie.
         NOTE: Ignores speaker brackets [Character Name] since those indicate who is speaking, not being addressed.
         """
+        print(f"      🔍 _message_contains_other_character_names DEBUG:")
+        print(f"         - Message: '{user_message}'")
+        
         # Import here to avoid circular imports
         from .character_tracking import extract_character_names_from_emotes, extract_addressed_characters
         
         # Extract speaker from bracket format [Character Name] - this should be ignored
         speaker_from_bracket = extract_current_speaker(user_message)
+        print(f"         - Speaker from bracket: '{speaker_from_bracket}'")
         
         # Check for character names in emotes and addressing patterns
         character_names = extract_character_names_from_emotes(user_message)
         addressed_characters = extract_addressed_characters(user_message)
         
+        print(f"         - Character names from emotes: {character_names}")
+        print(f"         - Addressed characters: {addressed_characters}")
+        
         # Combine all detected character names
         all_detected_names = set(character_names + addressed_characters)
+        print(f"         - All detected names: {all_detected_names}")
         
         # Filter out Elsie's names (these are fine for implicit responses)
         elsie_names = {'elsie', 'elise', 'elsy', 'els', 'bartender', 'barkeep', 'barmaid', 'server', 'waitress'}
@@ -273,10 +345,14 @@ class RoleplayStateManager:
                                    is_valid_character_name(name) and
                                    name.lower() != speaker_from_bracket.lower())]
         
+        print(f"         - After filtering Elsie names: {[name for name in all_detected_names if name.lower() not in elsie_names]}")
+        print(f"         - After filtering speaker '{speaker_from_bracket}': {other_character_names}")
+        
         if other_character_names:
-            print(f"      🎯 Other character names detected (excluding speaker '{speaker_from_bracket}'): {other_character_names}")
+            print(f"      🎯 OTHER CHARACTER NAMES DETECTED: {other_character_names}")
             return True
         
+        print(f"      ✅ No other character names detected")
         return False
     
     def get_participant_names(self) -> List[str]:
