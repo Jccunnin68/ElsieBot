@@ -39,6 +39,13 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     response_reason = strategy.get('response_reason', 'unknown')
     elsie_mentioned = strategy.get('elsie_mentioned', False)
     
+    # NEW: Extract conversation analysis data
+    conversation_analysis = strategy.get('conversation_analysis')
+    suggested_style = strategy.get('suggested_style', 'natural')
+    suggested_tone = strategy.get('suggested_tone', 'friendly')
+    conversation_direction = strategy.get('conversation_direction', 'continuing')
+    conversation_themes = strategy.get('conversation_themes', [])
+    
     # Check if this is a DGM-initiated session
     is_dgm_session = 'dgm_scene_setting' in triggers
     
@@ -67,8 +74,34 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
         database_context = _get_roleplay_database_context(user_message)
         print(f"   📚 Database context length: {len(database_context)} chars")
     
+    # NEW: Get conversation memory context
+    conversation_context = ""
+    if conversation_analysis:
+        # Import here to avoid circular dependency
+        from handlers.ai_attention.state_manager import get_roleplay_state 
+        rp_state = get_roleplay_state()
+        if rp_state.has_conversation_memory():
+            conversation_context = rp_state.get_conversation_context_for_prompt()
+            print(f"   💭 CONVERSATION MEMORY: {len(conversation_context)} chars")
+    
     # Adjust response style based on why Elsie is responding
     response_style_note = ""
+    
+    # NEW: Add conversation-aware response instructions
+    conversation_style_note = ""
+    if conversation_analysis:
+        suggestion = conversation_analysis['suggestion']
+        conversation_style_note = f"""
+**CONVERSATION FLOW GUIDANCE**:
+- Suggested response style: {suggested_style}
+- Suggested tone: {suggested_tone}
+- Conversation direction: {conversation_direction}
+{"- Active themes: " + ", ".join(conversation_themes) if conversation_themes else ""}
+- Analysis: {suggestion.reasoning}
+
+**CONVERSATION CONTINUITY**: Use the conversation context above to maintain natural flow and avoid repetition. Reference recent events, emotions, or topics naturally.
+"""
+    
     if elsie_mentioned:
         response_style_note = """
 **DIRECT ADDRESS MODE**: You have been directly mentioned or addressed by name. Respond naturally and engage fully with the interaction.
@@ -143,15 +176,20 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     if is_dgm_session:
         dgm_instructions = """
 
-🎬 **SPECIAL DGM SESSION MODE - ULTRA-PASSIVE**:
-- A Game Master has set this scene - you are in ULTRA-PASSIVE MODE
-- ONLY respond when directly addressed by name (Elsie, bartender, etc.)
-- Do NOT respond to general bar actions like "*looks around*" or "*sits at table*"
-- Do NOT respond to characters talking to each other
-- Do NOT initiate conversations, ask questions, or offer drinks unprompted
+🎬 **SPECIAL DGM SESSION MODE - SELECTIVE PASSIVE**:
+- A Game Master has set this scene - you are in SELECTIVE PASSIVE MODE
+- RESPOND WHEN:
+  * Directly addressed by name (Elsie, bartender, etc.)
+  * Following up on conversations YOU initiated (implicit responses)
+  * Clear service requests directed at you
+- DO NOT respond to:
+  * General bar actions like "*looks around*" or "*sits at table*"
+  * Characters talking to each other (unless you're part of the conversation)
+  * Ambient scene setting that doesn't involve you
+- Do NOT initiate NEW conversations, ask questions, or offer drinks unprompted
 - Keep responses extremely brief and reactive (1-2 sentences maximum)
-- Let the characters drive the scene completely - you are invisible background unless called upon
-- You should be like furniture unless someone specifically talks TO you
+- Let the characters drive the scene, but maintain natural conversation flow when you're involved
+- If someone responds to something you said, that's a natural conversation continuation
 """
     
     database_section = ""
@@ -163,12 +201,21 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
 
 Use this information naturally in your roleplay response when relevant. Don't just recite facts - weave them into the conversation organically."""
 
+    conversation_section = ""
+    if conversation_context:
+        conversation_section = f"""
+
+**CONVERSATION MEMORY:**
+{conversation_context}
+
+This shows the recent flow of conversation. Use this context to maintain continuity, avoid repetition, and respond appropriately to the conversational dynamics."""
+
     return f"""You are Elsie, intelligent and sophisticated Holographic bartender and Stellar Cartographer aboard the USS Stardancer, now engaged in a ROLEPLAY SCENARIO.
 
 🎭 ROLEPLAY MODE ACTIVE - CRITICAL INSTRUCTIONS:
 
 **WHY YOU'RE RESPONDING**: {response_reason}
-{response_style_note}{dgm_instructions}
+{conversation_style_note}{response_style_note}{dgm_instructions}
 
 **PERSONALITY CONTEXT**: {personality_context}
 
@@ -235,9 +282,232 @@ Current roleplay confidence: {confidence:.2f}
 Detected triggers: {', '.join(triggers)}
 {addressed_note}
 {"Direct mention detected - engage fully!" if elsie_mentioned else ""}
-{"DGM ULTRA-PASSIVE MODE: ONLY respond when directly addressed by name or someone is talking about you, do not respond to general bar actions like '*looks around*' or '*sits at table*'" if is_dgm_session else ""}
+{"DGM SELECTIVE PASSIVE MODE: Respond when directly addressed, following up on conversations you started, or clear service requests. Do not respond to general bar actions or characters talking to each other unless you're part of the conversation." if is_dgm_session else ""}
 
-Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, be like invisible furniture unless someone specifically talks TO you." if is_dgm_session else ""}"""
+Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, maintain natural conversation flow when you're involved but avoid initiating new interactions." if is_dgm_session else ""}{database_section}{conversation_section}"""
+
+
+def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
+    """
+    Enhanced roleplay context generation using contextual intelligence.
+    This uses the rich contextual cues and response decisions to provide
+    more targeted and intelligent roleplay guidance.
+    """
+    
+    # Extract enhanced context data
+    response_decision = strategy.get('response_decision')
+    contextual_cues = strategy.get('contextual_cues')
+    
+    # Fallback to original if enhanced data not available
+    if not response_decision or not contextual_cues:
+        print(f"   ⚠️  Enhanced context data not available, falling back to standard context")
+        return get_roleplay_context(strategy, user_message)
+    
+    print(f"🎭 GENERATING ENHANCED ROLEPLAY CONTEXT:")
+    print(f"   🎯 Response Type: {response_decision.response_type.value}")
+    print(f"   👤 Speaker: {contextual_cues.current_speaker}")
+    print(f"   💬 Should Respond: {response_decision.should_respond}")
+    print(f"   🎨 Style/Tone: {response_decision.response_style}/{response_decision.tone}")
+    
+    # Build character relationship context
+    character_context = _build_character_relationship_context(contextual_cues)
+    
+    # Build conversation flow context
+    conversation_context = _build_conversation_flow_context(contextual_cues, response_decision)
+    
+    # Build response guidance
+    response_guidance = _build_response_guidance(response_decision, contextual_cues)
+    
+    # Build scene context
+    scene_context = _build_scene_context(contextual_cues)
+    
+    # Database context if needed
+    database_context = ""
+    if strategy.get('needs_database'):
+        database_context = _get_roleplay_database_context(user_message)
+    
+    # Personality emphasis
+    personality_context = _build_personality_context(contextual_cues)
+    
+    return f"""You are Elsie, intelligent and sophisticated Holographic bartender and Stellar Cartographer aboard the USS Stardancer, now engaged in a ROLEPLAY SCENARIO with enhanced contextual intelligence.
+
+🎭 ENHANCED ROLEPLAY MODE - CONTEXTUAL INTELLIGENCE ACTIVE:
+
+{response_guidance}
+
+{scene_context}
+
+{character_context}
+
+{conversation_context}
+
+{personality_context}
+
+**RESPONSE EXECUTION:**
+1. **DIALOGUE FORMATTING:**
+   - ALWAYS wrap spoken dialogue in quotation marks: "Like this when speaking"
+   - Use *asterisks* for actions and emotes: *adjusts display*
+   - Example: *leans against the bar* "What brings you here tonight?"
+
+2. **STYLE & TONE GUIDANCE:**
+   - Response Style: {response_decision.response_style}
+   - Tone: {response_decision.tone}
+   - Approach: {response_decision.approach}
+   - Estimated Length: {response_decision.estimated_length}
+   {"- Address Character: " + response_decision.address_character if response_decision.address_character else ""}
+   {"- Relationship Tone: " + response_decision.relationship_tone if response_decision.relationship_tone else ""}
+
+3. **CONTENT GUIDANCE:**
+   {"- Suggested Themes: " + ", ".join(response_decision.suggested_themes) if response_decision.suggested_themes else ""}
+   {"- Continuation Cues: " + ", ".join(response_decision.continuation_cues) if response_decision.continuation_cues else ""}
+   {"- Knowledge to Use: " + ", ".join(response_decision.knowledge_to_use) if response_decision.knowledge_to_use else ""}
+
+4. **SCENE AWARENESS:**
+   - Scene Impact: {response_decision.scene_impact}
+   - Urgency: {response_decision.urgency}
+   - Confidence: {response_decision.confidence:.2f}
+
+{database_context}
+
+**CRITICAL ROLEPLAY INSTRUCTIONS:**
+- Stay completely in-character as Elsie
+- Keep responses natural and conversational
+- Use your extensive character knowledge appropriately
+- Maintain conversation flow and avoid repetition
+- Be responsive to the emotional context
+- {"Directly address " + response_decision.address_character + " in your response" if response_decision.address_character else "Respond to the general situation"}
+
+Respond naturally based on this contextual intelligence, staying in character as the sophisticated, multi-faceted Elsie."""
+
+
+def _build_character_relationship_context(cues) -> str:
+    """Build character relationship context section"""
+    if not cues.known_characters:
+        return "**CHARACTER CONTEXT:** No known characters present."
+    
+    context_lines = ["**CHARACTER RELATIONSHIP CONTEXT:**"]
+    
+    for name, profile in cues.known_characters.items():
+        relationship_desc = profile.relationship.replace("_", " ").title()
+        context_lines.append(f"- {name}: {relationship_desc} - {profile.personality_notes}")
+        if profile.preferences:
+            pref_str = ", ".join([f"{k}: {v}" for k, v in profile.preferences.items()])
+            context_lines.append(f"  Preferences: {pref_str}")
+    
+    if cues.current_speaker and cues.current_speaker in cues.known_characters:
+        speaker_profile = cues.known_characters[cues.current_speaker]
+        context_lines.append(f"\n**CURRENT SPEAKER:** {cues.current_speaker} ({speaker_profile.relationship.replace('_', ' ')})")
+        
+    if cues.last_addressed_by_elsie:
+        context_lines.append(f"**LAST ADDRESSED BY ELSIE:** {cues.last_addressed_by_elsie}")
+    
+    return "\n".join(context_lines)
+
+
+def _build_conversation_flow_context(cues, decision) -> str:
+    """Build conversation flow context section"""
+    dynamics = cues.conversation_dynamics
+    
+    context_lines = ["**CONVERSATION FLOW CONTEXT:**"]
+    context_lines.append(f"- Emotional Tone: {dynamics.emotional_tone}")
+    context_lines.append(f"- Direction: {dynamics.direction}")
+    context_lines.append(f"- Intensity: {dynamics.intensity}")
+    context_lines.append(f"- Intimacy Level: {dynamics.intimacy_level}")
+    
+    if dynamics.themes:
+        context_lines.append(f"- Active Themes: {', '.join(dynamics.themes)}")
+    
+    if dynamics.recent_events:
+        context_lines.append(f"- Recent Events: {', '.join(dynamics.recent_events[-3:])}")
+    
+    addressing = cues.addressing_context
+    if addressing.direct_mentions:
+        context_lines.append(f"- Direct Mentions: {', '.join(addressing.direct_mentions)}")
+    if addressing.group_addressing:
+        context_lines.append("- Group Addressing: Yes (everyone, you all, etc.)")
+    if addressing.service_requests:
+        context_lines.append(f"- Service Requests: {', '.join(addressing.service_requests)}")
+    if addressing.other_interactions:
+        interactions = [f"{speaker} → {target}" for speaker, target in addressing.other_interactions]
+        context_lines.append(f"- Other Interactions: {', '.join(interactions)}")
+    
+    return "\n".join(context_lines)
+
+
+def _build_response_guidance(decision, cues) -> str:
+    """Build response guidance section"""
+    if not decision.should_respond:
+        return f"""**RESPONSE DECISION:** LISTENING MODE
+- Reasoning: {decision.reasoning}
+- You should NOT respond to this situation
+- Maintain passive awareness of the scene"""
+    
+    guidance_lines = [f"**RESPONSE DECISION:** ACTIVE RESPONSE ({decision.response_type.value.upper()})"]
+    guidance_lines.append(f"- Reasoning: {decision.reasoning}")
+    guidance_lines.append(f"- Confidence: {decision.confidence:.2f}")
+    
+    if decision.response_type.value == "active_dialogue":
+        guidance_lines.append("- Engage fully in conversation")
+        guidance_lines.append("- Be natural and responsive")
+        
+    elif decision.response_type.value == "subtle_service":
+        guidance_lines.append("- Provide professional service briefly")
+        guidance_lines.append("- Keep response focused on the service request")
+        
+    elif decision.response_type.value == "group_acknowledgment":
+        guidance_lines.append("- Acknowledge the group greeting warmly")
+        guidance_lines.append("- Be inclusive in your response")
+        
+    elif decision.response_type.value == "implicit_response":
+        guidance_lines.append("- Continue the natural conversation flow")
+        guidance_lines.append("- Build on your previous interaction")
+        
+    elif decision.response_type.value == "technical_expertise":
+        guidance_lines.append("- Share your relevant expertise")
+        guidance_lines.append("- Be informative but conversational")
+        
+    elif decision.response_type.value == "supportive_listen":
+        guidance_lines.append("- Provide emotional support")
+        guidance_lines.append("- Be caring and empathetic")
+    
+    return "\n".join(guidance_lines)
+
+
+def _build_scene_context(cues) -> str:
+    """Build scene context section"""
+    context_lines = ["**SCENE CONTEXT:**"]
+    context_lines.append(f"- Session Mode: {cues.session_mode.value}")
+    context_lines.append(f"- Scene Control: {cues.scene_control.value}")
+    context_lines.append(f"- Setting: {cues.scene_setting}")
+    context_lines.append(f"- Session Type: {cues.session_type}")
+    
+    if cues.active_participants:
+        context_lines.append(f"- Active Participants: {', '.join(cues.active_participants)}")
+    
+    return "\n".join(context_lines)
+
+
+def _build_personality_context(cues) -> str:
+    """Build personality context section"""
+    context_lines = ["**PERSONALITY EMPHASIS:**"]
+    context_lines.append(f"- Primary Mode: {cues.personality_mode.value.replace('_', ' ').title()}")
+    
+    if cues.current_expertise:
+        context_lines.append(f"- Relevant Expertise: {', '.join(cues.current_expertise)}")
+    
+    # Add personality guidance based on mode
+    if cues.personality_mode.value == "bartender":
+        context_lines.append("- Focus on hospitality, service, and drink knowledge")
+    elif cues.personality_mode.value == "stellar_cartographer":
+        context_lines.append("- Emphasize scientific knowledge and navigation expertise")
+    elif cues.personality_mode.value == "counselor":
+        context_lines.append("- Be empathetic, supportive, and emotionally intelligent")
+    elif cues.personality_mode.value == "service_oriented":
+        context_lines.append("- Prioritize helping and assisting others")
+    else:
+        context_lines.append("- Use your complete, balanced personality")
+    
+    return "\n".join(context_lines)
 
 
 def detect_roleplay_personality_context(user_message: str) -> str:

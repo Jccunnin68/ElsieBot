@@ -8,7 +8,7 @@ generation, routing different types of queries to appropriate handlers.
 
 from typing import Dict, Any
 
-from .roleplay_contexts import get_roleplay_context
+from .roleplay_contexts import get_enhanced_roleplay_context, get_roleplay_context
 from .database_contexts import (
     get_character_context,
     get_logs_context,
@@ -34,10 +34,10 @@ def get_context_for_strategy(strategy: Dict[str, Any], user_message: str) -> str
     
     print(f"🎯 CONTEXT COORDINATOR: Routing approach '{approach}'")
     
-    # Roleplay approaches → use roleplay_contexts.py (EXISTING)
+    # Roleplay approaches → use enhanced roleplay context system
     if approach in ['roleplay_active', 'roleplay_mock_enhanced'] or approach.startswith('roleplay'):
-        print(f"   🎭 ROLEPLAY CONTEXT: Using roleplay_contexts.py")
-        return get_roleplay_context(strategy, user_message)
+        print(f"   🎭 ROLEPLAY CONTEXT: Using enhanced roleplay context system")
+        return get_enhanced_roleplay_context(strategy, user_message)
     
     # Database approaches → use database_contexts.py (EXISTING)
     elif approach == 'character_info':

@@ -120,20 +120,38 @@ def determine_response_strategy(user_message: str, conversation_history: list, c
 def _process_main_strategy_logic(user_message: str, conversation_history: list, channel_context: Dict, strategy: Dict, user_lower: str, rp_state, turn_number: int) -> Dict[str, any]:
     """Process the main strategy determination logic with ROLEPLAY-FIRST priority."""
     
-    # PRIORITY 1: If we're in roleplay, handle EVERYTHING through roleplay strategy
+    # PRIORITY 1: If we're in roleplay, handle EVERYTHING through enhanced contextual analysis
     # This ensures no query detection (ship, character, etc.) can override roleplay context
     if rp_state.is_roleplaying:
-        print(f"   🎭 IN ROLEPLAY MODE - Routing ALL messages through roleplay strategy")
+        print(f"   🎭 IN ROLEPLAY MODE - Using enhanced contextual intelligence")
         
-        # MOVED: Auto-exit logic is now handled in decision_extractor.py for messages FROM the RP channel
-        # This prevents duplicate checking and ensures proper flow control
+        # NEW: Use enhanced contextual analysis system
+        from handlers.ai_attention.context_gatherer import build_contextual_cues
+        from handlers.ai_attention.conversation_memory import getNextResponseEnhanced
         
-        is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
-        roleplay_strategy = process_roleplay_strategy(user_message, turn_number, channel_context, confidence_score, triggers)
+        # Build comprehensive contextual cues
+        contextual_cues = build_contextual_cues(user_message, rp_state, turn_number)
+        
+        # Get intelligent response decision
+        response_decision = getNextResponseEnhanced(contextual_cues)
+        
+        # Convert to strategy format
+        roleplay_strategy = _convert_decision_to_strategy(response_decision, contextual_cues, turn_number)
         
         # Ensure roleplay context is preserved
         if 'context_priority' not in roleplay_strategy or roleplay_strategy['context_priority'] == 'none':
             roleplay_strategy['context_priority'] = 'roleplay'
+        
+        # NEW: Add callback info to track Elsie's responses in conversation memory
+        roleplay_strategy['track_response_callback'] = {
+            'enabled': True,
+            'turn_number': turn_number,
+            'speaker': 'Elsie'
+        }
+        
+        # NEW: Add enhanced contextual data
+        roleplay_strategy['contextual_cues'] = contextual_cues
+        roleplay_strategy['response_decision'] = response_decision
         
         return roleplay_strategy
     
@@ -395,4 +413,89 @@ def _handle_standard_message_types(user_message: str, user_lower: str, strategy:
         'reasoning': 'General message or greeting detected',
         'context_priority': CONTEXT_PRIORITIES['none']
     })
+    return strategy
+
+
+def _convert_decision_to_strategy(response_decision, contextual_cues, turn_number: int) -> Dict[str, any]:
+    """
+    Convert an enhanced ResponseDecision into a strategy dictionary 
+    compatible with the existing system.
+    """
+    from handlers.ai_attention.contextual_cues import ResponseType
+    
+    # Base strategy structure
+    strategy = {
+        'approach': 'roleplay_enhanced',
+        'needs_database': False,
+        'reasoning': response_decision.reasoning,
+        'context_priority': 'roleplay',
+        'response_decision': response_decision,
+        'contextual_cues': contextual_cues
+    }
+    
+    # Convert response decision to existing approach types
+    if response_decision.should_respond:
+        if response_decision.response_type == ResponseType.ACTIVE_DIALOGUE:
+            strategy['approach'] = 'roleplay_active'
+            strategy['needs_database'] = True  # May need character/ship context
+            
+        elif response_decision.response_type == ResponseType.SUBTLE_SERVICE:
+            strategy['approach'] = 'roleplay_subtle_service'
+            
+        elif response_decision.response_type == ResponseType.GROUP_ACKNOWLEDGMENT:
+            strategy['approach'] = 'roleplay_group_response'
+            
+        elif response_decision.response_type == ResponseType.IMPLICIT_RESPONSE:
+            strategy['approach'] = 'roleplay_implicit'
+            
+        elif response_decision.response_type == ResponseType.TECHNICAL_EXPERTISE:
+            strategy['approach'] = 'roleplay_expertise'
+            strategy['needs_database'] = True  # Technical information needed
+            
+        elif response_decision.response_type == ResponseType.SUPPORTIVE_LISTEN:
+            strategy['approach'] = 'roleplay_supportive'
+            
+        else:
+            strategy['approach'] = 'roleplay_active'  # Safe default
+            
+    else:
+        # Not responding - listening mode
+        strategy['approach'] = 'roleplay_listening'
+        strategy['reasoning'] = f"Listening mode: {response_decision.reasoning}"
+    
+    # Add enhanced context information
+    strategy.update({
+        'response_style': response_decision.response_style,
+        'response_tone': response_decision.tone,
+        'response_approach': response_decision.approach,
+        'address_character': response_decision.address_character,
+        'relationship_tone': response_decision.relationship_tone,
+        'suggested_themes': response_decision.suggested_themes,
+        'estimated_length': response_decision.estimated_length,
+        'confidence': response_decision.confidence,
+        
+        # Character context
+        'current_speaker': contextual_cues.current_speaker,
+        'known_characters': list(contextual_cues.known_characters.keys()),
+        'personality_mode': contextual_cues.personality_mode.value,
+        'session_mode': contextual_cues.session_mode.value,
+        'scene_control': contextual_cues.scene_control.value,
+        
+        # Conversation context
+        'conversation_themes': contextual_cues.conversation_dynamics.themes,
+        'emotional_tone': contextual_cues.conversation_dynamics.emotional_tone,
+        'conversation_direction': contextual_cues.conversation_dynamics.direction,
+        
+        # Turn tracking
+        'turn_number': turn_number,
+        'last_addressed_by_elsie': contextual_cues.last_addressed_by_elsie
+    })
+    
+    print(f"   🔄 DECISION → STRATEGY CONVERSION:")
+    print(f"      - Response Decision: {response_decision.response_type.value} → {strategy['approach']}")
+    print(f"      - Should respond: {response_decision.should_respond}")
+    print(f"      - Database needed: {strategy['needs_database']}")
+    print(f"      - Address character: {response_decision.address_character}")
+    print(f"      - Style/Tone: {response_decision.response_style}/{response_decision.tone}")
+    
     return strategy 

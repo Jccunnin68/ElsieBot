@@ -1,22 +1,53 @@
 """
-AI Mock Response Subsystem
-==========================
+AI Emotion - Enhanced Emotional Intelligence for Elsie
+=====================================================
 
-This package contains all mock response functionality, organized into modular components.
-Mock responses are used when the Gemma API is unavailable or for simple conversational interactions.
+This package provides enhanced emotional intelligence capabilities for Elsie,
+including emotional support detection, context sensitivity analysis, and
+priority resolution for emotional vs. group addressing conflicts.
 
-Components:
-- mock_responses.py: Core mock response coordination
-- personality_contexts.py: Personality detection for mock responses
-- drink_menu.py: Bar and drink-related responses
-- greetings.py: Greeting and farewell responses
-- poetic_responses.py: Poetic circuit responses
-
-Usage:
-    from handlers.ai_emotion import get_mock_response
-    
-    response = get_mock_response(user_message, context)
+Key modules:
+- emotional_analysis: Core emotional analysis and support detection
+- context_sensitivity: Context-aware pattern recognition
+- priority_resolution: Confidence-based priority resolution
+- conversation_emotions: Conversation-level emotional intelligence
 """
+
+# Import key functions for easier access
+try:
+    from .emotional_analysis import (
+        detect_emotional_support_opportunity,
+        analyze_emotional_tone_enhanced,
+        EmotionalTone,
+        EmotionalContext
+    )
+    
+    from .context_sensitivity import (
+        distinguish_group_vs_contextual,
+        resolve_addressing_conflict,
+        AddressingType
+    )
+    
+    from .priority_resolution import (
+        resolve_emotional_vs_group_conflict,
+        create_emotional_support_candidate,
+        create_group_addressing_candidate,
+        ResponseType,
+        ResponsePriority
+    )
+    
+    from .conversation_emotions import (
+        ConversationEmotionalIntelligence,
+        ConversationMood,
+        EmotionalRelationship
+    )
+    
+except ImportError as e:
+    # Graceful fallback if modules aren't all available
+    print(f"Warning: Some ai_emotion modules not available: {e}")
+
+__version__ = "1.0.0"
+__author__ = "Elsie AI Enhancement Team"
 
 from .mock_responses import get_mock_response, should_use_mock_response
 from .personality_contexts import detect_mock_personality_context, is_simple_chat
