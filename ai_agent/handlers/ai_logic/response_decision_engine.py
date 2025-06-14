@@ -9,6 +9,7 @@ response decisions for roleplay scenarios.
 This replaces the fragmented decision logic with a comprehensive AI-driven system.
 """
 
+import re
 from typing import Dict, List, Optional, Tuple
 import traceback
 
@@ -28,6 +29,11 @@ class ResponseDecisionEngine:
     
     def __init__(self):
         self.last_analysis = None  # Cache for debugging
+        
+        # PHASE 3A: Fabrication prevention controls
+        self.fabrication_prevention_enabled = True
+        self.accuracy_validation_enabled = True
+        self.strict_mode = True  # Requires accurate information or admits lack of knowledge
         
     def getNextResponseEnhanced(self, contextual_cues) -> 'ResponseDecision':
         """
@@ -68,6 +74,13 @@ class ResponseDecisionEngine:
                 addressing_analysis,
                 contextual_cues
             )
+            
+            # PHASE 3A: Fabrication Prevention Validation
+            if self.fabrication_prevention_enabled:
+                response_decision = self._apply_fabrication_controls(
+                    response_decision, 
+                    contextual_cues
+                )
             
             # Step 5: ENHANCED - Generate AI Wisdom Context if needed
             if self._should_use_database_context(response_decision, contextual_cues):
@@ -577,6 +590,336 @@ class ResponseDecisionEngine:
             'database_facts': ['AI wisdom context available'],
             'context_cues': ['Database information integrated'],
             'full_context': context_str
+        }
+
+
+    def _apply_fabrication_controls(self, response_decision, contextual_cues):
+        """
+        PHASE 3A: Apply fabrication prevention controls to response decisions.
+        
+        This method validates that the response decision doesn't encourage fabrication
+        and adds strict accuracy requirements where appropriate.
+        """
+        print(f"   🛡️ FABRICATION CONTROLS - Validating response decision")
+        
+        try:
+            # Extract current message to analyze what's being asked
+            current_message = self._extract_current_message(contextual_cues)
+            
+            # Detect if this is a factual query that could lead to fabrication
+            fabrication_risk = self._assess_fabrication_risk(current_message, contextual_cues)
+            
+            if fabrication_risk['high_risk']:
+                print(f"   ⚠️  HIGH FABRICATION RISK DETECTED:")
+                print(f"      - Risk factors: {fabrication_risk['risk_factors']}")
+                print(f"      - Original reasoning: {response_decision.reasoning}")
+                
+                # Add accuracy requirements to the response
+                response_decision = self._add_accuracy_requirements(
+                    response_decision, 
+                    fabrication_risk,
+                    contextual_cues
+                )
+                
+                print(f"      - Enhanced reasoning: {response_decision.reasoning}")
+            
+            # Validate conversation history accuracy for context-based questions
+            if self._is_context_based_question(current_message):
+                response_decision = self._validate_conversation_accuracy(
+                    response_decision, 
+                    contextual_cues
+                )
+            
+            return response_decision
+            
+        except Exception as e:
+            print(f"   ❌ ERROR in fabrication controls: {e}")
+            # Add safety reasoning as fallback
+            response_decision.reasoning += f" | Fabrication control error: {e}"
+            return response_decision
+    
+    def _extract_current_message(self, contextual_cues) -> str:
+        """Extract the current message from contextual cues."""
+        # Try multiple sources for the current message
+        current_message = getattr(contextual_cues, 'current_message', '')
+        
+        if not current_message:
+            # Try to get from addressing context
+            addressing_context = getattr(contextual_cues, 'addressing_context', None)
+            if addressing_context and hasattr(addressing_context, 'original_message'):
+                current_message = addressing_context.original_message
+        
+        if not current_message:
+            # Try to get from conversation dynamics
+            dynamics = getattr(contextual_cues, 'conversation_dynamics', None)
+            if dynamics and hasattr(dynamics, 'recent_events') and dynamics.recent_events:
+                current_message = dynamics.recent_events[-1]
+        
+        return current_message or "No message content available"
+    
+    def _assess_fabrication_risk(self, current_message: str, contextual_cues) -> Dict:
+        """
+        PHASE 3B: Assess the risk of fabrication for the current message.
+        
+        Identifies patterns that historically led to fabrication issues.
+        """
+        risk_factors = []
+        high_risk = False
+        
+        message_lower = current_message.lower()
+        
+        # HIGH RISK: Questions about what someone said/wanted when they said nothing specific
+        factual_question_patterns = [
+            r'what did \w+ (?:say|want|ask|request|tell)',
+            r'what was \w+ (?:saying|wanting|asking|requesting)',
+            r'tell me what \w+ (?:said|wanted|asked|requested)',
+            r'what about \w+',
+            r'hey \w+ what did \w+',
+        ]
+        
+        for pattern in factual_question_patterns:
+            if re.search(pattern, message_lower):
+                risk_factors.append(f"factual_question_pattern: {pattern}")
+                high_risk = True
+        
+        # HIGH RISK: Technical/scientific questions without clear database context
+        technical_patterns = [
+            r'stellar nurseries?',
+            r'ngc \d+',
+            r'constellation\s+\w+',
+            r'nebula\s+\w+',
+            r'galaxy\s+\w+',
+            r'star system\s+\w+',
+            r'coordinates? (?:for|of|to)',
+        ]
+        
+        for pattern in technical_patterns:
+            if re.search(pattern, message_lower):
+                risk_factors.append(f"technical_pattern_without_context: {pattern}")
+                high_risk = True
+        
+        # MEDIUM RISK: Requests for specific information
+        specific_info_patterns = [
+            r'tell me about',
+            r'what is',
+            r'who is',
+            r'where is',
+            r'how does',
+            r'explain',
+        ]
+        
+        for pattern in specific_info_patterns:
+            if re.search(pattern, message_lower):
+                risk_factors.append(f"specific_info_request: {pattern}")
+        
+        # Check if there's verifiable conversation history for context questions
+        if self._is_context_based_question(current_message):
+            conversation_history_available = self._has_reliable_conversation_history(contextual_cues)
+            if not conversation_history_available:
+                risk_factors.append("context_question_without_reliable_history")
+                high_risk = True
+        
+        return {
+            'high_risk': high_risk,
+            'risk_factors': risk_factors,
+            'requires_accuracy_validation': len(risk_factors) > 0
+        }
+    
+    def _add_accuracy_requirements(self, response_decision, fabrication_risk, contextual_cues):
+        """
+        PHASE 3B: Add strict accuracy requirements to prevent fabrication.
+        """
+        # Enhance reasoning with accuracy requirements
+        original_reasoning = response_decision.reasoning
+        
+        accuracy_instructions = []
+        
+        if 'factual_question_pattern' in str(fabrication_risk['risk_factors']):
+            accuracy_instructions.append(
+                "CRITICAL: This is a factual question about what someone said/wanted. "
+                "You must base your response ONLY on verifiable conversation history. "
+                "If the person said nothing specific or their request was vague, say so directly. "
+                "DO NOT make up details, locations, or technical information."
+            )
+        
+        if 'technical_pattern_without_context' in str(fabrication_risk['risk_factors']):
+            accuracy_instructions.append(
+                "CRITICAL: This involves technical/scientific information. "
+                "Only provide information you have from reliable database sources. "
+                "If you don't have specific information, admit you need to look it up "
+                "or that you don't have that information available."
+            )
+        
+        if 'context_question_without_reliable_history' in fabrication_risk['risk_factors']:
+            accuracy_instructions.append(
+                "CRITICAL: This question requires conversation context, but reliable history is not available. "
+                "Admit that you weren't following the conversation closely enough to answer accurately."
+            )
+        
+        # Add accuracy instructions to various response fields
+        response_decision.reasoning = f"{original_reasoning} | ACCURACY REQUIRED: {' '.join(accuracy_instructions)}"
+        
+        # Add to knowledge_to_use for prompt inclusion
+        if not response_decision.knowledge_to_use:
+            response_decision.knowledge_to_use = []
+        response_decision.knowledge_to_use.extend(accuracy_instructions)
+        
+        # Modify tone and approach for accuracy
+        response_decision.tone = "honest_and_accurate"
+        response_decision.approach = "fact_based"
+        
+        # Add accuracy themes
+        if not response_decision.suggested_themes:
+            response_decision.suggested_themes = []
+        response_decision.suggested_themes.append("accuracy_required")
+        response_decision.suggested_themes.append("no_fabrication")
+        
+        return response_decision
+    
+    def _is_context_based_question(self, current_message: str) -> bool:
+        """Check if this question requires conversation context to answer."""
+        context_patterns = [
+            r'what did \w+ (?:say|want|ask|tell|request)',
+            r'what was \w+ (?:saying|asking|wanting)',
+            r'what about \w+',
+            r'hey \w+ what did \w+',
+            r'tell me what \w+ (?:said|wanted)',
+        ]
+        
+        message_lower = current_message.lower()
+        return any(re.search(pattern, message_lower) for pattern in context_patterns)
+    
+    def _has_reliable_conversation_history(self, contextual_cues) -> bool:
+        """Check if there's reliable conversation history available."""
+        # Check if we have conversation memory
+        if hasattr(contextual_cues, 'recent_activity') and contextual_cues.recent_activity:
+            return len(contextual_cues.recent_activity) >= 2
+        
+        # Check conversation dynamics for recent events
+        if hasattr(contextual_cues, 'conversation_dynamics'):
+            dynamics = contextual_cues.conversation_dynamics
+            if hasattr(dynamics, 'recent_events') and dynamics.recent_events:
+                return len(dynamics.recent_events) >= 2
+        
+        return False
+    
+    def _validate_conversation_accuracy(self, response_decision, contextual_cues):
+        """
+        PHASE 3C: Validate that conversation-based responses will be accurate.
+        """
+        print(f"   🔍 CONVERSATION ACCURACY VALIDATION")
+        
+        # Get available conversation history
+        recent_activity = getattr(contextual_cues, 'recent_activity', [])
+        
+        if not recent_activity:
+            print(f"      ❌ No conversation history available for context question")
+            
+            # Modify response to admit lack of context
+            response_decision.reasoning += " | No conversation history available for accurate context"
+            response_decision.knowledge_to_use.append(
+                "IMPORTANT: You don't have reliable conversation history. "
+                "Admit that you weren't following the conversation closely enough to answer accurately."
+            )
+        
+        else:
+            print(f"      ✅ Conversation history available: {len(recent_activity)} recent activities")
+            
+            # PHASE 3F: Enhanced conversation history validation
+            validated_history = self._validate_conversation_history_accuracy(
+                recent_activity, contextual_cues.current_message
+            )
+            
+            if validated_history['is_sufficient']:
+                # Add instruction to use only available history
+                response_decision.knowledge_to_use.append(
+                    "IMPORTANT: Base your response ONLY on the conversation history provided. "
+                    "Do not add details that aren't explicitly mentioned."
+                )
+                response_decision.knowledge_to_use.append(
+                    f"VERIFIED CONVERSATION CONTEXT: {validated_history['summary']}"
+                )
+            else:
+                # History insufficient - modify response to admit limitation
+                response_decision.reasoning += f" | Insufficient conversation history: {validated_history['limitation']}"
+                response_decision.knowledge_to_use.append(
+                    "CRITICAL: The conversation history is insufficient to answer this question accurately. "
+                    "Admit that you need more context or weren't following closely enough."
+                )
+        
+        return response_decision
+    
+    def _validate_conversation_history_accuracy(self, recent_activity: List[str], current_message: str) -> Dict:
+        """
+        PHASE 3F: Validate that conversation history is sufficient for the question being asked.
+        """
+        message_lower = current_message.lower()
+        
+        # Extract who the question is about
+        question_about_patterns = [
+            r'what did (\w+) (?:say|want|ask|request|tell)',
+            r'what was (\w+) (?:saying|wanting|asking|requesting)',
+            r'tell me what (\w+) (?:said|wanted|asked|requested)',
+            r'hey \w+ what did (\w+)',
+        ]
+        
+        target_character = None
+        for pattern in question_about_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                target_character = match.group(1).title()
+                break
+        
+        if not target_character:
+            return {
+                'is_sufficient': True,
+                'summary': 'General question not requiring specific character context',
+                'limitation': None
+            }
+        
+        # Check if target character appears in recent activity
+        character_mentioned_in_history = any(
+            target_character.lower() in activity.lower() for activity in recent_activity
+        )
+        
+        if not character_mentioned_in_history:
+            return {
+                'is_sufficient': False,
+                'summary': f'No recent activity involving {target_character}',
+                'limitation': f'{target_character} not mentioned in available conversation history'
+            }
+        
+        # Extract what the character actually said/did
+        character_activities = [
+            activity for activity in recent_activity 
+            if target_character.lower() in activity.lower()
+        ]
+        
+        # Validate if there's enough context
+        if len(character_activities) < 1:
+            return {
+                'is_sufficient': False,
+                'summary': f'Minimal context for {target_character}',
+                'limitation': f'Insufficient conversation context about {target_character}'
+            }
+        
+        # Build summary of what character actually did/said
+        summary_parts = []
+        for activity in character_activities:
+            if 'said' in activity.lower() or 'want' in activity.lower() or 'ask' in activity.lower():
+                summary_parts.append(activity)
+        
+        if not summary_parts:
+            return {
+                'is_sufficient': False,
+                'summary': f'{target_character} present but no clear statements/requests recorded',
+                'limitation': f'No clear record of what {target_character} said or wanted'
+            }
+        
+        return {
+            'is_sufficient': True,
+            'summary': f'Recent activity by {target_character}: {"; ".join(summary_parts)}',
+            'limitation': None
         }
 
 

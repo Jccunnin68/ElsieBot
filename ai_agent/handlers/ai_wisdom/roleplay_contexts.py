@@ -435,7 +435,10 @@ def _build_conversation_flow_context(cues, decision) -> str:
 
 
 def _build_response_guidance(decision, cues) -> str:
-    """Build response guidance section"""
+    """
+    Build response guidance section.
+    PHASE 3C: Enhanced to include fabrication control instructions.
+    """
     if not decision.should_respond:
         return f"""**RESPONSE DECISION:** LISTENING MODE
 - Reasoning: {decision.reasoning}
@@ -445,6 +448,26 @@ def _build_response_guidance(decision, cues) -> str:
     guidance_lines = [f"**RESPONSE DECISION:** ACTIVE RESPONSE ({decision.response_type.value.upper()})"]
     guidance_lines.append(f"- Reasoning: {decision.reasoning}")
     guidance_lines.append(f"- Confidence: {decision.confidence:.2f}")
+    
+    # PHASE 3C: Add fabrication control instructions if present
+    if hasattr(decision, 'knowledge_to_use') and decision.knowledge_to_use:
+        accuracy_instructions = [instruction for instruction in decision.knowledge_to_use 
+                               if 'CRITICAL:' in instruction or 'IMPORTANT:' in instruction]
+        
+        if accuracy_instructions:
+            guidance_lines.append("")
+            guidance_lines.append("**ACCURACY REQUIREMENTS:**")
+            for instruction in accuracy_instructions:
+                guidance_lines.append(f"- {instruction}")
+    
+    # PHASE 3C: Check for accuracy themes
+    if hasattr(decision, 'suggested_themes') and decision.suggested_themes:
+        if any(theme in ['accuracy_required', 'no_fabrication'] for theme in decision.suggested_themes):
+            if "ACCURACY REQUIREMENTS:" not in guidance_lines:
+                guidance_lines.append("")
+                guidance_lines.append("**ACCURACY REQUIREMENTS:**")
+            guidance_lines.append("- CRITICAL: Maintain strict accuracy - do not fabricate information")
+            guidance_lines.append("- If you don't know something, admit it honestly")
     
     if decision.response_type.value == "active_dialogue":
         guidance_lines.append("- Engage fully in conversation")
@@ -474,7 +497,10 @@ def _build_response_guidance(decision, cues) -> str:
 
 
 def _build_scene_context(cues) -> str:
-    """Build scene context section"""
+    """
+    Build scene context section.
+    PHASE 2E: Enhanced to include DGM scene context when available.
+    """
     context_lines = ["**SCENE CONTEXT:**"]
     context_lines.append(f"- Session Mode: {cues.session_mode.value}")
     context_lines.append(f"- Scene Control: {cues.scene_control.value}")
@@ -483,6 +509,46 @@ def _build_scene_context(cues) -> str:
     
     if cues.active_participants:
         context_lines.append(f"- Active Participants: {', '.join(cues.active_participants)}")
+    
+    # PHASE 2E: Add DGM scene context if available
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        
+        if rp_state.is_roleplaying:
+            dgm_scene_context = rp_state.get_dgm_scene_context()
+            
+            if dgm_scene_context:
+                context_lines.append("")
+                context_lines.append("**DGM SCENE DETAILS:**")
+                
+                if dgm_scene_context.get('location'):
+                    context_lines.append(f"- Location: {dgm_scene_context['location']}")
+                
+                if dgm_scene_context.get('time_of_day'):
+                    context_lines.append(f"- Time: {dgm_scene_context['time_of_day']}")
+                
+                if dgm_scene_context.get('ship_status'):
+                    context_lines.append(f"- Ship Status: {dgm_scene_context['ship_status']}")
+                
+                if dgm_scene_context.get('atmosphere'):
+                    context_lines.append(f"- Atmosphere: {dgm_scene_context['atmosphere']}")
+                
+                if dgm_scene_context.get('environment'):
+                    env_details = dgm_scene_context['environment']
+                    if isinstance(env_details, list):
+                        for detail in env_details:
+                            context_lines.append(f"- Environment: {detail}")
+                    else:
+                        context_lines.append(f"- Environment: {env_details}")
+                
+                if dgm_scene_context.get('raw_description'):
+                    context_lines.append(f"- Scene Description: {dgm_scene_context['raw_description']}")
+                
+                print(f"   🎬 DGM SCENE CONTEXT ADDED TO PROMPT: {len(dgm_scene_context)} elements")
+    
+    except Exception as e:
+        print(f"   ⚠️  Error adding DGM scene context: {e}")
     
     return "\n".join(context_lines)
 

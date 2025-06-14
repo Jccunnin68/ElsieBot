@@ -5,6 +5,9 @@ Decision Extractor - Response Decision Extraction Logic
 This module contains the logic for extracting response decisions from
 message analysis, determining whether AI generation is needed or if
 pre-generated responses can be used.
+
+PHASE 1A REFACTOR: Deprecated old strategy engine imports.
+All roleplay routing now goes through the enhanced decision engine.
 """
 
 import random
@@ -12,7 +15,10 @@ from typing import Dict, Optional
 
 from config import GEMMA_API_KEY
 from .response_decision import ResponseDecision
-from .strategy_engine import determine_response_strategy
+
+# PHASE 1A: DEPRECATED - Old strategy engine import commented out
+# from .strategy_engine import determine_response_strategy
+# All roleplay logic now uses response_router.py -> enhanced decision engine
 
 # Import from ai_attention handlers (Phase 6A)
 from handlers.ai_attention.character_tracking import extract_character_names_from_emotes

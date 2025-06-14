@@ -83,7 +83,7 @@ def build_contextual_cues(user_message: str, rp_state: 'RoleplayStateManager', t
     # Base session context
     session_mode = _determine_session_mode(rp_state)
     scene_control = _determine_scene_control_level(rp_state)
-    scene_setting = _determine_scene_setting(rp_state)
+    scene_setting = _determine_scene_setting(rp_state, user_message)
     
     # Character analysis
     current_speaker = _extract_current_speaker(user_message)
@@ -129,7 +129,10 @@ def build_contextual_cues(user_message: str, rp_state: 'RoleplayStateManager', t
         
         # Turn Context
         turn_number=turn_number,
-        recent_activity=_gather_recent_activity(rp_state)
+        recent_activity=_gather_recent_activity(rp_state),
+        
+        # PHASE 3B: Message Context for Fabrication Controls
+        current_message=user_message
     )
     
     print(f"   📊 CONTEXTUAL CUES BUILT:")
@@ -167,9 +170,56 @@ def _determine_scene_control_level(rp_state: 'RoleplayStateManager') -> SceneCon
         return SceneControlLevel.ACTIVE
 
 
-def _determine_scene_setting(rp_state: 'RoleplayStateManager') -> str:
-    """Determine current scene setting"""
-    # TODO: Could be enhanced to detect scene from conversation
+def _determine_scene_setting(rp_state: 'RoleplayStateManager', user_message: str = None) -> str:
+    """
+    Determine current scene setting.
+    PHASE 2B: Enhanced to use DGM scene context when available.
+    """
+    # PHASE 2B: Check for DGM scene context in current message
+    if user_message:
+        from .dgm_handler import check_dgm_post
+        dgm_result = check_dgm_post(user_message)
+        
+        if dgm_result['is_dgm'] and dgm_result.get('scene_context'):
+            scene_context = dgm_result['scene_context']
+            
+            # Build scene description from DGM context
+            scene_parts = []
+            
+            if scene_context.get('location'):
+                scene_parts.append(scene_context['location'])
+            
+            if scene_context.get('ship_status'):
+                scene_parts.append(f"({scene_context['ship_status']})")
+            
+            if scene_context.get('time_of_day'):
+                scene_parts.append(f"during {scene_context['time_of_day']}")
+            
+            if scene_context.get('atmosphere'):
+                scene_parts.append(f"- {scene_context['atmosphere']} atmosphere")
+            
+            if scene_parts:
+                scene_description = " ".join(scene_parts)
+                print(f"   🎬 DGM SCENE SETTING: {scene_description}")
+                return scene_description
+    
+    # PHASE 2B: Check roleplay state for stored DGM scene context
+    if rp_state.is_roleplaying and hasattr(rp_state, 'dgm_scene_context'):
+        stored_context = getattr(rp_state, 'dgm_scene_context', None)
+        if stored_context and stored_context.get('location'):
+            scene_parts = [stored_context['location']]
+            
+            if stored_context.get('time_of_day'):
+                scene_parts.append(f"during {stored_context['time_of_day']}")
+            
+            if stored_context.get('atmosphere'):
+                scene_parts.append(f"- {stored_context['atmosphere']} atmosphere")
+            
+            scene_description = " ".join(scene_parts)
+            print(f"   🎬 STORED DGM SCENE: {scene_description}")
+            return scene_description
+    
+    # Default fallback
     return "Ten Forward Bar aboard USS Stardancer"
 
 

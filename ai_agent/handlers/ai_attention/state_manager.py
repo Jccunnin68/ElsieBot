@@ -54,6 +54,9 @@ class RoleplayStateManager:
         # NEW: Conversation memory for enhanced context continuity
         self.conversation_memory = ConversationMemory(max_history=5)
         self.last_conversation_analysis = None  # Cache for last conversation analysis
+        
+        # PHASE 2C: DGM scene context storage
+        self.dgm_scene_context = {}  # Store scene context from DGM posts
     
     def start_roleplay_session(self, turn_number: int, initial_triggers: List[str], channel_context: Dict = None, dgm_characters: List[str] = None):
         """Initialize a new roleplay session with channel isolation."""
@@ -90,6 +93,9 @@ class RoleplayStateManager:
         # Reset conversation memory
         self.conversation_memory.clear_memory()
         self.last_conversation_analysis = None
+        
+        # PHASE 2C: Reset DGM scene context
+        self.dgm_scene_context = {}
         
         # Check if this is a DGM-initiated session
         self.dgm_initiated = 'dgm_scene_setting' in initial_triggers
@@ -506,6 +512,22 @@ class RoleplayStateManager:
         """
         self.add_participant(character_name, "speaking", turn_number)
         print(f"   🗣️ SPEAKING CHARACTER ADDED: {character_name} (Turn {turn_number})")
+    
+    def store_dgm_scene_context(self, scene_context: Dict):
+        """
+        PHASE 2C: Store DGM scene context for use in future responses.
+        This allows Elsie to understand and reference the scene setting.
+        """
+        if scene_context:
+            self.dgm_scene_context.update(scene_context)
+            print(f"   🎬 DGM SCENE CONTEXT STORED:")
+            for key, value in scene_context.items():
+                if key != 'raw_description':  # Don't log the full description
+                    print(f"      - {key}: {value}")
+    
+    def get_dgm_scene_context(self) -> Dict:
+        """Get the stored DGM scene context."""
+        return self.dgm_scene_context.copy()
     
     def to_dict(self) -> Dict:
         """Convert state to dictionary for logging/debugging."""

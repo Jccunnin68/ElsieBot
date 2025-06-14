@@ -113,13 +113,25 @@ def _handle_roleplay_with_enhanced_intelligence(user_message: str, conversation_
         return final_decision
         
     except Exception as e:
-        print(f"   ❌ ERROR in enhanced roleplay processing: {e}")
+        print(f"   ❌ CRITICAL ERROR in enhanced roleplay processing: {e}")
         import traceback
         print(f"   📋 Traceback: {traceback.format_exc()}")
         
-        # Fallback to original roleplay handler
-        from .roleplay_handler import handle_roleplay_message
-        return handle_roleplay_message(user_message, conversation_history, channel_context)
+        # PHASE 3E: DO NOT fallback to old system - return safe default instead
+        print(f"   🛡️ FABRICATION PROTECTION: Using safe default instead of old system fallback")
+        
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="I'm having difficulty processing that request right now. Please try again in a moment.",
+            strategy={
+                'approach': 'safe_fallback',
+                'needs_database': False,
+                'reasoning': f'Enhanced decision engine error - safe fallback applied: {str(e)}',
+                'context_priority': 'safety',
+                'fabrication_controls_applied': True,
+                'error_protection': True
+            }
+        )
 
 
 def _update_roleplay_state_from_decision(response_decision, contextual_cues, rp_state, turn_number: int):
@@ -179,6 +191,10 @@ def _convert_to_final_response_decision(response_decision, contextual_cues) -> R
         'confidence': response_decision.confidence,
         'scene_impact': response_decision.scene_impact,
         
+        # PHASE 3D: Fabrication control information
+        'knowledge_to_use': getattr(response_decision, 'knowledge_to_use', []),
+        'avoid_topics': getattr(response_decision, 'avoid_topics', []),
+        
         # Contextual information
         'session_mode': contextual_cues.session_mode.value,
         'current_speaker': contextual_cues.current_speaker,
@@ -190,7 +206,8 @@ def _convert_to_final_response_decision(response_decision, contextual_cues) -> R
         # Enhanced decision information
         'enhanced_decision': True,
         'emotional_intelligence_used': True,
-        'priority_resolution_used': True
+        'priority_resolution_used': True,
+        'fabrication_controls_applied': True  # PHASE 3D: Mark that fabrication controls were used
     }
     
     return ResponseDecision(
@@ -263,6 +280,11 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
                 dgm_characters=dgm_result.get('characters', [])
             )
         
+        # PHASE 2D: Store DGM scene context
+        scene_context = dgm_result.get('scene_context', {})
+        if scene_context:
+            rp_state.store_dgm_scene_context(scene_context)
+        
         # Return no-response decision with proper NO_RESPONSE string
         return ResponseDecision(
             needs_ai_generation=False,
@@ -305,6 +327,11 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
                 initial_triggers=['dgm_controlled_elsie'],
                 channel_context=channel_context
             )
+        
+        # PHASE 2D: Store DGM scene context if present
+        scene_context = dgm_result.get('scene_context', {})
+        if scene_context:
+            rp_state.store_dgm_scene_context(scene_context)
         
         return ResponseDecision(
             needs_ai_generation=False,

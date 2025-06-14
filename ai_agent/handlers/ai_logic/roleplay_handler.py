@@ -2,14 +2,15 @@
 Roleplay Handler - All Roleplay Mode Logic
 ==========================================
 
-This module handles ALL responses when Elsie is in roleplay mode.
-Provides rich, character-aware responses with full feature set including:
-- Bar service with character knowledge
-- Character-aware greetings, farewells, status responses  
-- Full database context via roleplay_contexts.py
-- AI-generated responses with relationship awareness
+PHASE 1B: DEPRECATED - This module has been superseded by enhanced decision engine.
 
-CRITICAL: This handler is ONLY called when in roleplay mode.
+All roleplay logic now flows through:
+response_router.py -> _handle_roleplay_with_enhanced_intelligence() -> response_decision_engine.py
+
+The enhanced system provides better fabrication control, DGM context integration,
+and fixes the bugs related to inappropriate leading questions and information invention.
+
+LEGACY NOTICE: Functions kept for compatibility but redirect to new system.
 """
 
 import random
@@ -24,72 +25,69 @@ from config import GEMMA_API_KEY
 
 def handle_roleplay_message(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
     """
-    Handle ALL roleplay mode messages with full character-aware features.
+    PHASE 1B: DEPRECATED - This function has been replaced by enhanced decision engine.
     
-    Roleplay mode provides:
-    - Character-aware greetings ("Welcome back, Maeve!")
-    - Bar service with relationships ("Here's your usual, Commander")
-    - Menu interactions in roleplay context
-    - Full database context for roleplay queries
-    - Rich AI-generated responses
+    All roleplay logic now goes through:
+    response_router.py -> _handle_roleplay_with_enhanced_intelligence() -> response_decision_engine.py
     
-    Args:
-        user_message: The user's message
-        conversation_history: Previous conversation turns  
-        channel_context: Channel information
-        
-    Returns:
-        ResponseDecision with roleplay strategy
+    This function is kept for compatibility but should not be called.
     """
-    print(f"\n🎭 ROLEPLAY HANDLER - Processing roleplay message")
+    print(f"\n⚠️  DEPRECATED: handle_roleplay_message() called - redirecting to enhanced intelligence")
     
-    rp_state = get_roleplay_state()
-    turn_number = len(conversation_history) + 1
+    # PHASE 1B: Redirect to enhanced decision engine
+    from .response_router import _handle_roleplay_with_enhanced_intelligence
+    return _handle_roleplay_with_enhanced_intelligence(user_message, conversation_history, channel_context)
     
-    # Handle cross-channel messages (busy responses)
-    if not rp_state.is_message_from_roleplay_channel(channel_context):
-        return _handle_cross_channel_busy(rp_state, channel_context)
-    
-    # Update activity for roleplay channel messages
-    rp_state.update_roleplay_channel_activity()
-    
-    # Track character turns
-    character_names = extract_character_names_from_emotes(user_message)
-    if character_names:
-        rp_state.mark_character_turn(turn_number, character_names[0])
-    
-    # Determine if Elsie should respond and how
-    should_respond, response_reason = should_elsie_respond_in_roleplay(
-        user_message, rp_state, turn_number
-    )
-    
-    if not should_respond:
-        return _handle_roleplay_no_response(response_reason)
-    
-    # Detect response type for roleplay
-    response_type = detect_roleplay_response_type(user_message)
-    
-    print(f"   🎭 Roleplay Response Type: {response_type}")
-    print(f"   🎯 Response Reason: {response_reason}")
-    
-    # ALL roleplay responses use AI generation with character context
-    # This ensures greetings, drink orders, etc. are character-aware
-    strategy = build_roleplay_strategy(
-        user_message, response_type, response_reason, rp_state, turn_number, channel_context
-    )
-    
-    # Check for AI variety enhancement (80% chance in roleplay)
-    if response_type in ['greeting', 'drink_order', 'farewell', 'status_inquiry', 'conversational']:
-        if should_use_ai_variety_for_roleplay():
-            print(f"   ✨ AI VARIETY ENHANCED: {response_type} with full roleplay context")
-            strategy['ai_variety_type'] = response_type
-            strategy['approach'] = 'roleplay_mock_enhanced'
-    
-    return ResponseDecision(
-        needs_ai_generation=True,
-        pre_generated_response=None,
-        strategy=strategy
-    )
+    # PHASE 1B: DEPRECATED - Old roleplay handler logic commented out
+    # print(f"\n🎭 ROLEPLAY HANDLER - Processing roleplay message")
+    # 
+    # rp_state = get_roleplay_state()
+    # turn_number = len(conversation_history) + 1
+    # 
+    # # Handle cross-channel messages (busy responses)
+    # if not rp_state.is_message_from_roleplay_channel(channel_context):
+    #     return _handle_cross_channel_busy(rp_state, channel_context)
+    # 
+    # # Update activity for roleplay channel messages
+    # rp_state.update_roleplay_channel_activity()
+    # 
+    # # Track character turns
+    # character_names = extract_character_names_from_emotes(user_message)
+    # if character_names:
+    #     rp_state.mark_character_turn(turn_number, character_names[0])
+    # 
+    # # Determine if Elsie should respond and how
+    # should_respond, response_reason = should_elsie_respond_in_roleplay(
+    #     user_message, rp_state, turn_number
+    # )
+    # 
+    # if not should_respond:
+    #     return _handle_roleplay_no_response(response_reason)
+    # 
+    # # Detect response type for roleplay
+    # response_type = detect_roleplay_response_type(user_message)
+    # 
+    # print(f"   🎭 Roleplay Response Type: {response_type}")
+    # print(f"   🎯 Response Reason: {response_reason}")
+    # 
+    # # ALL roleplay responses use AI generation with character context
+    # # This ensures greetings, drink orders, etc. are character-aware
+    # strategy = build_roleplay_strategy(
+    #     user_message, response_type, response_reason, rp_state, turn_number, channel_context
+    # )
+    # 
+    # # Check for AI variety enhancement (80% chance in roleplay)
+    # if response_type in ['greeting', 'drink_order', 'farewell', 'status_inquiry', 'conversational']:
+    #     if should_use_ai_variety_for_roleplay():
+    #         print(f"   ✨ AI VARIETY ENHANCED: {response_type} with full roleplay context")
+    #         strategy['ai_variety_type'] = response_type
+    #         strategy['approach'] = 'roleplay_mock_enhanced'
+    # 
+    # return ResponseDecision(
+    #     needs_ai_generation=True,
+    #     pre_generated_response=None,
+    #     strategy=strategy
+    # )
 
 
 def detect_roleplay_response_type(user_message: str) -> str:

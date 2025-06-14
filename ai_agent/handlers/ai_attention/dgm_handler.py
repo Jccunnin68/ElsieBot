@@ -12,13 +12,135 @@ from typing import Dict, List, Any
 from .character_tracking import is_valid_character_name
 
 
+def extract_scene_context(user_message: str) -> Dict[str, Any]:
+    """
+    PHASE 2A: Extract scene context information from DGM posts.
+    
+    Parses location, time, environment, and other scene details that Elsie should understand.
+    Examples:
+    - "[DGM] *The Stardancer was currently in orbit of Earth.*" -> location: "orbit of Earth", ship: "Stardancer"
+    - "[DGM] The doors to Ten Forward slide open as evening approaches." -> location: "Ten Forward", time: "evening"
+    """
+    # Remove DGM tag for cleaner parsing
+    clean_message = re.sub(r'^\s*\[DGM\]\s*', '', user_message, flags=re.IGNORECASE).strip()
+    
+    scene_context = {
+        'location': None,
+        'time_of_day': None,
+        'ship_status': None,
+        'environment': None,
+        'atmosphere': None,
+        'raw_description': clean_message
+    }
+    
+    print(f"   🎬 EXTRACTING SCENE CONTEXT from: '{clean_message[:100]}{'...' if len(clean_message) > 100 else ''}'")
+    
+    # Extract location information
+    location_patterns = [
+        # Specific locations
+        r'(?:in|at|to|aboard|on)\s+(Ten Forward|the bridge|engineering|sickbay|the holodeck|the ready room|the observation lounge)',
+        r'(?:in|at|to|aboard|on)\s+(Earth|Vulcan|Risa|Deep Space Nine|the Alpha Quadrant)',
+        r'(?:in|at|to|aboard|on)\s+(orbit of [A-Z][a-z]+)',
+        r'(?:in|at|to|aboard|on)\s+(the [A-Z][a-zA-Z\s]+)',
+        
+        # Ship locations
+        r'(?:aboard|on)\s+(USS [A-Z][a-z]+|the [A-Z][a-z]+)',
+        r'(USS [A-Z][a-z]+|the [A-Z][a-z]+)\s+(?:was|is|remains)',
+        
+        # General location patterns
+        r'(?:doors to|entrance to|inside|within)\s+([A-Z][a-zA-Z\s]+)',
+        r'([A-Z][a-zA-Z\s]+)\s+(?:slide open|opens|closes)',
+    ]
+    
+    for pattern in location_patterns:
+        match = re.search(pattern, clean_message, re.IGNORECASE)
+        if match:
+            location = match.group(1).strip()
+            scene_context['location'] = location
+            print(f"      📍 LOCATION: {location}")
+            break
+    
+    # Extract time of day
+    time_patterns = [
+        r'\b(morning|afternoon|evening|night|dawn|dusk|midnight|noon)\b',
+        r'\b(early morning|late evening|late night)\b',
+        r'as\s+(evening|morning|night|dawn|dusk)\s+(?:approaches|arrives|falls)',
+    ]
+    
+    for pattern in time_patterns:
+        match = re.search(pattern, clean_message, re.IGNORECASE)
+        if match:
+            time_of_day = match.group(1).strip().lower()
+            scene_context['time_of_day'] = time_of_day
+            print(f"      🕐 TIME: {time_of_day}")
+            break
+    
+    # Extract ship status
+    ship_status_patterns = [
+        r'(?:was|is|remains)\s+(?:currently\s+)?(?:in\s+)?(orbit|docked|traveling|at warp|in space)',
+        r'(?:orbiting|approaching|leaving|departing)\s+([A-Z][a-z]+)',
+        r'(?:at|in|near)\s+(warp|impulse|full stop)',
+    ]
+    
+    for pattern in ship_status_patterns:
+        match = re.search(pattern, clean_message, re.IGNORECASE)
+        if match:
+            ship_status = match.group(0).strip()
+            scene_context['ship_status'] = ship_status
+            print(f"      🚀 SHIP STATUS: {ship_status}")
+            break
+    
+    # Extract environmental details
+    environment_patterns = [
+        r'\*([^*]+(?:lighting|atmosphere|temperature|sound|music|noise)[^*]*)\*',
+        r'\*([^*]+(?:warm|cold|bright|dim|quiet|loud|peaceful|busy)[^*]*)\*',
+        r'\*([^*]+(?:glow|shimmer|flicker|hum|buzz)[^*]*)\*',
+    ]
+    
+    environment_details = []
+    for pattern in environment_patterns:
+        matches = re.finditer(pattern, clean_message, re.IGNORECASE)
+        for match in matches:
+            detail = match.group(1).strip()
+            environment_details.append(detail)
+            print(f"      🌟 ENVIRONMENT: {detail}")
+    
+    if environment_details:
+        scene_context['environment'] = environment_details
+    
+    # Extract atmospheric mood
+    atmosphere_patterns = [
+        r'\b(peaceful|busy|quiet|lively|tense|relaxed|formal|casual|festive|somber)\b',
+        r'\b(empty|crowded|bustling|serene|chaotic)\b',
+    ]
+    
+    for pattern in atmosphere_patterns:
+        match = re.search(pattern, clean_message, re.IGNORECASE)
+        if match:
+            atmosphere = match.group(1).strip().lower()
+            scene_context['atmosphere'] = atmosphere
+            print(f"      🎭 ATMOSPHERE: {atmosphere}")
+            break
+    
+    # Filter out None values for cleaner context
+    filtered_context = {k: v for k, v in scene_context.items() if v is not None}
+    
+    if len(filtered_context) > 1:  # More than just raw_description
+        print(f"   ✅ SCENE CONTEXT EXTRACTED: {len(filtered_context)-1} elements")
+    else:
+        print(f"   ℹ️  No specific scene context detected")
+    
+    return filtered_context
+
+
 def check_dgm_post(user_message: str) -> Dict[str, Any]:
     """
     Check if this is a DGM (Daedalus Game Master) post for scene setting.
     DGM posts should trigger roleplay sessions but never get responses.
     Enhanced to parse character names from DGM scene descriptions.
     Enhanced to detect DGM-controlled Elsie posts with [DGM][Elsie] pattern.
-    Returns dict with is_dgm, action, triggers_roleplay, confidence, triggers, characters, dgm_controlled_elsie
+    PHASE 2A: Enhanced to extract scene context (location, time, environment).
+    Returns dict with is_dgm, action, triggers_roleplay, confidence, triggers, characters, dgm_controlled_elsie, scene_context
     """
     # Check for DGM tag at the start of the message
     dgm_pattern = r'^\s*\[DGM\]'
@@ -31,10 +153,14 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
             'triggers': [],
             'characters': [],
             'dgm_controlled_elsie': False,
-            'elsie_content': ''
+            'elsie_content': '',
+            'scene_context': {}
         }
     
     print(f"   🎬 DGM POST ANALYSIS:")
+    
+    # PHASE 2A: Extract scene context from all DGM posts
+    scene_context = extract_scene_context(user_message)
     
     # Check for DGM-controlled Elsie posts: [DGM][Elsie] pattern
     dgm_elsie_pattern = r'\[DGM\]\s*\[Elsie\]\s*(.*)'
@@ -51,7 +177,8 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
             'triggers': ['dgm_controlled_elsie'],
             'characters': [],
             'dgm_controlled_elsie': True,
-            'elsie_content': elsie_content
+            'elsie_content': elsie_content,
+            'scene_context': scene_context
         }
     
     # Extract character names from multiple sources
@@ -122,7 +249,8 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
                 'triggers': ['dgm_scene_end'],
                 'characters': character_list,
                 'dgm_controlled_elsie': False,
-                'elsie_content': ''
+                'elsie_content': '',
+                'scene_context': scene_context
             }
     
     # Default DGM scene setting
@@ -135,7 +263,8 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
         'triggers': ['dgm_scene_setting'],
         'characters': character_list,
         'dgm_controlled_elsie': False,
-        'elsie_content': ''
+        'elsie_content': '',
+        'scene_context': scene_context
     }
 
 

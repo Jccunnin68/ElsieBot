@@ -2,11 +2,18 @@
 Strategy Engine - Core Response Strategy Determination
 =====================================================
 
-This module contains Elsie's "inner monologue" logic for determining
-the best response strategy based on message analysis and context.
+PHASE 1C: DEPRECATED - This module has been superseded by enhanced decision engine.
 
-The strategy engine analyzes messages and returns a strategy dictionary
-containing approach, database needs, reasoning, and additional context.
+All strategy determination now flows through:
+response_router.py -> _handle_roleplay_with_enhanced_intelligence() -> response_decision_engine.py
+
+The enhanced system provides better:
+- Fabrication control (fixes false information)
+- DGM context integration (proper scene setting)
+- Individual addressing detection (fixes conversation flow)
+- Leading question prevention (more natural greetings)
+
+LEGACY NOTICE: Functions kept for compatibility but redirect to new system.
 """
 
 import re
@@ -52,70 +59,83 @@ from handlers.ai_attention.roleplay_types import (
 
 def determine_response_strategy(user_message: str, conversation_history: list, channel_context: Optional[Dict] = None) -> Dict[str, any]:
     """
-    Elsie's inner monologue to determine the best response strategy.
-    Enhanced with strict roleplay session isolation and DGM-only exit control.
-    Returns a strategy dict with approach, needs_database, and reasoning.
+    PHASE 1C: DEPRECATED - This function has been replaced by enhanced decision engine.
+    
+    All strategy determination now flows through:
+    response_router.py -> route_message_to_handler() -> response_decision_engine.py
+    
+    This function is kept for compatibility but should not be called.
     """
-    user_lower = user_message.lower().strip()
+    print(f"\n⚠️  DEPRECATED: determine_response_strategy() called - redirecting to enhanced router")
     
-    # Get roleplay state manager
-    rp_state = get_roleplay_state()
-    turn_number = len(conversation_history) + 1
+    # PHASE 1C: Redirect to enhanced router system
+    from .response_router import route_message_to_handler
+    decision = route_message_to_handler(user_message, conversation_history, channel_context)
     
-    # Inner monologue process
-    strategy = {
-        'approach': APPROACH_TYPES['general'],
-        'needs_database': False,
-        'reasoning': '',
-        'context_priority': CONTEXT_PRIORITIES['none']
-    }
+    # Convert ResponseDecision back to strategy format for compatibility
+    return decision.strategy
     
-    # PRIORITY 0: Channel validation when in roleplay mode - FIXED to prevent DM short-circuiting
-    if rp_state.is_roleplaying:
-        if not rp_state.is_message_from_roleplay_channel(channel_context):
-            # FIXED: External messages should NEVER trigger auto-exit here
-            # This logic was allowing DMs to short-circuit roleplay sessions
-            # Always return busy response for external messages, preserving roleplay state
-            channel_info = rp_state.get_roleplay_channel_info()
-            busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. Please try again later or join that thread."
-            
-            # Check if this is a DM
-            if channel_context and channel_context.get('type', '').lower() in ['dm', 'group_dm']:
-                busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. DM interactions are paused during roleplay sessions."
-            
-            print(f"   🚫 CROSS-CHANNEL BUSY: Returning busy signal, preserving roleplay state")
-            strategy.update({
-                'approach': 'cross_channel_busy',
-                'needs_database': False,
-                'reasoning': f'Cross-channel message while roleplaying in {channel_info["channel_name"]}',
-                'context_priority': CONTEXT_PRIORITIES['none'],
-                'busy_message': busy_message,
-                'roleplay_channel': channel_info['channel_name']
-            })
-            return strategy
-    
-    # PRIORITY 1: Check for DGM-only roleplay exit conditions if already in RP mode
-    if rp_state.is_roleplaying:
-        # Only check for DGM scene end - remove all other exit conditions
-        is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
-        
-        if TRIGGER_TYPES['dgm_scene_end'] in triggers:
-            print(f"   🎬 DGM SCENE END DETECTED - Ending roleplay session")
-            rp_state.end_roleplay_session(EXIT_CONDITIONS['dgm_scene_end'])
-            strategy.update({
-                'approach': APPROACH_TYPES['dgm_scene_end'],
-                'needs_database': False,
-                'reasoning': 'DGM scene end - end roleplay session',
-                'context_priority': CONTEXT_PRIORITIES['none']
-            })
-            return strategy
-        
-        # REMOVED: All automatic exit logic (sustained topic shift, etc.)
-        # Roleplay sessions are now locked until DGM explicitly ends them
-        print(f"   🔒 ROLEPLAY LOCKED: Only DGM can end this session (topic shifts ignored)")
-    
-    # Process main strategy logic
-    return _process_main_strategy_logic(user_message, conversation_history, channel_context, strategy, user_lower, rp_state, turn_number)
+    # PHASE 1C: DEPRECATED - Old strategy engine logic commented out
+    # user_lower = user_message.lower().strip()
+    # 
+    # # Get roleplay state manager
+    # rp_state = get_roleplay_state()
+    # turn_number = len(conversation_history) + 1
+    # 
+    # # Inner monologue process
+    # strategy = {
+    #     'approach': APPROACH_TYPES['general'],
+    #     'needs_database': False,
+    #     'reasoning': '',
+    #     'context_priority': CONTEXT_PRIORITIES['none']
+    # }
+    # 
+    # # PRIORITY 0: Channel validation when in roleplay mode - FIXED to prevent DM short-circuiting
+    # if rp_state.is_roleplaying:
+    #     if not rp_state.is_message_from_roleplay_channel(channel_context):
+    #         # FIXED: External messages should NEVER trigger auto-exit here
+    #         # This logic was allowing DMs to short-circuit roleplay sessions
+    #         # Always return busy response for external messages, preserving roleplay state
+    #         channel_info = rp_state.get_roleplay_channel_info()
+    #         busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. Please try again later or join that thread."
+    #         
+    #         # Check if this is a DM
+    #         if channel_context and channel_context.get('type', '').lower() in ['dm', 'group_dm']:
+    #             busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. DM interactions are paused during roleplay sessions."
+    #         
+    #         print(f"   🚫 CROSS-CHANNEL BUSY: Returning busy signal, preserving roleplay state")
+    #         strategy.update({
+    #             'approach': 'cross_channel_busy',
+    #             'needs_database': False,
+    #             'reasoning': f'Cross-channel message while roleplaying in {channel_info["channel_name"]}',
+    #             'context_priority': CONTEXT_PRIORITIES['none'],
+    #             'busy_message': busy_message,
+    #             'roleplay_channel': channel_info['channel_name']
+    #         })
+    #         return strategy
+    # 
+    # # PRIORITY 1: Check for DGM-only roleplay exit conditions if already in RP mode
+    # if rp_state.is_roleplaying:
+    #     # Only check for DGM scene end - remove all other exit conditions
+    #     is_roleplay, confidence_score, triggers = detect_roleplay_triggers(user_message, channel_context)
+    #     
+    #     if TRIGGER_TYPES['dgm_scene_end'] in triggers:
+    #         print(f"   🎬 DGM SCENE END DETECTED - Ending roleplay session")
+    #         rp_state.end_roleplay_session(EXIT_CONDITIONS['dgm_scene_end'])
+    #         strategy.update({
+    #             'approach': APPROACH_TYPES['dgm_scene_end'],
+    #             'needs_database': False,
+    #             'reasoning': 'DGM scene end - end roleplay session',
+    #             'context_priority': CONTEXT_PRIORITIES['none']
+    #         })
+    #         return strategy
+    #     
+    #     # REMOVED: All automatic exit logic (sustained topic shift, etc.)
+    #     # Roleplay sessions are now locked until DGM explicitly ends them
+    #     print(f"   🔒 ROLEPLAY LOCKED: Only DGM can end this session (topic shifts ignored)")
+    # 
+    # # Process main strategy logic
+    # return _process_main_strategy_logic(user_message, conversation_history, channel_context, strategy, user_lower, rp_state, turn_number)
 
 def _process_main_strategy_logic(user_message: str, conversation_history: list, channel_context: Dict, strategy: Dict, user_lower: str, rp_state, turn_number: int) -> Dict[str, any]:
     """Process the main strategy determination logic with ROLEPLAY-FIRST priority."""
