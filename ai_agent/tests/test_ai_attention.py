@@ -1,11 +1,11 @@
 """
-Tests for AI Attention - Roleplay State Management
-==================================================
+Tests for AI Attention - State Management
+=========================================
 
-Tests all components of the roleplay detection and state management system.
+Tests components of the roleplay state management system.
 """
 
-import pytest
+
 import sys
 import os
 
@@ -13,71 +13,12 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from handlers.ai_attention import (
-    detect_roleplay_triggers,
     check_dgm_post,
     is_roleplay_allowed_channel,
     extract_character_names_from_emotes,
     detect_roleplay_exit_conditions,
     is_valid_character_name
 )
-
-
-class TestRoleplayDetection:
-    """Test roleplay trigger detection."""
-    
-    def test_character_brackets_detection(self):
-        """Test detection of character name brackets."""
-        message = "[Fallo] *walks into the room* Hello everyone."
-        is_rp, confidence, triggers = detect_roleplay_triggers(message)
-        
-        assert is_rp == True
-        assert confidence >= 0.7  # High confidence for character brackets
-        assert "character_brackets" in triggers
-    
-    def test_emote_detection(self):
-        """Test detection of emotes."""
-        message = "*sits down at the bar* Can I get a drink?"
-        is_rp, confidence, triggers = detect_roleplay_triggers(message)
-        
-        assert is_rp == True
-        assert confidence >= 0.6  # High confidence for emotes
-        assert "emotes" in triggers
-    
-    def test_quoted_dialogue_detection(self):
-        """Test detection of quoted dialogue."""
-        message = '"Hello there," she said with a smile.'
-        is_rp, confidence, triggers = detect_roleplay_triggers(message)
-        
-        assert confidence > 0.0  # Should get some confidence
-        assert "quoted_dialogue" in triggers
-    
-    def test_thread_context_bonus(self):
-        """Test thread context gives confidence bonus."""
-        message = "The character walks into the room"
-        channel_context = {'is_thread': True, 'type': 'public_thread'}
-        
-        is_rp, confidence, triggers = detect_roleplay_triggers(message, channel_context)
-        
-        # Should get thread bonus
-        assert "thread_context" in triggers or "thread_rp_pattern" in triggers
-    
-    def test_non_roleplay_message(self):
-        """Test that non-roleplay messages aren't detected."""
-        message = "What's the weather like today?"
-        is_rp, confidence, triggers = detect_roleplay_triggers(message)
-        
-        assert is_rp == False
-        assert confidence < 0.25  # Below threshold
-    
-    def test_channel_restrictions(self):
-        """Test that roleplay is blocked in restricted channels."""
-        message = "*does something roleplay-like*"
-        channel_context = {'type': 'general', 'is_thread': False, 'is_dm': False}
-        
-        is_rp, confidence, triggers = detect_roleplay_triggers(message, channel_context)
-        
-        # Should be blocked due to channel restrictions
-        assert "channel_restricted" in triggers
 
 
 class TestDGMPosts:
@@ -259,31 +200,5 @@ class TestRoleplayExitConditions:
             assert should_exit == False
 
 
-class TestEdgeCases:
-    """Test edge cases and error conditions."""
-    
-    def test_empty_message(self):
-        """Test handling of empty messages."""
-        is_rp, confidence, triggers = detect_roleplay_triggers("")
-        
-        assert is_rp == False
-        assert confidence == 0.0
-    
-    def test_very_long_message(self):
-        """Test handling of very long messages."""
-        long_message = "Hello " * 1000 + "*does something*"
-        is_rp, confidence, triggers = detect_roleplay_triggers(long_message)
-        
-        # Should still detect roleplay patterns
-        assert "emotes" in triggers
-    
-    def test_special_characters(self):
-        """Test handling of messages with special characters."""
-        special_message = "*walks @#$% into the room!!! 🎭*"
-        is_rp, confidence, triggers = detect_roleplay_triggers(special_message)
-        
-        assert "emotes" in triggers
 
 
-if __name__ == "__main__":
-    pytest.main([__file__]) 
