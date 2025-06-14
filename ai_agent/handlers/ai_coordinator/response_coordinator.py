@@ -8,7 +8,7 @@ optimizing the flow to avoid expensive AI calls when possible.
 
 from typing import Dict
 
-from handlers.ai_logic import extract_response_decision
+from handlers.ai_logic.response_router import route_message_to_handler
 from handlers.ai_attention import extract_character_names_from_emotes, get_roleplay_state
 from .ai_engine import generate_ai_response_with_decision
 
@@ -50,7 +50,7 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
         print(f"   ⚠️  No channel context provided - assuming allowed")
     
     # Make the decision using existing logic
-    decision = extract_response_decision(user_message, conversation_history, channel_context)
+    decision = route_message_to_handler(user_message, conversation_history, channel_context)
     
     # If no AI needed, return the pre-generated response
     if not decision.needs_ai_generation:

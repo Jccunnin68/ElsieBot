@@ -1,8 +1,6 @@
 """Database-driven content retrieval and wiki search functionality"""
 
 from database_controller import get_db_controller
-from handlers.ai_logic.log_processor import parse_log_characters, is_ship_log_title
-# Removed circular import: from handlers.ai_logic.query_detection import is_log_query
 from typing import Optional
 import requests
 from urllib.parse import quote
@@ -196,6 +194,7 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
                 content_preview = r['raw_content'][:50] + "..." if len(r['raw_content']) > 50 else r['raw_content']
                 
                 # Use enhanced ship log detection
+                from handlers.ai_logic.log_processor import is_ship_log_title
                 if is_ship_log_title(title):
                     log_results.append(r)
                     print(f"   ✓ Detected ship log: '{title}' Content='{content_preview}'")
@@ -225,6 +224,7 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
             print(f"   📄 Processing {page_type}: '{title}' ({len(content)} chars)")
             
             # Parse character speaking patterns in the log using enhanced dialogue parsing
+            from handlers.ai_logic.log_processor import parse_log_characters
             parsed_content = parse_log_characters(content)
             
             # Format the log with title and parsed content
@@ -725,5 +725,5 @@ def get_log_url(search_query: str) -> str:
         return f"Error retrieving URL for '{search_query}': {e}"
 
 def get_recent_log_url(search_query: str) -> str:
-    """Legacy function - redirects to get_log_url for backward compatibility"""
+    """Get recent log URL - redirects to get_log_url for consistency"""
     return get_log_url(search_query) 

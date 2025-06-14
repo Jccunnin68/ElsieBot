@@ -139,6 +139,21 @@ class ResponseDecisionEngine:
             # Basic emotional analysis
             emotional_context = analyze_emotional_context(current_message)
             
+            # Ensure emotional_context is a dictionary
+            if not isinstance(emotional_context, dict):
+                print(f"   ⚠️  WARNING: emotional_context is not a dict, got {type(emotional_context)}: {emotional_context}")
+                emotional_context = {
+                    'emotional_tone': 'neutral',
+                    'emotional_confidence': 0.8,
+                    'needs_support': False,
+                    'support_confidence': 0.0,
+                    'intensity': 'low',
+                    'vulnerability_level': 'low',
+                    'support_indicators': [],
+                    'emotional_keywords': [],
+                    'contextual_clues': []
+                }
+            
             # Enhanced conversation emotional analysis
             conversation_emotions = ConversationEmotionalIntelligence()
             
@@ -177,6 +192,10 @@ class ResponseDecisionEngine:
                 'emotional_tone': 'neutral',
                 'needs_support': False,
                 'support_confidence': 0.0,
+                'enhanced_support_needs': False,
+                'enhanced_support_confidence': 0.0,
+                'enhanced_support_reasoning': f'Error in analysis: {str(e)}',
+                'conversation_emotional_analysis': False,
                 'error': str(e)
             }
     
@@ -340,12 +359,26 @@ class ResponseDecisionEngine:
             # Check for individual addressing (highest priority)
             is_individual_addressing = addressing_analysis.get('is_individual_address', False)
             
+            # Check for character-to-character interactions (high priority)
+            is_character_to_character = self._check_character_to_character_interaction(contextual_cues)
+            
+            # Check for service requests (high priority)
+            service_requests = self._check_service_requests(contextual_cues)
+            
             if is_individual_addressing:
                 return {
                     'primary_decision': 'individual_addressing',
                     'confidence': addressing_confidence,
                     'reasoning': 'Individual addressing detected - Elsie is directly mentioned',
                     'conflict_resolved': False
+                }
+            elif service_requests:
+                return {
+                    'primary_decision': 'service_request',
+                    'confidence': 0.9,
+                    'reasoning': f"Service request detected: {', '.join(service_requests)}",
+                    'conflict_resolved': False,
+                    'service_types': service_requests
                 }
             elif needs_support and support_confidence >= 0.4:
                 return {
@@ -359,6 +392,13 @@ class ResponseDecisionEngine:
                     'primary_decision': 'group_addressing',
                     'confidence': addressing_confidence,
                     'reasoning': 'Group addressing detected',
+                    'conflict_resolved': False
+                }
+            elif is_character_to_character:
+                return {
+                    'primary_decision': 'character_to_character',
+                    'confidence': 0.8,
+                    'reasoning': 'Character-to-character interaction detected - Elsie should listen',
                     'conflict_resolved': False
                 }
             else:
@@ -409,6 +449,18 @@ class ResponseDecisionEngine:
                 approach = "welcoming"
                 tone = "friendly"
                 
+            elif primary_decision == 'service_request':
+                should_respond = True
+                response_type = ResponseType.SUBTLE_SERVICE
+                approach = "service-oriented"
+                tone = "professional"
+                
+            elif primary_decision == 'character_to_character':
+                should_respond = False
+                response_type = ResponseType.NONE
+                approach = "roleplay_listening"
+                tone = "observant"
+                
             else:
                 # Check for technical expertise opportunities before standard response
                 technical_expertise_detected = self._check_technical_expertise(contextual_cues)
@@ -457,6 +509,66 @@ class ResponseDecisionEngine:
                 response_type=ResponseType.NONE,
                 reasoning=f"Error building decision: {e}"
             )
+    
+    def _check_character_to_character_interaction(self, contextual_cues) -> bool:
+        """
+        Check if this is a character-to-character interaction where Elsie should listen.
+        
+        FIXED: Adds missing character-to-character detection with higher priority than technical expertise.
+        """
+        try:
+            # Get addressing context
+            addressing_context = getattr(contextual_cues, 'addressing_context', None)
+            if not addressing_context:
+                return False
+            
+            # Check if other characters are being addressed (not Elsie)
+            other_interactions = getattr(addressing_context, 'other_interactions', [])
+            if other_interactions:
+                print(f"   👥 CHARACTER-TO-CHARACTER INTERACTION DETECTED: {other_interactions}")
+                return True
+            
+            # Check current message for character names being addressed
+            current_message = getattr(contextual_cues, 'current_message', '')
+            if not current_message:
+                return False
+            
+            # Look for pattern: [Character] "Other Character, ..."
+            import re
+            # Pattern to detect character addressing another character
+            addressing_pattern = r'\[([^\]]+)\]\s*["\']([A-Z][a-z]+)[,\s]'
+            match = re.search(addressing_pattern, current_message)
+            
+            if match:
+                speaker = match.group(1).strip()
+                addressed = match.group(2).strip()
+                
+                # Make sure it's not addressing Elsie
+                if addressed.lower() not in ['elsie', 'el']:
+                    print(f"   👥 CHARACTER-TO-CHARACTER DETECTED: {speaker} addressing {addressed}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"   ⚠️  ERROR checking character-to-character interaction: {e}")
+            return False
+
+    def _check_service_requests(self, contextual_cues) -> List[str]:
+        """
+        Check if there are service requests in the contextual cues.
+        """
+        try:
+            addressing_context = getattr(contextual_cues, 'addressing_context', None)
+            if addressing_context:
+                service_requests = getattr(addressing_context, 'service_requests', [])
+                if service_requests:
+                    print(f"   🍺 SERVICE REQUESTS DETECTED: {service_requests}")
+                    return service_requests
+            return []
+        except Exception as e:
+            print(f"   ⚠️  ERROR checking service requests: {e}")
+            return []
     
     def _check_technical_expertise(self, contextual_cues) -> bool:
         """

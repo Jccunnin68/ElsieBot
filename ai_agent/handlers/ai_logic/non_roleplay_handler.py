@@ -99,8 +99,6 @@ def detect_non_roleplay_query_type(user_message: str) -> str:
         return 'logs'
     elif extract_tell_me_about_subject(user_message):
         return 'tell_me_about'
-    elif is_stardancer_query(user_message):
-        return 'ship_info'
     elif is_federation_archives_request(user_message):
         return 'federation_archives'
     elif extract_ship_log_query(user_message)[0]:

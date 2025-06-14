@@ -7,6 +7,9 @@ to enhance Elsie's roleplay responses with better continuity and context.
 """
 
 from ai_agent.handlers.ai_attention.conversation_memory import ConversationMemory, getNextResponse, track_elsie_response, format_conversation_for_context
+from ai_agent.handlers.ai_logic.response_decision_engine import create_response_decision_engine
+from ai_agent.handlers.ai_attention.context_gatherer import build_contextual_cues
+from ai_agent.handlers.ai_attention.state_manager import get_roleplay_state
 
 
 def demo_conversation_flow():
@@ -16,8 +19,13 @@ def demo_conversation_flow():
     print("🎭 CONVERSATION MEMORY SYSTEM DEMO")
     print("=" * 50)
     
-    # Initialize conversation memory
+    # Initialize conversation memory and enhanced decision engine
     memory = ConversationMemory(max_history=5)
+    decision_engine = create_response_decision_engine()
+    rp_state = get_roleplay_state()
+    
+    # Setup a test roleplay session
+    rp_state.start_roleplay_session(1, ["emote"], {"channel_id": "test", "channel_name": "test"})
     
     # Simulate a roleplay conversation
     conversation_turns = [
@@ -41,12 +49,28 @@ def demo_conversation_flow():
         
         # Add to conversation memory
         memory.add_turn(speaker, message, turn_number)
+        rp_state.add_conversation_turn(speaker, message, turn_number)
         
         # If this is a user turn (not Elsie), analyze for response suggestions
         if speaker != "Elsie" and memory.has_sufficient_context():
             print("\n💭 ANALYZING CONVERSATION FOR RESPONSE SUGGESTIONS:")
             
-            # Prepare conversation history for analysis
+            # Build contextual cues for enhanced analysis
+            contextual_cues = build_contextual_cues(message, rp_state, turn_number)
+            
+            # Get enhanced response decision
+            response_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
+            
+            print(f"   🎯 ENHANCED RESPONSE ANALYSIS:")
+            print(f"      - Should Respond: {response_decision.should_respond}")
+            print(f"      - Response Type: {response_decision.response_type.value}")
+            print(f"      - Style: {response_decision.response_style}")
+            print(f"      - Tone: {response_decision.tone}")
+            print(f"      - Approach: {response_decision.approach}")
+            print(f"      - Confidence: {response_decision.confidence:.2f}")
+            print(f"      - Reasoning: {response_decision.reasoning}")
+            
+            # Also get traditional conversation analysis for comparison
             conversation_history = []
             for hist_turn in memory.get_recent_history():
                 conversation_history.append({
@@ -56,7 +80,7 @@ def demo_conversation_flow():
                     'message_type': hist_turn.message_type
                 })
             
-            # Get response suggestion
+            # Get response suggestion from conversation memory
             suggestion, analyzed = getNextResponse(
                 conversation_history=conversation_history,
                 memory_store=memory,
@@ -64,7 +88,7 @@ def demo_conversation_flow():
             )
             
             if analyzed:
-                print(f"   🎯 SUGGESTED RESPONSE STYLE:")
+                print(f"   📊 CONVERSATION MEMORY ANALYSIS:")
                 print(f"      - Style: {suggestion.style}")
                 print(f"      - Tone: {suggestion.tone}")
                 print(f"      - Approach: {suggestion.approach}")
@@ -81,19 +105,25 @@ def demo_conversation_flow():
     print(context)
     
     print("\n" + "=" * 50)
-    print("🎭 ROLEPLAY PROMPT INTEGRATION EXAMPLE:")
+    print("🎭 ENHANCED ROLEPLAY PROMPT INTEGRATION EXAMPLE:")
     print("-" * 40)
     
-    # Show how this would be integrated into a roleplay prompt
-    latest_suggestion = memory.get_last_suggestion()
-    if latest_suggestion:
+    # Show how enhanced decision would be integrated into a roleplay prompt
+    final_message = "\"It's just... sometimes I feel like I'm not living up to expectations.\""
+    final_cues = build_contextual_cues(final_message, rp_state, 5)
+    final_decision = decision_engine.getNextResponseEnhanced(final_cues)
+    
+    if final_decision.should_respond:
         sample_prompt_section = f"""
-**CONVERSATION FLOW GUIDANCE**:
-- Suggested response style: {latest_suggestion.style}
-- Suggested tone: {latest_suggestion.tone}
-- Conversation direction: {latest_suggestion.conversation_direction}
-- Active themes: {', '.join(latest_suggestion.themes) if latest_suggestion.themes else 'None'}
-- Analysis: {latest_suggestion.reasoning}
+**ENHANCED RESPONSE GUIDANCE**:
+- Response Type: {final_decision.response_type.value}
+- Suggested Style: {final_decision.response_style}
+- Suggested Tone: {final_decision.tone}
+- Approach: {final_decision.approach}
+- Address Character: {final_decision.address_character or 'General'}
+- Relationship Tone: {final_decision.relationship_tone}
+- Confidence: {final_decision.confidence:.2f}
+- Analysis: {final_decision.reasoning}
 
 **CONVERSATION CONTINUITY**: Use the conversation context above to maintain natural flow and avoid repetition. 
 Reference recent events, emotions, or topics naturally.
@@ -101,15 +131,16 @@ Reference recent events, emotions, or topics naturally.
 {context}
 
 This shows the recent flow of conversation. Use this context to maintain continuity, avoid repetition, 
-and respond appropriately to the conversational dynamics.
+and respond appropriately to the conversational dynamics and emotional needs.
 """
         print(sample_prompt_section)
     
-    print("\n✨ DEMO COMPLETE - Conversation memory system provides:")
-    print("   🔄 Conversation flow analysis")
-    print("   🎯 Response style suggestions")
+    print("\n✨ DEMO COMPLETE - Enhanced conversation system provides:")
+    print("   🧠 Contextual intelligence analysis")
+    print("   🎯 Enhanced response decision making")
+    print("   💭 Emotional intelligence integration")
     print("   📝 Context continuity")
-    print("   🧠 Memory of recent exchanges")
+    print("   🔄 Conversation flow analysis")
     print("   🎭 Enhanced roleplay immersion")
 
 
@@ -117,8 +148,11 @@ def demo_conversation_analysis_types():
     """
     Demonstrate different types of conversation analysis.
     """
-    print("\n🤖 CONVERSATION ANALYSIS TYPES DEMO")
+    print("\n🤖 ENHANCED CONVERSATION ANALYSIS TYPES DEMO")
     print("=" * 50)
+    
+    decision_engine = create_response_decision_engine()
+    rp_state = get_roleplay_state()
     
     test_conversations = [
         {
@@ -151,34 +185,32 @@ def demo_conversation_analysis_types():
         print(f"\n🎪 SCENARIO: {scenario['name']}")
         print("-" * 30)
         
+        # Setup fresh session for each scenario
+        rp_state.end_roleplay_session("test_reset")
+        rp_state.start_roleplay_session(1, ["emote"], {"channel_id": "test", "channel_name": "test"})
+        
         memory = ConversationMemory()
         
-        # Add messages to memory
+        # Add messages to memory and analyze the final one
         for i, message in enumerate(scenario['messages']):
             speaker = "User" if i % 2 == 0 else "Elsie"
             memory.add_turn(speaker, message, i + 1)
+            rp_state.add_conversation_turn(speaker, message, i + 1)
         
-        # Analyze the conversation
-        if memory.has_sufficient_context():
-            conversation_history = []
-            for turn in memory.get_recent_history():
-                conversation_history.append({
-                    'speaker': turn.speaker,
-                    'message': turn.message,
-                    'turn_number': turn.turn_number
-                })
+        # Analyze the final user message with enhanced system
+        final_message = scenario['messages'][-1]
+        if len(scenario['messages']) % 2 == 1:  # Odd number means last is user message
+            contextual_cues = build_contextual_cues(final_message, rp_state, len(scenario['messages']))
+            response_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
             
-            suggestion, analyzed = getNextResponse(
-                conversation_history=conversation_history,
-                memory_store=memory
-            )
-            
-            print(f"📊 ANALYSIS RESULTS:")
-            print(f"   Style: {suggestion.style}")
-            print(f"   Tone: {suggestion.tone}")
-            print(f"   Approach: {suggestion.approach}")
-            print(f"   Direction: {suggestion.conversation_direction}")
-            print(f"   Themes: {suggestion.themes}")
+            print(f"📊 ENHANCED ANALYSIS RESULTS:")
+            print(f"   Should Respond: {response_decision.should_respond}")
+            print(f"   Response Type: {response_decision.response_type.value}")
+            print(f"   Style: {response_decision.response_style}")
+            print(f"   Tone: {response_decision.tone}")
+            print(f"   Approach: {response_decision.approach}")
+            print(f"   Confidence: {response_decision.confidence:.2f}")
+            print(f"   Reasoning: {response_decision.reasoning}")
 
 
 if __name__ == "__main__":

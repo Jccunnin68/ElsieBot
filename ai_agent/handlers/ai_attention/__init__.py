@@ -32,7 +32,6 @@ from .character_tracking import (
 from .channel_restrictions import is_roleplay_allowed_channel
 from .state_manager import RoleplayStateManager, get_roleplay_state
 from .response_logic import (
-    should_elsie_respond_in_roleplay,
     check_subtle_bar_interaction,
     check_if_other_character_addressed,
     extract_drink_from_emote
@@ -60,8 +59,7 @@ __all__ = [
     'RoleplayStateManager',
     'get_roleplay_state',
     
-    # Response logic
-    'should_elsie_respond_in_roleplay',
+    # Response logic (enhanced pathway functions only)
     'check_subtle_bar_interaction',
     'check_if_other_character_addressed',
     'extract_drink_from_emote',

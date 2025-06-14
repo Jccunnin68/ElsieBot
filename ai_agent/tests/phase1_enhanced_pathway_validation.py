@@ -115,7 +115,7 @@ def run_enhanced_pathway_validation():
             "setup": lambda: setup_fresh_state(rp_state),
             "message": 'Tell me about USS Stardancer',
             "channel": {"type": "DM", "is_dm": True, "channel_name": "dm", "channel_id": "dm-456"},
-            "expected_approach": "stardancer_info",
+            "expected_approach": "tell_me_about",
             "expected_ai_generation": True
         }
     ]
@@ -275,14 +275,24 @@ def benchmark_enhanced_vs_legacy():
     test_message = '[Tavi] "Hello Elsie, how are you today?"'
     test_channel = {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"}
     
-    # Setup state
-    rp_state = get_roleplay_state()
-    setup_dgm_session(rp_state, ["Tavi"])
-    
     # Benchmark enhanced pathway
     start_time = time.time()
-    for _ in range(10):
+    for i in range(10):
+        # Setup fresh state for each run to prevent accumulation
+        rp_state = get_roleplay_state()
+        setup_dgm_session(rp_state, ["Tavi"])
+        
+        # Clear conversation memory to prevent infinite loops
+        from handlers.ai_attention.conversation_memory import get_global_conversation_tracker
+        memory = get_global_conversation_tracker()
+        if memory:
+            memory.clear_memory()
+        
         response_decision = route_message_to_handler(test_message, [], test_channel)
+        
+        # Clean up after each run
+        rp_state.end_roleplay_session("benchmark_cleanup")
+    
     enhanced_time = (time.time() - start_time) / 10
     
     print(f"📊 Enhanced Pathway Average: {enhanced_time:.4f} seconds")
