@@ -244,7 +244,7 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
             return {
                 'is_dgm': True,
                 'action': 'end_scene',
-                'triggers_roleplay': True,
+                'triggers_roleplay': False,
                 'confidence': 1.0,
                 'triggers': ['dgm_scene_end'],
                 'characters': character_list,
