@@ -14,6 +14,8 @@ from dataclasses import dataclass, asdict
 import asyncio
 import re
 
+from handlers.ai_attention.contextual_cues import ResponseDecision
+
 
 @dataclass
 class ConversationTurn:
@@ -386,6 +388,393 @@ def track_elsie_response(response_text: str, turn_number: int, memory_store: Con
     print(f"      - Response length: {len(response_text)} chars")
     print(f"      - Addressed to: {addressed_to or 'general'}")
     print(f"      - Memory size: {len(memory_store.history)} turns")
+
+
+def getNextResponseEnhanced(contextual_cues) -> 'ResponseDecision':
+    """
+    Enhanced version of getNextResponse that uses rich contextual cues to make
+    intelligent decisions about whether and how Elsie should respond.
+    
+    This replaces the fragmented if-statement logic with holistic analysis
+    of all available context.
+    
+    Args:
+        contextual_cues: ElsieContextualCues with rich contextual state
+        
+    Returns:
+        ResponseDecision with comprehensive response guidance
+    """
+    print(f"🧠 ENHANCED RESPONSE ANALYSIS - Turn {contextual_cues.turn_number}")
+    
+    try:
+        # Import here to avoid circular dependencies
+        from .contextual_cues import ResponseDecision, ResponseType
+        
+        # Build comprehensive context prompt for future LLM analysis
+        context_prompt = _build_context_prompt(contextual_cues)
+        
+        # Analyze using rule-based system (future: LLM integration)
+        decision = _analyze_with_rules(contextual_cues)
+        
+        print(f"   ✅ ENHANCED DECISION GENERATED:")
+        print(f"      - Should respond: {decision.should_respond}")
+        print(f"      - Response type: {decision.response_type.value}")
+        print(f"      - Reasoning: {decision.reasoning}")
+        print(f"      - Style: {decision.response_style}")
+        print(f"      - Tone: {decision.tone}")
+        print(f"      - Address: {decision.address_character}")
+        
+        return decision
+        
+    except Exception as e:
+        print(f"   ❌ ERROR in getNextResponseEnhanced: {e}")
+        # Return safe default
+        from .contextual_cues import create_response_decision, ResponseType
+        return create_response_decision(
+            should_respond=False,
+            response_type=ResponseType.NONE,
+            reasoning=f"Error in analysis: {e}"
+        )
+
+
+def _build_context_prompt(cues) -> str:
+    """
+    Build a comprehensive context prompt for LLM analysis.
+    This will be used when we integrate LLM decision making.
+    """
+    
+    # Character context
+    character_info = []
+    for name, profile in cues.known_characters.items():
+        character_info.append(f"- {name}: {profile.relationship}, {profile.personality_notes}")
+    
+    # Conversation dynamics
+    dynamics = cues.conversation_dynamics
+    addressing = cues.addressing_context
+    
+    prompt = f"""
+ELSIE RESPONSE DECISION CONTEXT:
+
+SESSION CONTEXT:
+- Mode: {cues.session_mode.value}
+- Type: {cues.session_type}
+- Scene: {cues.scene_setting}
+- Control Level: {cues.scene_control.value}
+
+CHARACTERS:
+- Current Speaker: {cues.current_speaker}
+- Active Participants: {', '.join(cues.active_participants)}
+- Last Addressed by Elsie: {cues.last_addressed_by_elsie}
+
+KNOWN RELATIONSHIPS:
+{chr(10).join(character_info)}
+
+CONVERSATION DYNAMICS:
+- Themes: {', '.join(dynamics.themes)}
+- Emotional Tone: {dynamics.emotional_tone}
+- Direction: {dynamics.direction}
+- Intensity: {dynamics.intensity}
+- Intimacy: {dynamics.intimacy_level}
+
+ADDRESSING CONTEXT:
+- Direct Mentions: {', '.join(addressing.direct_mentions)}
+- Group Addressing: {addressing.group_addressing}
+- Service Requests: {', '.join(addressing.service_requests)}
+- Implicit Opportunity: {addressing.implicit_opportunity}
+- Other Interactions: {addressing.other_interactions}
+
+ELSIE'S STATE:
+- Personality Mode: {cues.personality_mode.value}
+- Expertise Areas: {', '.join(cues.current_expertise)}
+- Relevant Knowledge: {', '.join(cues.relevant_knowledge)}
+
+QUESTION: Should Elsie respond to this situation? If so, how?
+"""
+    
+    return prompt
+
+
+def _analyze_with_rules(cues) -> 'ResponseDecision':
+    """
+    Analyze using rule-based system with comprehensive context and enhanced emotional intelligence.
+    This replaces the fragmented if-statement logic and fixes the emotional support detection issue.
+    """
+    from .contextual_cues import ResponseDecision, ResponseType
+    
+    addressing = cues.addressing_context
+    dynamics = cues.conversation_dynamics
+    
+    # Import enhanced emotional intelligence modules
+    try:
+        from ..ai_emotion.priority_resolution import resolve_emotional_vs_group_conflict
+        from ..ai_emotion.context_sensitivity import distinguish_group_vs_contextual
+        from ..ai_emotion.conversation_emotions import ConversationEmotionalIntelligence
+        
+        # Initialize emotional intelligence
+        emotional_intelligence = ConversationEmotionalIntelligence()
+        
+        # Current message for analysis
+        current_message = getattr(cues, 'current_message', '')
+        
+        print(f"   🔧 ENHANCED PRIORITY ANALYSIS:")
+        
+    except ImportError as e:
+        print(f"   ⚠️  Emotional intelligence modules not available: {e}")
+        # Fall back to original logic
+        emotional_intelligence = None
+    
+    # PRIORITY 1: Direct mentions (highest priority - unchanged)
+    if addressing.direct_mentions:
+        return ResponseDecision(
+            should_respond=True,
+            response_type=ResponseType.ACTIVE_DIALOGUE,
+            reasoning=f"Directly mentioned: {', '.join(addressing.direct_mentions)}",
+            confidence=0.95,
+            response_style="conversational",
+            tone="natural",
+            approach="direct",
+            address_character=cues.current_speaker,
+            relationship_tone=_get_relationship_tone(cues.current_speaker, cues.known_characters),
+            suggested_themes=dynamics.themes,
+            estimated_length="brief"
+        )
+    
+    # ENHANCED PRIORITY RESOLUTION: Group addressing vs Emotional support conflict
+    group_addressing_detected = addressing.group_addressing
+    emotional_support_detected = (dynamics.emotional_tone in ['sad', 'frustrated', 'anxious', 'overwhelmed'] 
+                                 and dynamics.intimacy_level in ['personal', 'intimate'])
+    
+    if group_addressing_detected and emotional_support_detected and emotional_intelligence:
+        print(f"   ⚖️  CONFLICT DETECTED: Group addressing vs Emotional support")
+        
+        # Use enhanced conflict resolution
+        context = {
+            'message': current_message,
+            'vulnerability_level': 'high' if dynamics.emotional_tone in ['overwhelmed', 'anxious'] else 'moderate',
+            'intimacy_level': dynamics.intimacy_level,
+            'relationship': getattr(cues.known_characters.get(cues.current_speaker, {}), 'relationship', 'unknown'),
+            'current_speaker': cues.current_speaker
+        }
+        
+        decision_type, final_confidence, reasoning = resolve_emotional_vs_group_conflict(
+            emotional_confidence=0.75,
+            group_confidence=0.85,
+            message=current_message,
+            context=context
+        )
+        
+        if decision_type == 'emotional_support':
+            return ResponseDecision(
+                should_respond=True,
+                response_type=ResponseType.SUPPORTIVE_LISTEN,
+                reasoning=f"Enhanced analysis: {reasoning}",
+                confidence=final_confidence,
+                response_style="caring",
+                tone="supportive",
+                approach="empathetic",
+                address_character=cues.current_speaker,
+                suggested_themes=['emotional_support'],
+                estimated_length="brief"
+            )
+        else:
+            return ResponseDecision(
+                should_respond=True,
+                response_type=ResponseType.GROUP_ACKNOWLEDGMENT,
+                reasoning=f"Enhanced analysis: {reasoning}",
+                confidence=final_confidence,
+                response_style="friendly",
+                tone="warm",
+                approach="inclusive",
+                suggested_themes=dynamics.themes,
+                estimated_length="brief"
+            )
+    
+    # PRIORITY 2: Enhanced Emotional Support (now higher priority when detected)
+    if emotional_support_detected:
+        # Use enhanced emotional support detection if available
+        if emotional_intelligence:
+            conversation_history = getattr(cues, 'conversation_history', [])
+            enhanced_needs_support, enhanced_confidence, reasoning = emotional_intelligence.detect_emotional_support_opportunity_enhanced(
+                current_message, conversation_history
+            )
+            
+            if enhanced_needs_support:
+                return ResponseDecision(
+                    should_respond=True,
+                    response_type=ResponseType.SUPPORTIVE_LISTEN,
+                    reasoning=f"Enhanced emotional support detection: {reasoning}",
+                    confidence=enhanced_confidence,
+                    response_style="caring",
+                    tone="supportive",
+                    approach="empathetic",
+                    address_character=cues.current_speaker,
+                    suggested_themes=['emotional_support'],
+                    estimated_length="brief"
+                )
+        else:
+            # Fall back to basic emotional support detection
+            return ResponseDecision(
+                should_respond=True,
+                response_type=ResponseType.SUPPORTIVE_LISTEN,
+                reasoning=f"Emotional support opportunity: {dynamics.emotional_tone} tone, {dynamics.intimacy_level} intimacy",
+                confidence=0.75,
+                response_style="caring",
+                tone="supportive",
+                approach="empathetic",
+                suggested_themes=['emotional_support'],
+                estimated_length="brief"
+            )
+    
+    # PRIORITY 3: Enhanced Group addressing (with context sensitivity)
+    if group_addressing_detected:
+        # Use enhanced group addressing analysis if available
+        if emotional_intelligence and current_message:
+            addressing_type, addressing_confidence = distinguish_group_vs_contextual(current_message)
+            
+            if addressing_type == "direct_group":
+                return ResponseDecision(
+                    should_respond=True,
+                    response_type=ResponseType.GROUP_ACKNOWLEDGMENT,
+                    reasoning=f"Enhanced analysis: Direct group addressing detected (confidence: {addressing_confidence:.2f})",
+                    confidence=addressing_confidence,
+                    response_style="friendly",
+                    tone="warm",
+                    approach="inclusive",
+                    suggested_themes=dynamics.themes,
+                    estimated_length="brief"
+                )
+            elif addressing_type == "contextual_mention":
+                print(f"   🎯 CONTEXTUAL MENTION: Group addressing downgraded to contextual mention")
+                # Don't respond to contextual mentions as group addressing
+                # Continue to other priorities
+            else:
+                # Fallback to original group addressing logic
+                return ResponseDecision(
+                    should_respond=True,
+                    response_type=ResponseType.GROUP_ACKNOWLEDGMENT,
+                    reasoning="Group addressing detected (everyone, you all, etc.)",
+                    confidence=0.85,
+                    response_style="friendly",
+                    tone="warm",
+                    approach="inclusive",
+                    suggested_themes=dynamics.themes,
+                    estimated_length="brief"
+                )
+        else:
+            # Original group addressing logic
+            return ResponseDecision(
+                should_respond=True,
+                response_type=ResponseType.GROUP_ACKNOWLEDGMENT,
+                reasoning="Group addressing detected (everyone, you all, etc.)",
+                confidence=0.85,
+                response_style="friendly",
+                tone="warm",
+                approach="inclusive",
+                suggested_themes=dynamics.themes,
+                estimated_length="brief"
+            )
+    
+    # PRIORITY 4: Service requests
+    if addressing.service_requests:
+        return ResponseDecision(
+            should_respond=True,
+            response_type=ResponseType.SUBTLE_SERVICE,
+            reasoning=f"Service request: {', '.join(addressing.service_requests)}",
+            confidence=0.9,
+            response_style="professional",
+            tone="helpful",
+            approach="service-oriented",
+            address_character=cues.current_speaker,
+            estimated_length="brief"
+        )
+    
+    # PRIORITY 5: Implicit response opportunity
+    if addressing.implicit_opportunity:
+        return ResponseDecision(
+            should_respond=True,
+            response_type=ResponseType.IMPLICIT_RESPONSE,
+            reasoning="Natural conversation follow-up opportunity",
+            confidence=0.8,
+            response_style="conversational",
+            tone="natural",
+            approach="responsive",
+            address_character=cues.current_speaker,
+            relationship_tone=_get_relationship_tone(cues.current_speaker, cues.known_characters),
+            continuation_cues=["build on previous interaction"],
+            estimated_length="brief"
+        )
+    
+    # PRIORITY 6: Technical expertise opportunity
+    if 'stellar_cartography' in cues.current_expertise and 'stellar_cartography' in dynamics.themes:
+        return ResponseDecision(
+            should_respond=True,
+            response_type=ResponseType.TECHNICAL_EXPERTISE,
+            reasoning="Stellar cartography expertise relevant to conversation",
+            confidence=0.7,
+            response_style="informative",
+            tone="professional",
+            approach="knowledgeable",
+            suggested_themes=['stellar_cartography'],
+            estimated_length="moderate"
+        )
+    
+    # PRIORITY 7: Character-to-character interaction (listening mode)
+    if addressing.other_interactions:
+        interaction_str = ', '.join([f"{speaker} → {target}" for speaker, target in addressing.other_interactions])
+        return ResponseDecision(
+            should_respond=False,
+            response_type=ResponseType.NONE,
+            reasoning=f"Characters talking to each other: {interaction_str}",
+            confidence=0.9,
+            response_style="observant",
+            tone="neutral",
+            approach="passive",
+            scene_impact="background"
+        )
+    
+    # PRIORITY 8: DGM selective mode
+    if cues.scene_control.value == "selective":
+        return ResponseDecision(
+            should_respond=False,
+            response_type=ResponseType.NONE,
+            reasoning="DGM selective mode - no direct involvement detected",
+            confidence=0.85,
+            response_style="passive",
+            tone="neutral",
+            approach="selective",
+            scene_impact="background"
+        )
+    
+    # DEFAULT: No clear reason to respond
+    return ResponseDecision(
+        should_respond=False,
+        response_type=ResponseType.NONE,
+        reasoning="No clear engagement opportunity detected",
+        confidence=0.7,
+        response_style="observant",
+        tone="neutral",
+        approach="passive",
+        scene_impact="background"
+    )
+
+
+def _get_relationship_tone(speaker: Optional[str], known_characters: Dict[str, Any]) -> str:
+    """Get appropriate relationship tone for addressing a character"""
+    if not speaker or speaker not in known_characters:
+        return "friendly"
+    
+    relationship = known_characters[speaker].relationship
+    
+    if relationship in ["close_friend", "special_affection"]:
+        return "warm"
+    elif relationship in ["captain", "superior"]:
+        return "respectful"
+    elif relationship in ["colleague", "crew_member"]:
+        return "professional"
+    elif relationship == "debtor":
+        return "slightly_teasing"
+    else:
+        return "friendly"
 
 
 def _extract_addressed_character_from_response(response_text: str) -> Optional[str]:
