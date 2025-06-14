@@ -392,204 +392,43 @@ def track_elsie_response(response_text: str, turn_number: int, memory_store: Con
 
 def getNextResponseEnhanced(contextual_cues) -> 'ResponseDecision':
     """
-    Enhanced version of getNextResponse that uses rich contextual cues to make
-    intelligent decisions about whether and how Elsie should respond.
+    DEPRECATED: This function has been MOVED to ai_logic/response_decision_engine.py
     
-    This replaces the fragmented if-statement logic with holistic analysis
-    of all available context.
+    The enhanced response decision making is now handled by the ResponseDecisionEngine
+    which integrates emotional intelligence from ai_emotion with contextual intelligence
+    from ai_attention.
     
-    Args:
-        contextual_cues: ElsieContextualCues with rich contextual state
-        
-    Returns:
-        ResponseDecision with comprehensive response guidance
+    Use ResponseDecisionEngine.getNextResponseEnhanced() instead.
     """
-    print(f"🧠 ENHANCED RESPONSE ANALYSIS - Turn {contextual_cues.turn_number}")
+    print(f"⚠️  DEPRECATED: getNextResponseEnhanced called from conversation_memory.py")
+    print(f"   📍 This function has been moved to ai_logic/response_decision_engine.py")
+    print(f"   🔄 Redirecting to new enhanced decision engine...")
     
     try:
-        # Import here to avoid circular dependencies
-        from .contextual_cues import ResponseDecision, ResponseType
+        # Redirect to the new decision engine
+        from ..ai_logic.response_decision_engine import create_response_decision_engine
         
-        # Build comprehensive context prompt for future LLM analysis
-        context_prompt = _build_context_prompt(contextual_cues)
-        
-        # Analyze using rule-based system (future: LLM integration)
-        decision = _analyze_with_rules(contextual_cues)
-        
-        print(f"   ✅ ENHANCED DECISION GENERATED:")
-        print(f"      - Should respond: {decision.should_respond}")
-        print(f"      - Response type: {decision.response_type.value}")
-        print(f"      - Reasoning: {decision.reasoning}")
-        print(f"      - Style: {decision.response_style}")
-        print(f"      - Tone: {decision.tone}")
-        print(f"      - Address: {decision.address_character}")
-        
-        return decision
+        decision_engine = create_response_decision_engine()
+        return decision_engine.getNextResponseEnhanced(contextual_cues)
         
     except Exception as e:
-        print(f"   ❌ ERROR in getNextResponseEnhanced: {e}")
+        print(f"   ❌ ERROR redirecting to new decision engine: {e}")
         # Return safe default
         from .contextual_cues import create_response_decision, ResponseType
         return create_response_decision(
             should_respond=False,
             response_type=ResponseType.NONE,
-            reasoning=f"Error in analysis: {e}"
+            reasoning=f"Error redirecting to new decision engine: {e}"
         )
 
 
-def _build_context_prompt(cues) -> str:
-    """
-    Build a comprehensive context prompt for LLM analysis.
-    This will be used when we integrate LLM decision making.
-    """
-    
-    # Character context
-    character_info = []
-    for name, profile in cues.known_characters.items():
-        character_info.append(f"- {name}: {profile.relationship}, {profile.personality_notes}")
-    
-    # Conversation dynamics
-    dynamics = cues.conversation_dynamics
-    addressing = cues.addressing_context
-    
-    prompt = f"""
-ELSIE RESPONSE DECISION CONTEXT:
-
-SESSION CONTEXT:
-- Mode: {cues.session_mode.value}
-- Type: {cues.session_type}
-- Scene: {cues.scene_setting}
-- Control Level: {cues.scene_control.value}
-
-CHARACTERS:
-- Current Speaker: {cues.current_speaker}
-- Active Participants: {', '.join(cues.active_participants)}
-- Last Addressed by Elsie: {cues.last_addressed_by_elsie}
-
-KNOWN RELATIONSHIPS:
-{chr(10).join(character_info)}
-
-CONVERSATION DYNAMICS:
-- Themes: {', '.join(dynamics.themes)}
-- Emotional Tone: {dynamics.emotional_tone}
-- Direction: {dynamics.direction}
-- Intensity: {dynamics.intensity}
-- Intimacy: {dynamics.intimacy_level}
-
-ADDRESSING CONTEXT:
-- Direct Mentions: {', '.join(addressing.direct_mentions)}
-- Group Addressing: {addressing.group_addressing}
-- Service Requests: {', '.join(addressing.service_requests)}
-- Implicit Opportunity: {addressing.implicit_opportunity}
-- Other Interactions: {addressing.other_interactions}
-
-ELSIE'S STATE:
-- Personality Mode: {cues.personality_mode.value}
-- Expertise Areas: {', '.join(cues.current_expertise)}
-- Relevant Knowledge: {', '.join(cues.relevant_knowledge)}
-
-QUESTION: Should Elsie respond to this situation? If so, how?
-"""
-    
-    return prompt
+# NOTE: _build_context_prompt has been MOVED to ai_logic/response_decision_engine.py
+# Context prompts are now built as part of the enhanced decision engine.
 
 
-def _analyze_with_rules(cues) -> 'ResponseDecision':
-    """
-    Analyze using rule-based system with comprehensive context and enhanced emotional intelligence.
-    This replaces the fragmented if-statement logic and fixes the emotional support detection issue.
-    """
-    from .contextual_cues import ResponseDecision, ResponseType
-    
-    addressing = cues.addressing_context
-    dynamics = cues.conversation_dynamics
-    
-    # Import enhanced emotional intelligence modules
-    try:
-        from ..ai_emotion.priority_resolution import resolve_emotional_vs_group_conflict
-        from ..ai_emotion.context_sensitivity import distinguish_group_vs_contextual
-        from ..ai_emotion.conversation_emotions import ConversationEmotionalIntelligence
-        
-        # Initialize emotional intelligence
-        emotional_intelligence = ConversationEmotionalIntelligence()
-        
-        # Current message for analysis
-        current_message = getattr(cues, 'current_message', '')
-        
-        print(f"   🔧 ENHANCED PRIORITY ANALYSIS:")
-        
-    except ImportError as e:
-        print(f"   ⚠️  Emotional intelligence modules not available: {e}")
-        # Fall back to original logic
-        emotional_intelligence = None
-    
-    # PRIORITY 1: Direct mentions (highest priority - unchanged)
-    if addressing.direct_mentions:
-        return ResponseDecision(
-            should_respond=True,
-            response_type=ResponseType.ACTIVE_DIALOGUE,
-            reasoning=f"Directly mentioned: {', '.join(addressing.direct_mentions)}",
-            confidence=0.95,
-            response_style="conversational",
-            tone="natural",
-            approach="direct",
-            address_character=cues.current_speaker,
-            relationship_tone=_get_relationship_tone(cues.current_speaker, cues.known_characters),
-            suggested_themes=dynamics.themes,
-            estimated_length="brief"
-        )
-    
-    # ENHANCED PRIORITY RESOLUTION: Group addressing vs Emotional support conflict
-    group_addressing_detected = addressing.group_addressing
-    emotional_support_detected = (dynamics.emotional_tone in ['sad', 'frustrated', 'anxious', 'overwhelmed'] 
-                                 and dynamics.intimacy_level in ['personal', 'intimate'])
-    
-    if group_addressing_detected and emotional_support_detected and emotional_intelligence:
-        print(f"   ⚖️  CONFLICT DETECTED: Group addressing vs Emotional support")
-        
-        # Use enhanced conflict resolution
-        context = {
-            'message': current_message,
-            'vulnerability_level': 'high' if dynamics.emotional_tone in ['overwhelmed', 'anxious'] else 'moderate',
-            'intimacy_level': dynamics.intimacy_level,
-            'relationship': getattr(cues.known_characters.get(cues.current_speaker, {}), 'relationship', 'unknown'),
-            'current_speaker': cues.current_speaker
-        }
-        
-        decision_type, final_confidence, reasoning = resolve_emotional_vs_group_conflict(
-            emotional_confidence=0.75,
-            group_confidence=0.85,
-            message=current_message,
-            context=context
-        )
-        
-        if decision_type == 'emotional_support':
-            return ResponseDecision(
-                should_respond=True,
-                response_type=ResponseType.SUPPORTIVE_LISTEN,
-                reasoning=f"Enhanced analysis: {reasoning}",
-                confidence=final_confidence,
-                response_style="caring",
-                tone="supportive",
-                approach="empathetic",
-                address_character=cues.current_speaker,
-                suggested_themes=['emotional_support'],
-                estimated_length="brief"
-            )
-        else:
-            return ResponseDecision(
-                should_respond=True,
-                response_type=ResponseType.GROUP_ACKNOWLEDGMENT,
-                reasoning=f"Enhanced analysis: {reasoning}",
-                confidence=final_confidence,
-                response_style="friendly",
-                tone="warm",
-                approach="inclusive",
-                suggested_themes=dynamics.themes,
-                estimated_length="brief"
-            )
-    
-    # PRIORITY 2: Enhanced Emotional Support (now higher priority when detected)
+# NOTE: _analyze_with_rules function has been MOVED to ai_logic/response_decision_engine.py
+# The rule-based analysis is now part of the ResponseDecisionEngine class
+# which integrates emotional intelligence from ai_emotion modules.
     if emotional_support_detected:
         # Use enhanced emotional support detection if available
         if emotional_intelligence:

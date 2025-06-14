@@ -2,7 +2,7 @@
 
 from database_controller import get_db_controller
 from handlers.ai_logic.log_processor import parse_log_characters, is_ship_log_title
-from handlers.ai_logic.query_detection import is_log_query
+# Removed circular import: from handlers.ai_logic.query_detection import is_log_query
 from typing import Optional
 import requests
 from urllib.parse import quote
@@ -256,7 +256,17 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
         controller = get_db_controller()
         
         # Check if this is a log query - handle with hierarchical log retrieval
-        if is_log_query(query):
+        # Inline check to avoid circular import with query_detection.py
+        log_indicators = [
+            'log', 'logs', 'mission log', 'ship log', 'stardancer log', 
+            'captain log', 'personal log', 'stardate', 'entry',
+            'what happened', 'events', 'mission report', 'incident report',
+            'summarize', 'summary', 'recap', 'tell me what',
+            'last mission', 'recent mission', 'latest log'
+        ]
+        is_log_query_result = any(indicator in query.lower() for indicator in log_indicators)
+        
+        if is_log_query_result:
             log_content = get_log_content(query, mission_logs_only=mission_logs_only)
             if log_content:
                 log_type_msg = "mission logs only" if mission_logs_only else "all log types"
