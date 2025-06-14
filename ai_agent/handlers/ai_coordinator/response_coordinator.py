@@ -56,6 +56,14 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     if not decision.needs_ai_generation:
         print(f"✅ Pre-generated response: {decision.strategy['reasoning']}")
         
+        # SAFETY CHECK: Ensure we never return None
+        if decision.pre_generated_response is None:
+            print(f"   ⚠️  WARNING: pre_generated_response is None, defaulting to NO_RESPONSE")
+            print(f"   📋 Strategy: {decision.strategy}")
+            response = "NO_RESPONSE"
+        else:
+            response = decision.pre_generated_response
+        
         # Handle tracking for roleplay responses that don't need AI
         if decision.strategy['approach'] == 'roleplay_active':
             rp_state = get_roleplay_state()
@@ -73,7 +81,7 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
                 rp_state.mark_response_turn(turn_number)
                 print(f"   📝 ENSURED: Elsie's response turn tracked")
         
-        return decision.pre_generated_response
+        return response
     
     # Otherwise, do the expensive AI generation
     print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")

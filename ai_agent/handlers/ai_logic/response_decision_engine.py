@@ -169,35 +169,81 @@ class ResponseDecisionEngine:
     
     def _analyze_addressing_context(self, contextual_cues) -> Dict:
         """
-        Analyze addressing context using ai_emotion context sensitivity.
+        Analyze addressing context using ai_emotion context sensitivity AND contextual cues.
+        
+        FIXED: Now properly integrates with contextual cues addressing detection.
         """
         try:
+            # FIRST: Check contextual cues for direct addressing
+            addressing_context = getattr(contextual_cues, 'addressing_context', None)
+            
+            if addressing_context:
+                direct_mentions = getattr(addressing_context, 'direct_mentions', [])
+                group_addressing = getattr(addressing_context, 'group_addressing', False)
+                service_requests = getattr(addressing_context, 'service_requests', [])
+                
+                print(f"   👥 CONTEXTUAL CUES ADDRESSING:")
+                print(f"      - Direct mentions: {direct_mentions}")
+                print(f"      - Group addressing: {group_addressing}")
+                print(f"      - Service requests: {service_requests}")
+                
+                # PRIORITY 1: Direct individual addressing (highest priority)
+                if direct_mentions:
+                    addressing_type = 'individual_address'
+                    addressing_confidence = 0.9
+                    print(f"   🎯 INDIVIDUAL ADDRESSING DETECTED from contextual cues")
+                    
+                    return {
+                        'addressing_type': addressing_type,
+                        'addressing_confidence': addressing_confidence,
+                        'is_individual_address': True,
+                        'is_contextual_mention': False,
+                        'is_direct_group': False,
+                        'direct_mentions': direct_mentions,
+                        'source': 'contextual_cues'
+                    }
+                
+                # PRIORITY 2: Group addressing from contextual cues
+                elif group_addressing:
+                    addressing_type = 'direct_group'
+                    addressing_confidence = 0.85
+                    print(f"   👥 GROUP ADDRESSING DETECTED from contextual cues")
+                    
+                    return {
+                        'addressing_type': addressing_type,
+                        'addressing_confidence': addressing_confidence,
+                        'is_individual_address': False,
+                        'is_contextual_mention': False,
+                        'is_direct_group': True,
+                        'source': 'contextual_cues'
+                    }
+            
+            # FALLBACK: Use ai_emotion context sensitivity for edge cases
             from handlers.ai_emotion.context_sensitivity import distinguish_group_vs_contextual
             
             # Extract message
             current_message = getattr(contextual_cues, 'current_message', '')
             if not current_message:
-                addressing_context = getattr(contextual_cues, 'addressing_context', None)
-                if addressing_context and hasattr(addressing_context, 'original_message'):
-                    current_message = addressing_context.original_message
-                else:
-                    current_message = "No message content available"
+                current_message = "No message content available"
             
-            # Analyze addressing patterns
+            # Analyze addressing patterns (only for group vs contextual distinction)
             addressing_type, addressing_confidence = distinguish_group_vs_contextual(current_message)
             
             # Enhanced addressing analysis
             addressing_analysis = {
                 'addressing_type': addressing_type,
                 'addressing_confidence': addressing_confidence,
+                'is_individual_address': False,
                 'is_contextual_mention': addressing_type == 'contextual_mention',
                 'is_direct_group': addressing_type == 'direct_group',
-                'message_analyzed': current_message
+                'message_analyzed': current_message,
+                'source': 'ai_emotion_fallback'
             }
             
-            print(f"   👥 ADDRESSING ANALYSIS COMPLETE:")
+            print(f"   👥 ADDRESSING ANALYSIS COMPLETE (fallback):")
             print(f"      - Type: {addressing_type}")
             print(f"      - Confidence: {addressing_confidence:.2f}")
+            print(f"      - Source: ai_emotion fallback")
             
             return addressing_analysis
             
@@ -206,7 +252,11 @@ class ResponseDecisionEngine:
             return {
                 'addressing_type': 'no_addressing',
                 'addressing_confidence': 0.5,
-                'error': str(e)
+                'is_individual_address': False,
+                'is_contextual_mention': False,
+                'is_direct_group': False,
+                'error': str(e),
+                'source': 'error_fallback'
             }
     
     def _resolve_decision_conflicts(self, emotional_context: Dict, addressing_analysis: Dict, contextual_cues) -> Dict:
@@ -274,7 +324,17 @@ class ResponseDecisionEngine:
                         }
             
             # No conflict or conflict resolution not needed
-            if needs_support and support_confidence >= 0.4:
+            # Check for individual addressing (highest priority)
+            is_individual_addressing = addressing_analysis.get('is_individual_address', False)
+            
+            if is_individual_addressing:
+                return {
+                    'primary_decision': 'individual_addressing',
+                    'confidence': addressing_confidence,
+                    'reasoning': 'Individual addressing detected - Elsie is directly mentioned',
+                    'conflict_resolved': False
+                }
+            elif needs_support and support_confidence >= 0.4:
                 return {
                     'primary_decision': 'emotional_support',
                     'confidence': support_confidence,
@@ -318,7 +378,13 @@ class ResponseDecisionEngine:
             reasoning = decision_result.get('reasoning', 'Standard response')
             
             # Determine response type and whether to respond
-            if primary_decision == 'emotional_support':
+            if primary_decision == 'individual_addressing':
+                should_respond = True
+                response_type = ResponseType.ACTIVE_DIALOGUE
+                approach = "responsive"
+                tone = "friendly"
+                
+            elif primary_decision == 'emotional_support':
                 should_respond = True
                 response_type = ResponseType.SUPPORTIVE_LISTEN
                 approach = "empathetic"

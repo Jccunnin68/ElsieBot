@@ -263,10 +263,10 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
                 dgm_characters=dgm_result.get('characters', [])
             )
         
-        # Return no-response decision
+        # Return no-response decision with proper NO_RESPONSE string
         return ResponseDecision(
             needs_ai_generation=False,
-            pre_generated_response=None,
+            pre_generated_response="NO_RESPONSE",
             strategy={
                 'approach': 'dgm_scene_setting',
                 'needs_database': False,
@@ -285,7 +285,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
         
         return ResponseDecision(
             needs_ai_generation=False,
-            pre_generated_response=None,
+            pre_generated_response="NO_RESPONSE",
             strategy={
                 'approach': 'dgm_scene_end',
                 'needs_database': False,
@@ -294,7 +294,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
             }
         )
     
-    elif dgm_action == 'controlled_elsie':
+    elif dgm_action == 'control_elsie':
         print(f"   🎭 DGM Controlled Elsie - Adding to context")
         
         # Ensure roleplay session is active
@@ -308,7 +308,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
         
         return ResponseDecision(
             needs_ai_generation=False,
-            pre_generated_response=None,
+            pre_generated_response="NO_RESPONSE",
             strategy={
                 'approach': 'dgm_controlled_elsie',
                 'needs_database': False,
@@ -321,7 +321,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
     # Unknown DGM action
     return ResponseDecision(
         needs_ai_generation=False,
-        pre_generated_response=None,
+        pre_generated_response="NO_RESPONSE",
         strategy={
             'approach': 'general',
             'needs_database': False,
