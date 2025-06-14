@@ -69,13 +69,30 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
     print(f"   📊 Final participants: {rp_state.get_participant_names()} (Count: {len(rp_state.get_participant_names())})")
     
     # Track character turn for simple implicit response logic
+    current_speaker = None
     if character_names:
         # Use the first detected character as the speaker
-        print(f"   📝 Marking character turn: {character_names[0]}")
-        rp_state.mark_character_turn(turn_number, character_names[0])
+        current_speaker = character_names[0]
+        print(f"   📝 Marking character turn: {current_speaker}")
+        rp_state.mark_character_turn(turn_number, current_speaker)
+    
+    # NEW: Add conversation turn to memory for enhanced context tracking
+    speaker_for_memory = current_speaker if current_speaker else "User"
+    addressed_to = addressed_characters[0] if addressed_characters else None
+    rp_state.add_conversation_turn(speaker_for_memory, user_message, turn_number, addressed_to)
     
     # Update confidence tracking
     rp_state.update_confidence(confidence_score)
+    
+    # NEW: Get conversation analysis for enhanced response strategy
+    conversation_analysis = rp_state.get_conversation_analysis(turn_number)
+    print(f"   💭 CONVERSATION ANALYSIS RESULT: {conversation_analysis is not None}")
+    if conversation_analysis:
+        suggestion = conversation_analysis['suggestion']
+        print(f"      - Suggested style: {suggestion.style}")
+        print(f"      - Suggested tone: {suggestion.tone}")
+        print(f"      - Conversation direction: {suggestion.conversation_direction}")
+        print(f"      - Themes: {suggestion.themes}")
     
     # Determine response style based on context - SIMPLIFIED LOGIC
     should_respond, response_reason = should_elsie_respond_in_roleplay(user_message, rp_state, turn_number)
@@ -97,7 +114,7 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
         rp_state.set_listening_mode(False, reason_priority)
         rp_state.mark_response_turn(turn_number)
         
-        return {
+        strategy_dict = {
             'approach': 'roleplay_active',
             'needs_database': True,  # Enable database for contextual RP queries
             'reasoning': f'Roleplay response - {reason_priority}, participants: {rp_state.get_participant_names()}',
@@ -110,6 +127,20 @@ def process_roleplay_strategy(user_message: str, turn_number: int, channel_conte
             'response_reason': reason_priority,
             'elsie_mentioned': elsie_mentioned
         }
+        
+        # NEW: Add conversation analysis to strategy if available
+        if conversation_analysis:
+            strategy_dict['conversation_analysis'] = conversation_analysis
+            strategy_dict['suggested_style'] = conversation_analysis['suggestion'].style
+            strategy_dict['suggested_tone'] = conversation_analysis['suggestion'].tone
+            strategy_dict['conversation_direction'] = conversation_analysis['suggestion'].conversation_direction
+            strategy_dict['conversation_themes'] = conversation_analysis['suggestion'].themes
+            
+            # Enhance reasoning with conversation context
+            if conversation_analysis['suggestion'].reasoning:
+                strategy_dict['reasoning'] += f" | Conversation: {conversation_analysis['suggestion'].reasoning}"
+        
+        return strategy_dict
     else:
         # Passive listening mode - check if we should interject
         should_interject = rp_state.should_interject_subtle_action(turn_number)

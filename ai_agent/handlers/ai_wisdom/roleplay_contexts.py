@@ -39,6 +39,13 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     response_reason = strategy.get('response_reason', 'unknown')
     elsie_mentioned = strategy.get('elsie_mentioned', False)
     
+    # NEW: Extract conversation analysis data
+    conversation_analysis = strategy.get('conversation_analysis')
+    suggested_style = strategy.get('suggested_style', 'natural')
+    suggested_tone = strategy.get('suggested_tone', 'friendly')
+    conversation_direction = strategy.get('conversation_direction', 'continuing')
+    conversation_themes = strategy.get('conversation_themes', [])
+    
     # Check if this is a DGM-initiated session
     is_dgm_session = 'dgm_scene_setting' in triggers
     
@@ -67,8 +74,34 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
         database_context = _get_roleplay_database_context(user_message)
         print(f"   📚 Database context length: {len(database_context)} chars")
     
+    # NEW: Get conversation memory context
+    conversation_context = ""
+    if conversation_analysis:
+        # Import here to avoid circular dependency
+        from handlers.ai_attention.state_manager import get_roleplay_state 
+        rp_state = get_roleplay_state()
+        if rp_state.has_conversation_memory():
+            conversation_context = rp_state.get_conversation_context_for_prompt()
+            print(f"   💭 CONVERSATION MEMORY: {len(conversation_context)} chars")
+    
     # Adjust response style based on why Elsie is responding
     response_style_note = ""
+    
+    # NEW: Add conversation-aware response instructions
+    conversation_style_note = ""
+    if conversation_analysis:
+        suggestion = conversation_analysis['suggestion']
+        conversation_style_note = f"""
+**CONVERSATION FLOW GUIDANCE**:
+- Suggested response style: {suggested_style}
+- Suggested tone: {suggested_tone}
+- Conversation direction: {conversation_direction}
+{"- Active themes: " + ", ".join(conversation_themes) if conversation_themes else ""}
+- Analysis: {suggestion.reasoning}
+
+**CONVERSATION CONTINUITY**: Use the conversation context above to maintain natural flow and avoid repetition. Reference recent events, emotions, or topics naturally.
+"""
+    
     if elsie_mentioned:
         response_style_note = """
 **DIRECT ADDRESS MODE**: You have been directly mentioned or addressed by name. Respond naturally and engage fully with the interaction.
@@ -143,15 +176,20 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     if is_dgm_session:
         dgm_instructions = """
 
-🎬 **SPECIAL DGM SESSION MODE - ULTRA-PASSIVE**:
-- A Game Master has set this scene - you are in ULTRA-PASSIVE MODE
-- ONLY respond when directly addressed by name (Elsie, bartender, etc.)
-- Do NOT respond to general bar actions like "*looks around*" or "*sits at table*"
-- Do NOT respond to characters talking to each other
-- Do NOT initiate conversations, ask questions, or offer drinks unprompted
+🎬 **SPECIAL DGM SESSION MODE - SELECTIVE PASSIVE**:
+- A Game Master has set this scene - you are in SELECTIVE PASSIVE MODE
+- RESPOND WHEN:
+  * Directly addressed by name (Elsie, bartender, etc.)
+  * Following up on conversations YOU initiated (implicit responses)
+  * Clear service requests directed at you
+- DO NOT respond to:
+  * General bar actions like "*looks around*" or "*sits at table*"
+  * Characters talking to each other (unless you're part of the conversation)
+  * Ambient scene setting that doesn't involve you
+- Do NOT initiate NEW conversations, ask questions, or offer drinks unprompted
 - Keep responses extremely brief and reactive (1-2 sentences maximum)
-- Let the characters drive the scene completely - you are invisible background unless called upon
-- You should be like furniture unless someone specifically talks TO you
+- Let the characters drive the scene, but maintain natural conversation flow when you're involved
+- If someone responds to something you said, that's a natural conversation continuation
 """
     
     database_section = ""
@@ -163,12 +201,21 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
 
 Use this information naturally in your roleplay response when relevant. Don't just recite facts - weave them into the conversation organically."""
 
+    conversation_section = ""
+    if conversation_context:
+        conversation_section = f"""
+
+**CONVERSATION MEMORY:**
+{conversation_context}
+
+This shows the recent flow of conversation. Use this context to maintain continuity, avoid repetition, and respond appropriately to the conversational dynamics."""
+
     return f"""You are Elsie, intelligent and sophisticated Holographic bartender and Stellar Cartographer aboard the USS Stardancer, now engaged in a ROLEPLAY SCENARIO.
 
 🎭 ROLEPLAY MODE ACTIVE - CRITICAL INSTRUCTIONS:
 
 **WHY YOU'RE RESPONDING**: {response_reason}
-{response_style_note}{dgm_instructions}
+{conversation_style_note}{response_style_note}{dgm_instructions}
 
 **PERSONALITY CONTEXT**: {personality_context}
 
@@ -235,9 +282,9 @@ Current roleplay confidence: {confidence:.2f}
 Detected triggers: {', '.join(triggers)}
 {addressed_note}
 {"Direct mention detected - engage fully!" if elsie_mentioned else ""}
-{"DGM ULTRA-PASSIVE MODE: ONLY respond when directly addressed by name or someone is talking about you, do not respond to general bar actions like '*looks around*' or '*sits at table*'" if is_dgm_session else ""}
+{"DGM SELECTIVE PASSIVE MODE: Respond when directly addressed, following up on conversations you started, or clear service requests. Do not respond to general bar actions or characters talking to each other unless you're part of the conversation." if is_dgm_session else ""}
 
-Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, be like invisible furniture unless someone specifically talks TO you." if is_dgm_session else ""}"""
+Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, maintain natural conversation flow when you're involved but avoid initiating new interactions." if is_dgm_session else ""}{database_section}{conversation_section}"""
 
 
 def detect_roleplay_personality_context(user_message: str) -> str:

@@ -135,6 +135,13 @@ def _process_main_strategy_logic(user_message: str, conversation_history: list, 
         if 'context_priority' not in roleplay_strategy or roleplay_strategy['context_priority'] == 'none':
             roleplay_strategy['context_priority'] = 'roleplay'
         
+        # NEW: Add callback info to track Elsie's responses in conversation memory
+        roleplay_strategy['track_response_callback'] = {
+            'enabled': True,
+            'turn_number': turn_number,
+            'speaker': 'Elsie'
+        }
+        
         return roleplay_strategy
     
     # PRIORITY 2: Check for DGM posts (only when NOT in roleplay - these start new sessions)
