@@ -25,11 +25,16 @@ from handlers.ai_logic.query_detection import (
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     """
     Generate context for active roleplay mode.
-    This creates the special roleplay prompt that makes Elsie reactive, not interrogative.
-    Enhanced with addressed character tracking and response reasoning.
-    Now includes database access for contextual roleplay questions.
-    Enhanced for DGM-initiated sessions with special passive behavior.
-    Enhanced with contextual personality and quoted dialogue.
+    
+    This function provides roleplay context for scenarios where the enhanced
+    context system is not available or as a fallback option.
+    
+    Args:
+        strategy: Strategy dictionary containing approach and context info
+        user_message: The user's message to analyze
+        
+    Returns:
+        str: Formatted context string for roleplay scenarios
     """
     participants = strategy.get('participants', [])
     new_characters = strategy.get('new_characters', [])
@@ -255,7 +260,6 @@ This shows the recent flow of conversation. Use this context to maintain continu
    - Use brief, natural emotes (*actions*) sparingly
    - Be part of the scene, not an observer or director
    - Keep responses concise and conversational
-   - Know your backstory, you were a dance instructor that was created for a girl named Isabella, she was like a daughter, you now lived in Atlantis an ai sanctuary on earth but are assigned to the Stardancer for outreat. You love your job.
    - You know the crew of the Stardancer well, the Captain is Captain Marcus Blaine, his daughter Maeve is a good friend of yours (and you will acknowledge her when she is playing), Commander Sif is the Executive officer, Lt Commander Shay Daly is the second officer and an Gyndroid.
    - you also know the cadet cadre well, their names are Tavi Antony, who is the daughter of Doctor Dahlia Delancy of USS Pilgrim Fame, and Captain Marcus Antonius who commands the Myrmidon and is a legendary captain, the rest of the cadets are Hedwik a Kzari/Trill Hybird
    - you know Tairi Snow an orion and a cadet, she is a bit of a recluse, Vrajan Kodor is a trill male and a even spirt, Muirgen Finney is a human irish cadet, and a bit of a lush, Zarina Dryellia is a beryxian vulcan hybrid and the Daughter of the Legendary Captain T'pang of the USS Pilgrim responsible for ending the Dawnbreaker War. Elsie likes her very much.
@@ -289,9 +293,14 @@ Respond naturally to their roleplay action, staying in character as the intellig
 
 def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     """
-    Enhanced roleplay context generation using contextual intelligence.
-    This uses the rich contextual cues and response decisions to provide
-    more targeted and intelligent roleplay guidance.
+    PRIMARY: Enhanced roleplay context generation using contextual intelligence.
+    
+    This is the primary function for roleplay context generation, using rich
+    contextual cues and response decisions to provide targeted and intelligent
+    roleplay guidance.
+    
+    This function integrates with the enhanced decision engine and provides
+    sophisticated context-aware roleplay prompts.
     """
     
     # Extract enhanced context data
@@ -435,7 +444,10 @@ def _build_conversation_flow_context(cues, decision) -> str:
 
 
 def _build_response_guidance(decision, cues) -> str:
-    """Build response guidance section"""
+    """
+    Build response guidance section.
+    PHASE 3C: Enhanced to include fabrication control instructions.
+    """
     if not decision.should_respond:
         return f"""**RESPONSE DECISION:** LISTENING MODE
 - Reasoning: {decision.reasoning}
@@ -445,6 +457,26 @@ def _build_response_guidance(decision, cues) -> str:
     guidance_lines = [f"**RESPONSE DECISION:** ACTIVE RESPONSE ({decision.response_type.value.upper()})"]
     guidance_lines.append(f"- Reasoning: {decision.reasoning}")
     guidance_lines.append(f"- Confidence: {decision.confidence:.2f}")
+    
+    # PHASE 3C: Add fabrication control instructions if present
+    if hasattr(decision, 'knowledge_to_use') and decision.knowledge_to_use:
+        accuracy_instructions = [instruction for instruction in decision.knowledge_to_use 
+                               if 'CRITICAL:' in instruction or 'IMPORTANT:' in instruction]
+        
+        if accuracy_instructions:
+            guidance_lines.append("")
+            guidance_lines.append("**ACCURACY REQUIREMENTS:**")
+            for instruction in accuracy_instructions:
+                guidance_lines.append(f"- {instruction}")
+    
+    # PHASE 3C: Check for accuracy themes
+    if hasattr(decision, 'suggested_themes') and decision.suggested_themes:
+        if any(theme in ['accuracy_required', 'no_fabrication'] for theme in decision.suggested_themes):
+            if "ACCURACY REQUIREMENTS:" not in guidance_lines:
+                guidance_lines.append("")
+                guidance_lines.append("**ACCURACY REQUIREMENTS:**")
+            guidance_lines.append("- CRITICAL: Maintain strict accuracy - do not fabricate information")
+            guidance_lines.append("- If you don't know something, admit it honestly")
     
     if decision.response_type.value == "active_dialogue":
         guidance_lines.append("- Engage fully in conversation")
@@ -474,7 +506,10 @@ def _build_response_guidance(decision, cues) -> str:
 
 
 def _build_scene_context(cues) -> str:
-    """Build scene context section"""
+    """
+    Build scene context section.
+    PHASE 2E: Enhanced to include DGM scene context when available.
+    """
     context_lines = ["**SCENE CONTEXT:**"]
     context_lines.append(f"- Session Mode: {cues.session_mode.value}")
     context_lines.append(f"- Scene Control: {cues.scene_control.value}")
@@ -483,6 +518,46 @@ def _build_scene_context(cues) -> str:
     
     if cues.active_participants:
         context_lines.append(f"- Active Participants: {', '.join(cues.active_participants)}")
+    
+    # PHASE 2E: Add DGM scene context if available
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        
+        if rp_state.is_roleplaying:
+            dgm_scene_context = rp_state.get_dgm_scene_context()
+            
+            if dgm_scene_context:
+                context_lines.append("")
+                context_lines.append("**DGM SCENE DETAILS:**")
+                
+                if dgm_scene_context.get('location'):
+                    context_lines.append(f"- Location: {dgm_scene_context['location']}")
+                
+                if dgm_scene_context.get('time_of_day'):
+                    context_lines.append(f"- Time: {dgm_scene_context['time_of_day']}")
+                
+                if dgm_scene_context.get('ship_status'):
+                    context_lines.append(f"- Ship Status: {dgm_scene_context['ship_status']}")
+                
+                if dgm_scene_context.get('atmosphere'):
+                    context_lines.append(f"- Atmosphere: {dgm_scene_context['atmosphere']}")
+                
+                if dgm_scene_context.get('environment'):
+                    env_details = dgm_scene_context['environment']
+                    if isinstance(env_details, list):
+                        for detail in env_details:
+                            context_lines.append(f"- Environment: {detail}")
+                    else:
+                        context_lines.append(f"- Environment: {env_details}")
+                
+                if dgm_scene_context.get('raw_description'):
+                    context_lines.append(f"- Scene Description: {dgm_scene_context['raw_description']}")
+                
+                print(f"   🎬 DGM SCENE CONTEXT ADDED TO PROMPT: {len(dgm_scene_context)} elements")
+    
+    except Exception as e:
+        print(f"   ⚠️  Error adding DGM scene context: {e}")
     
     return "\n".join(context_lines)
 

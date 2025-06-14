@@ -8,7 +8,7 @@ generation, routing different types of queries to appropriate handlers.
 
 from typing import Dict, Any
 
-from .roleplay_contexts import get_enhanced_roleplay_context, get_roleplay_context
+from .roleplay_contexts import get_enhanced_roleplay_context
 from .database_contexts import (
     get_character_context,
     get_logs_context,

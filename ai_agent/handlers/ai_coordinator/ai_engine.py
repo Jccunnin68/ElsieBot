@@ -20,7 +20,7 @@ from handlers.handlers_utils import (
     convert_earth_date_to_star_trek,
     
 )
-from handlers.ai_logic.decision_extractor import get_roleplay_state
+from handlers.ai_attention.state_manager import get_roleplay_state
 from handlers.ai_logic.query_detection import is_stardancer_query
 from handlers.ai_coordinator.conversation_utils import format_conversation_history_with_dgm_elsie
 from handlers.ai_emotion import get_mock_response
@@ -257,17 +257,17 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         
         # Generate context based on strategy
         if strategy['approach'] == 'roleplay_active':
-            # ALL roleplay_active responses should use roleplay context
-            print(f"🎭 ROLEPLAY ACTIVE - Using roleplay context generation")
-            from handlers.ai_wisdom.roleplay_contexts import get_roleplay_context
-            context = get_roleplay_context(strategy, user_message)
+            # ALL roleplay_active responses should use enhanced roleplay context
+            print(f"🎭 ROLEPLAY ACTIVE - Using enhanced roleplay context generation")
+            from handlers.ai_wisdom.roleplay_contexts import get_enhanced_roleplay_context
+            context = get_enhanced_roleplay_context(strategy, user_message)
         
         elif strategy['approach'] == 'roleplay_mock_enhanced':
-            # Roleplay mock enhanced responses also use roleplay context
+            # Roleplay mock enhanced responses also use enhanced roleplay context
             mock_type = strategy.get('mock_response_type', 'unknown')
-            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with roleplay context")
-            from handlers.ai_wisdom.roleplay_contexts import get_roleplay_context
-            context = get_roleplay_context(strategy, user_message)
+            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with enhanced roleplay context")
+            from handlers.ai_wisdom.roleplay_contexts import get_enhanced_roleplay_context
+            context = get_enhanced_roleplay_context(strategy, user_message)
         
         elif strategy['needs_database']:
             print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")

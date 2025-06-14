@@ -8,14 +8,6 @@ This helps break circular dependencies by providing a central location for share
 
 from typing import Dict, List, Tuple
 
-# Roleplay detection constants
-ROLEPLAY_INDICATORS = {
-    'emote': r'\*[^*]+\*',  # *action*
-    'action': r'\[[^\]]+\]',  # [action]
-    'dialogue': r'"[^"]+"',  # "dialogue"
-    'character': r'<[^>]+>'  # <character>
-}
-
 # Roleplay state types
 RoleplayState = Dict[str, any]
 RoleplayTrigger = str
@@ -56,11 +48,6 @@ DGMResponse = Dict[str, any]
 ExitType = str
 ExitReason = str
 ExitContext = Dict[str, any]
-
-# Roleplay confidence thresholds
-MIN_ROLEPLAY_CONFIDENCE = 0.3
-MIN_CONTINUATION_CONFIDENCE = 0.4
-MIN_THREAD_CONFIDENCE = 0.3
 
 # Discord Channel Types (from Discord API)
 # 0: GUILD_TEXT - A text channel within a server
@@ -123,10 +110,6 @@ DATABASE_NEEDS = {
 
 # Roleplay trigger types
 TRIGGER_TYPES = {
-    'emote': 'emote',
-    'action': 'action',
-    'dialogue': 'dialogue',
-    'character': 'character',
     'dgm_scene_setting': 'dgm_scene_setting',
     'dgm_scene_end': 'dgm_scene_end',
     'dgm_controlled_elsie': 'dgm_controlled_elsie',
@@ -195,18 +178,4 @@ DATABASE_TYPES = {
     'ship_info': 'ship_info',
     'log_info': 'log_info',
     'general_info': 'general_info'
-}
-
-# Roleplay trigger types
-TRIGGER_TYPES = {
-    'emote': 'emote',
-    'action': 'action',
-    'dialogue': 'dialogue',
-    'character': 'character',
-    'dgm_scene_setting': 'dgm_scene_setting',
-    'dgm_scene_end': 'dgm_scene_end',
-    'dgm_controlled_elsie': 'dgm_controlled_elsie',
-    'ongoing_session': 'ongoing_session',
-    'dialogue_continuation': 'dialogue_continuation',
-    'thread_channel_monitoring': 'thread_channel_monitoring'
 } 

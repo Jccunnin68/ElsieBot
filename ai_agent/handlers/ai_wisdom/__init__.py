@@ -20,7 +20,7 @@ Usage:
 
 from .context_coordinator import get_context_for_strategy
 from .ooc_handlers import handle_ooc_url_request
-from .roleplay_contexts import get_roleplay_context, detect_roleplay_personality_context
+from .roleplay_contexts import get_enhanced_roleplay_context, detect_roleplay_personality_context
 from .database_contexts import (
     get_character_context,
     get_logs_context, 
@@ -39,7 +39,7 @@ __all__ = [
     'handle_ooc_url_request',
     
     # Roleplay contexts
-    'get_roleplay_context',
+    'get_enhanced_roleplay_context',
     'detect_roleplay_personality_context',
     
     # Database contexts

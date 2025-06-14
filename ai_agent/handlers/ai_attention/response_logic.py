@@ -15,72 +15,7 @@ if TYPE_CHECKING:
 
 
 
-def should_elsie_respond_in_roleplay(user_message: str, rp_state: 'RoleplayStateManager', current_turn: int) -> Tuple[bool, str]:
-    """
-    Determine if Elsie should actively respond during roleplay or just listen.
-    
-    CRITICAL: This function should ONLY be called when rp_state.is_roleplaying = True
-    Implicit responses and roleplay logic don't apply outside roleplay sessions.
-    
-    Returns (should_respond, reason)
-    """
-    # SAFETY CHECK: This function should only be called in roleplay mode
-    if not rp_state.is_roleplaying:
-        print(f"   ⚠️  WARNING: should_elsie_respond_in_roleplay called when NOT in roleplay mode!")
-        return False, "not_in_roleplay"
-    
-    message_lower = user_message.lower().strip()
-    participants = rp_state.get_participant_names()
-    is_dgm_session = rp_state.is_dgm_session()
-    is_thread_session = rp_state.is_thread_based()
-    
-    print(f"   🎭 ROLEPLAY RESPONSE CHECK:")
-    print(f"      - Participants: {participants}")
-    print(f"      - DGM Session: {is_dgm_session}")
-    print(f"      - Thread Session: {is_thread_session}")
-    
-    from .character_tracking import extract_current_speaker
-    speaking_character = extract_current_speaker(user_message)
-    
-    # Universal speaker tracking for all RP messages
-    if speaking_character:
-        rp_state.add_speaking_character(speaking_character, current_turn)
-    
-    # 1. Check for clear reasons to LISTEN FIRST
-    # This prevents Elsie from responding to her own posts.
-    if speaking_character and speaking_character.lower() == 'elsie':
-        print(f"   👂 LISTENING: Elsie is the speaker in this post.")
-        return False, "elsie_is_speaker"
 
-    # 2. ENHANCED: Check if other character is addressed FIRST (before implicit response check)
-    # This prevents false positives when characters are talking to each other
-    other_character_addressed = check_if_other_character_addressed(user_message, rp_state)
-    if other_character_addressed:
-        print(f"   👂 LISTENING: Message directed at '{other_character_addressed}', not Elsie.")
-        print(f"      - Character conversation detected: {speaking_character} → {other_character_addressed}")
-        return False, "other_character_addressed"
-
-    # 3. Check for DIRECT ADDRESSING of Elsie
-    if _is_elsie_directly_addressed(user_message):
-        print(f"   🗣️ DIRECT ADDRESSING: Elsie is directly mentioned or addressed.")
-        return True, "elsie_directly_addressed"
-
-    # 4. Check for IMPLICIT RESPONSE scenarios (character following up after Elsie addressed them)
-    # This is now much more restrictive and accurate
-    if rp_state.is_simple_implicit_response(current_turn, user_message):
-        print(f"   🗣️ IMPLICIT RESPONSE: Following up on conversation with Elsie.")
-        return True, "implicit_response"
-    
-    # 5. Check for SUBTLE BAR SERVICE scenarios (drink requests, etc.)
-    if _is_subtle_bar_service_needed(user_message):
-        print(f"   🍺 SUBTLE BAR SERVICE: Service request detected.")
-        return True, "subtle_bar_service"
-    
-    # 6. DEFAULT TO LISTENING for everything else
-    # This is the key change - we no longer respond to "substantial messages" just because they exist
-    # Elsie should be passive and only respond when directly involved
-    print(f"   👂 LISTENING: No direct involvement detected - passive monitoring.")
-    return False, "passive_listening"
 
 
 def _is_elsie_directly_addressed(user_message: str) -> bool:

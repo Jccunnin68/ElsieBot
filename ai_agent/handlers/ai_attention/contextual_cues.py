@@ -112,6 +112,9 @@ class ElsieContextualCues:
     # Turn Context
     turn_number: int = 0
     recent_activity: List[str] = field(default_factory=list)
+    
+    # PHASE 3B: Message Context for Fabrication Controls
+    current_message: str = ""  # The current user message being analyzed
 
 
 @dataclass

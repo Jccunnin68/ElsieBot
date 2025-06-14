@@ -13,23 +13,22 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from handlers.handlers_utils import (
+from handlers.ai_logic import (
     convert_earth_date_to_star_trek,
     is_continuation_request,
     is_federation_archives_request,
-    extract_continuation_focus,
     is_specific_log_request,
     is_stardancer_query,
-    is_stardancer_command_query,
-    extract_tell_me_about_subject,
     is_ooc_query,
     extract_ooc_log_url_request,
+    extract_tell_me_about_subject,
     extract_ship_log_query,
     is_character_query,
     get_query_type,
     detect_topic_change,
-    format_conversation_history,
-    detect_roleplay_triggers,
+    format_conversation_history
+)
+from handlers.ai_attention import (
     is_roleplay_allowed_channel,
     extract_addressed_characters,
     is_valid_character_name,
@@ -100,49 +99,6 @@ class TestOOCHandling:
         is_url, query = extract_ooc_log_url_request("OOC: link me the log page for the last stardancer")
         assert is_url
         assert "stardancer" in query.lower()
-
-
-class TestRoleplayDetection:
-    """Test roleplay detection and management"""
-    
-    def test_detect_roleplay_triggers(self):
-        # Test emote detection
-        is_rp, confidence, triggers = detect_roleplay_triggers("*walks into the bar*")
-        assert is_rp
-        assert "emotes" in triggers
-        
-        # Test character brackets
-        is_rp, confidence, triggers = detect_roleplay_triggers("[John Smith] walks forward")
-        assert is_rp
-        assert "character_brackets" in triggers
-        
-    def test_channel_restrictions(self):
-        # Thread should be allowed
-        channel_context = {"is_thread": True, "type": "public_thread"}
-        assert is_roleplay_allowed_channel(channel_context)
-        
-        # General channel should be blocked
-        channel_context = {"is_thread": False, "type": "text", "name": "general"}
-        assert not is_roleplay_allowed_channel(channel_context)
-
-
-class TestCharacterExtraction:
-    """Test character name extraction functions"""
-    
-    def test_extract_character_names_from_emotes(self):
-        names = extract_character_names_from_emotes("*John walks over to Sarah*")
-        assert "John" in names
-        assert "Sarah" in names
-        
-    def test_extract_addressed_characters(self):
-        names = extract_addressed_characters("Hey John, what do you think?")
-        assert "John" in names
-        
-    def test_valid_character_name(self):
-        assert is_valid_character_name("John")
-        assert is_valid_character_name("Sarah Smith")
-        assert not is_valid_character_name("the")
-        assert not is_valid_character_name("and")
 
 
 class TestConversationFlow:

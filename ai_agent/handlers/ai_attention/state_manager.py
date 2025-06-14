@@ -54,6 +54,9 @@ class RoleplayStateManager:
         # NEW: Conversation memory for enhanced context continuity
         self.conversation_memory = ConversationMemory(max_history=5)
         self.last_conversation_analysis = None  # Cache for last conversation analysis
+        
+        # PHASE 2C: DGM scene context storage
+        self.dgm_scene_context = {}  # Store scene context from DGM posts
     
     def start_roleplay_session(self, turn_number: int, initial_triggers: List[str], channel_context: Dict = None, dgm_characters: List[str] = None):
         """Initialize a new roleplay session with channel isolation."""
@@ -90,6 +93,9 @@ class RoleplayStateManager:
         # Reset conversation memory
         self.conversation_memory.clear_memory()
         self.last_conversation_analysis = None
+        
+        # PHASE 2C: Reset DGM scene context
+        self.dgm_scene_context = {}
         
         # Check if this is a DGM-initiated session
         self.dgm_initiated = 'dgm_scene_setting' in initial_triggers
@@ -507,6 +513,22 @@ class RoleplayStateManager:
         self.add_participant(character_name, "speaking", turn_number)
         print(f"   🗣️ SPEAKING CHARACTER ADDED: {character_name} (Turn {turn_number})")
     
+    def store_dgm_scene_context(self, scene_context: Dict):
+        """
+        PHASE 2C: Store DGM scene context for use in future responses.
+        This allows Elsie to understand and reference the scene setting.
+        """
+        if scene_context:
+            self.dgm_scene_context.update(scene_context)
+            print(f"   🎬 DGM SCENE CONTEXT STORED:")
+            for key, value in scene_context.items():
+                if key != 'raw_description':  # Don't log the full description
+                    print(f"      - {key}: {value}")
+    
+    def get_dgm_scene_context(self) -> Dict:
+        """Get the stored DGM scene context."""
+        return self.dgm_scene_context.copy()
+    
     def to_dict(self) -> Dict:
         """Convert state to dictionary for logging/debugging."""
         return {
@@ -534,21 +556,43 @@ class RoleplayStateManager:
         """
         Check if a message is from the same channel where roleplay is happening.
         Returns True if message is from roleplay channel, False if from different channel.
+        Enhanced to handle cases where channel_id might be missing.
         """
         if not self.is_roleplaying or not message_channel_context:
             return True  # No restriction when not roleplaying or no context
         
+        # Primary comparison: channel_id
         message_channel_id = message_channel_context.get('channel_id')
-        if not message_channel_id or not self.roleplay_channel_id:
-            return True  # Can't validate without IDs
+        roleplay_channel_id = self.roleplay_channel_id
         
-        is_same_channel = message_channel_id == self.roleplay_channel_id
+        if message_channel_id and roleplay_channel_id:
+            is_same_channel = message_channel_id == roleplay_channel_id
+            
+            if not is_same_channel:
+                message_channel_name = message_channel_context.get('channel_name', 'Unknown')
+                print(f"   🚫 CROSS-CHANNEL REJECTED (ID): Message from '{message_channel_name}' (ID: {message_channel_id}) while roleplaying in '{self.roleplay_channel_name}' (ID: {roleplay_channel_id})")
+            
+            return is_same_channel
         
-        if not is_same_channel:
-            message_channel_name = message_channel_context.get('channel_name', 'Unknown')
-            print(f"   🚫 CROSS-CHANNEL REJECTED: Message from '{message_channel_name}' while roleplaying in '{self.roleplay_channel_name}'")
+        # Fallback comparison: channel_name (when IDs are missing)
+        message_channel_name = message_channel_context.get('channel_name', '')
+        roleplay_channel_name = self.roleplay_channel_name or ''
         
-        return is_same_channel
+        if message_channel_name and roleplay_channel_name:
+            is_same_channel = message_channel_name == roleplay_channel_name
+            
+            if not is_same_channel:
+                print(f"   🚫 CROSS-CHANNEL REJECTED (NAME): Message from '{message_channel_name}' while roleplaying in '{roleplay_channel_name}'")
+                print(f"      - Warning: Using fallback name comparison due to missing channel IDs")
+            
+            return is_same_channel
+        
+        # Final fallback: if we can't determine, allow the message but log warning
+        print(f"   ⚠️  CROSS-CHANNEL CHECK: Cannot determine channel match - allowing message")
+        print(f"      - Message context: {message_channel_context}")
+        print(f"      - Roleplay channel: ID={roleplay_channel_id}, Name={roleplay_channel_name}")
+        
+        return True  # Fail open for safety
     
     def get_roleplay_channel_info(self) -> Dict:
         """Get information about the current roleplay channel."""

@@ -8,7 +8,7 @@ optimizing the flow to avoid expensive AI calls when possible.
 
 from typing import Dict
 
-from handlers.ai_logic import extract_response_decision
+from handlers.ai_logic.response_router import route_message_to_handler
 from handlers.ai_attention import extract_character_names_from_emotes, get_roleplay_state
 from .ai_engine import generate_ai_response_with_decision
 
@@ -50,11 +50,19 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
         print(f"   ⚠️  No channel context provided - assuming allowed")
     
     # Make the decision using existing logic
-    decision = extract_response_decision(user_message, conversation_history, channel_context)
+    decision = route_message_to_handler(user_message, conversation_history, channel_context)
     
     # If no AI needed, return the pre-generated response
     if not decision.needs_ai_generation:
         print(f"✅ Pre-generated response: {decision.strategy['reasoning']}")
+        
+        # SAFETY CHECK: Ensure we never return None
+        if decision.pre_generated_response is None:
+            print(f"   ⚠️  WARNING: pre_generated_response is None, defaulting to NO_RESPONSE")
+            print(f"   📋 Strategy: {decision.strategy}")
+            response = "NO_RESPONSE"
+        else:
+            response = decision.pre_generated_response
         
         # Handle tracking for roleplay responses that don't need AI
         if decision.strategy['approach'] == 'roleplay_active':
@@ -73,7 +81,7 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
                 rp_state.mark_response_turn(turn_number)
                 print(f"   📝 ENSURED: Elsie's response turn tracked")
         
-        return decision.pre_generated_response
+        return response
     
     # Otherwise, do the expensive AI generation
     print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")

@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from handlers.ai_attention.context_gatherer import build_contextual_cues
-from handlers.ai_attention.conversation_memory import getNextResponseEnhanced
+from handlers.ai_logic.response_decision_engine import create_response_decision_engine
 from handlers.ai_attention.state_manager import RoleplayStateManager
 from handlers.ai_attention.contextual_cues import ResponseType
 
@@ -25,8 +25,9 @@ def run_enhanced_system_demo():
     print("=" * 80)
     print()
     
-    # Initialize test state
+    # Initialize test state and decision engine
     rp_state = RoleplayStateManager()
+    decision_engine = create_response_decision_engine()
     
     # Test scenarios
     scenarios = [
@@ -93,8 +94,8 @@ def run_enhanced_system_demo():
         print(f"\n📝 Message: {scenario['message']}")
         contextual_cues = build_contextual_cues(scenario['message'], rp_state, i)
         
-        # Get enhanced response decision
-        response_decision = getNextResponseEnhanced(contextual_cues)
+        # Get enhanced response decision using decision engine directly
+        response_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
         
         # Analyze results
         print(f"\n📊 ANALYSIS RESULTS:")

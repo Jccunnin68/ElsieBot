@@ -8,7 +8,7 @@ in DGM sessions with the new conversation memory system.
 
 from ai_agent.handlers.ai_attention.state_manager import RoleplayStateManager
 from ai_agent.handlers.ai_attention.conversation_memory import ConversationMemory
-from ai_agent.handlers.ai_logic.strategy_engine import should_elsie_respond_in_roleplay
+from ai_agent.handlers.ai_logic.response_router import route_message_to_handler
 
 
 def test_dgm_implicit_response():
@@ -80,25 +80,27 @@ def test_dgm_implicit_response():
                 rp_state.set_last_character_addressed(addressed_to)
                 print(f"   🎯 ELSIE ADDRESSED: {addressed_to}")
         else:
-            # Add user turn and check response logic
+            # Add user turn and check response logic using enhanced pathway
             rp_state.add_conversation_turn(speaker, message, turn_number)
             rp_state.mark_character_turn(turn_number, speaker)
             
-            # Test response logic
-            should_respond, reason = should_elsie_respond_in_roleplay(message, rp_state, turn_number)
+            # Test response logic using enhanced pathway
+            response_decision = route_message_to_handler(message, [], channel_context)
             
-            print(f"   🤔 RESPONSE DECISION:")
-            print(f"      - Should respond: {should_respond}")
-            print(f"      - Reason: {reason}")
+            print(f"   🤔 ENHANCED RESPONSE DECISION:")
+            print(f"      - Should respond: {response_decision.needs_ai_generation}")
+            print(f"      - Approach: {response_decision.strategy.get('approach', 'unknown')}")
+            print(f"      - Reasoning: {response_decision.strategy.get('reasoning', 'No reasoning provided')}")
             
             # Special check for implicit response in DGM session
-            if reason == "implicit_response":
+            approach = response_decision.strategy.get('approach', '')
+            if approach == "roleplay_listening" and not response_decision.needs_ai_generation:
                 print(f"   ✅ DGM IMPLICIT RESPONSE WORKING!")
                 print(f"      - DGM session allows implicit responses")
                 print(f"      - Natural conversation flow maintained")
             elif turn_number == 4:  # This should be an implicit response
                 print(f"   ❌ IMPLICIT RESPONSE FAILED!")
-                print(f"      - Expected implicit response but got: {reason}")
+                print(f"      - Expected implicit response but got: {approach}")
                 print(f"      - DGM session may be blocking natural conversation")
     
     print(f"\n📊 FINAL STATE ANALYSIS:")
@@ -157,12 +159,13 @@ def test_non_dgm_implicit_response():
     rp_state.mark_response_turn(3)
     
     test_message = "\"Hi Elsie, how are you?\""
-    should_respond, reason = should_elsie_respond_in_roleplay(test_message, rp_state, 4)
+    response_decision = route_message_to_handler(test_message, [], channel_context)
     
     print(f"🤔 NON-DGM RESPONSE DECISION:")
-    print(f"   - Should respond: {should_respond}")
-    print(f"   - Reason: {reason}")
-    print(f"   - Result: {'✅ PASS' if reason == 'implicit_response' else '❌ FAIL'}")
+    print(f"   - Should respond: {response_decision.needs_ai_generation}")
+    print(f"   - Approach: {response_decision.strategy.get('approach', 'unknown')}")
+    approach = response_decision.strategy.get('approach', '')
+    print(f"   - Result: {'✅ PASS' if approach in ['roleplay_active', 'roleplay_implicit'] else '❌ FAIL'}")
 
 
 if __name__ == "__main__":
