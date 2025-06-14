@@ -297,7 +297,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
             }
         )
     
-    elif dgm_action == 'scene_end':
+    elif dgm_action == 'end_scene':
         print(f"   🎬 DGM Scene End - Ending roleplay session")
         
         # End roleplay session
