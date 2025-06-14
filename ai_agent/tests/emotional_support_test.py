@@ -24,10 +24,10 @@ def test_emotional_support_enhancement():
     
     # Import test modules
     try:
-        from priority_resolution import resolve_emotional_vs_group_conflict
-        from context_sensitivity import distinguish_group_vs_contextual
-        from conversation_emotions import ConversationEmotionalIntelligence
-        from emotional_analysis import detect_emotional_support_opportunity
+        from handlers.ai_emotion.priority_resolution import resolve_emotional_vs_group_conflict
+        from handlers.ai_emotion.context_sensitivity import distinguish_group_vs_contextual
+        from handlers.ai_emotion.conversation_emotions import ConversationEmotionalIntelligence
+        from handlers.ai_emotion.emotional_analysis import detect_emotional_support_opportunity
         
         print("✅ All emotional intelligence modules imported successfully")
     except ImportError as e:
@@ -190,7 +190,7 @@ def test_context_sensitivity_patterns():
     print("🎯 CONTEXT SENSITIVITY PATTERN TESTS")
     print(f"{'='*60}")
     
-    from context_sensitivity import distinguish_group_vs_contextual
+    from handlers.ai_emotion.context_sensitivity import distinguish_group_vs_contextual
     
     test_patterns = [
         ("Good morning everyone!", "direct_group"),

@@ -25,8 +25,8 @@ def test_enhanced_architecture():
     
     try:
         # Step 1: Test Context Gathering (ai_attention)
-        from ai_attention.context_gatherer import build_contextual_cues
-        from ai_attention.state_manager import RoleplayStateManager
+        from handlers.ai_attention.context_gatherer import build_contextual_cues
+        from handlers.ai_attention.state_manager import RoleplayStateManager
         
         # Create mock roleplay state
         rp_state = RoleplayStateManager()
@@ -39,9 +39,9 @@ def test_enhanced_architecture():
         print(f"   ✅ CONTEXT GATHERING: Session mode {contextual_cues.session_mode.value}")
         
         # Step 2: Test Emotional Intelligence (ai_emotion)
-        from emotional_analysis import analyze_emotional_context
-        from context_sensitivity import distinguish_group_vs_contextual
-        from priority_resolution import resolve_emotional_vs_group_conflict
+        from handlers.ai_emotion.emotional_analysis import analyze_emotional_context
+        from handlers.ai_emotion.context_sensitivity import distinguish_group_vs_contextual
+        from handlers.ai_emotion.priority_resolution import resolve_emotional_vs_group_conflict
         
         # Test emotional analysis
         emotional_context = analyze_emotional_context(test_message)
@@ -62,7 +62,7 @@ def test_enhanced_architecture():
             print(f"   ⚖️  PRIORITY RESOLUTION: {decision_type} (confidence: {final_confidence:.2f})")
         
         # Step 3: Test Decision Engine (ai_logic)
-        from ai_logic.response_decision_engine import create_response_decision_engine
+        from handlers.ai_logic.response_decision_engine import create_response_decision_engine
         
         decision_engine = create_response_decision_engine()
         response_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
@@ -74,7 +74,7 @@ def test_enhanced_architecture():
         print(f"      - Confidence: {response_decision.confidence:.2f}")
         
         # Step 4: Test Integration via Response Router
-        from ai_logic.response_router import route_message_to_handler
+        from handlers.ai_logic.response_router import route_message_to_handler
         
         final_decision = route_message_to_handler(
             test_message,
@@ -111,7 +111,7 @@ def test_fallback_behavior():
     test_message = "Hello Elsie!"
     
     try:
-        from ai_logic.response_router import route_message_to_handler
+        from handlers.ai_logic.response_router import route_message_to_handler
         
         final_decision = route_message_to_handler(
             test_message,
