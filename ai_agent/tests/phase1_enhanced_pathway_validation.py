@@ -42,7 +42,7 @@ def run_enhanced_pathway_validation():
             "name": "DGM Scene Setting",
             "setup": lambda: setup_fresh_state(rp_state),
             "message": '[DGM] *The USS Stardancer approaches Earth orbit as the evening crew reports for duty.*',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "dgm_scene_setting",
             "expected_ai_generation": False
         },
@@ -50,7 +50,7 @@ def run_enhanced_pathway_validation():
             "name": "Direct Character Greeting to Elsie",
             "setup": lambda: setup_dgm_session(rp_state),
             "message": '[Tavi] *walks into Ten Forward* "Good evening, Elsie! How are you tonight?"',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "roleplay_active",
             "expected_ai_generation": True
         },
@@ -58,7 +58,7 @@ def run_enhanced_pathway_validation():
             "name": "Group Greeting",
             "setup": lambda: setup_dgm_session(rp_state, ["Maeve", "Zarina"]),
             "message": '[Maeve] *enters Ten Forward with a smile* "Good evening everyone!"',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "roleplay_group_response",
             "expected_ai_generation": True
         },
@@ -66,7 +66,7 @@ def run_enhanced_pathway_validation():
             "name": "Drink Service Request",
             "setup": lambda: setup_dgm_session(rp_state, ["Marcus"]),
             "message": '[Marcus] *approaches the bar* *signals for a drink*',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "roleplay_subtle_service",
             "expected_ai_generation": True
         },
@@ -74,7 +74,7 @@ def run_enhanced_pathway_validation():
             "name": "Emotional Support Scenario",
             "setup": lambda: setup_dgm_session(rp_state, ["Tavi"]),
             "message": '[Tavi] *sits heavily at the bar* "I\'m having trouble living up to everyone\'s expectations."',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "roleplay_supportive",
             "expected_ai_generation": True
         },
@@ -82,7 +82,7 @@ def run_enhanced_pathway_validation():
             "name": "Technical Expertise Query",
             "setup": lambda: setup_dgm_session(rp_state, ["Shay"]),
             "message": '[Shay] *studying star charts* "These stellar navigation calculations seem off for this sector."',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "roleplay_technical",
             "expected_ai_generation": True
         },
@@ -90,7 +90,7 @@ def run_enhanced_pathway_validation():
             "name": "Character-to-Character Interaction",
             "setup": lambda: setup_dgm_session(rp_state, ["Maeve", "Zarina"]),
             "message": '[Maeve] "Zarina, what do you think about the new mission parameters?"',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "roleplay_listening",
             "expected_ai_generation": False
         },
@@ -98,7 +98,7 @@ def run_enhanced_pathway_validation():
             "name": "Cross-Channel Busy Response",
             "setup": lambda: setup_dgm_session(rp_state),
             "message": 'Hello Elsie!',
-            "channel": {"type": "DM", "is_dm": True, "channel_name": "dm"},
+            "channel": {"type": "DM", "is_dm": True, "channel_name": "dm", "channel_id": "dm-456"},
             "expected_approach": "cross_channel_busy",
             "expected_ai_generation": False
         },
@@ -106,7 +106,7 @@ def run_enhanced_pathway_validation():
             "name": "DGM Scene End",
             "setup": lambda: setup_dgm_session(rp_state),
             "message": '[DGM] END',
-            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+            "channel": {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
             "expected_approach": "dgm_scene_end",
             "expected_ai_generation": False
         },
@@ -114,7 +114,7 @@ def run_enhanced_pathway_validation():
             "name": "Non-Roleplay Query",
             "setup": lambda: setup_fresh_state(rp_state),
             "message": 'Tell me about USS Stardancer',
-            "channel": {"type": "DM", "is_dm": True, "channel_name": "dm"},
+            "channel": {"type": "DM", "is_dm": True, "channel_name": "dm", "channel_id": "dm-456"},
             "expected_approach": "stardancer_info",
             "expected_ai_generation": True
         }
@@ -249,11 +249,11 @@ def setup_dgm_session(rp_state, participants=None):
     if rp_state.is_roleplaying:
         rp_state.end_roleplay_session("test_reset")
     
-    # Start new DGM session
+    # Start new DGM session with proper channel context
     rp_state.start_roleplay_session(
         turn_number=1,
         initial_triggers=['dgm_scene_setting'],
-        channel_context={"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"},
+        channel_context={"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"},
         dgm_characters=participants
     )
     
@@ -273,7 +273,7 @@ def benchmark_enhanced_vs_legacy():
     
     # Test message
     test_message = '[Tavi] "Hello Elsie, how are you today?"'
-    test_channel = {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread"}
+    test_channel = {"type": "GUILD_PUBLIC_THREAD", "is_thread": True, "channel_name": "rp-thread", "channel_id": "rp-thread-123"}
     
     # Setup state
     rp_state = get_roleplay_state()
