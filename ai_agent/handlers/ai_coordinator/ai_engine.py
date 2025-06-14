@@ -8,6 +8,7 @@ Gemma API calls, database searches, and response processing.
 
 import google.generativeai as genai
 from typing import Dict
+import re
 
 from config import GEMMA_API_KEY
 from handlers.handlers_utils import estimate_token_count
@@ -90,6 +91,147 @@ def convert_to_third_person_emotes(response_text: str) -> str:
     converted_text = re.sub(emote_pattern, convert_emote, response_text)
     
     return converted_text
+
+def strip_discord_emojis(response_text: str) -> str:
+    """
+    Remove Discord emoji codes from roleplay responses to maintain clean formatting.
+    Discord converts :emoji: codes to actual emoji icons, which disrupts roleplay immersion.
+    This function either removes them or converts them to appropriate text.
+    """
+    if not response_text:
+        return response_text
+    
+    original_text = response_text
+    
+    # Define emoji conversions for common cases
+    # Some emojis convert to descriptive text, others are removed entirely
+    emoji_conversions = {
+        # Facial expressions - convert to descriptive text when in emotes
+        ':smile:': 'smiling',
+        ':grin:': 'grinning', 
+        ':laugh:': 'laughing',
+        ':chuckle:': 'chuckling',
+        ':wink:': 'winking',
+        ':frown:': 'frowning',
+        ':sad:': 'sadly',
+        ':cry:': 'tearfully',
+        ':sigh:': 'sighing',
+        ':smirk:': 'smirking',
+        ':blush:': 'blushing',
+        ':surprised:': 'surprised',
+        ':shock:': 'shocked',
+        ':confused:': 'confused',
+        ':thoughtful:': 'thoughtfully',
+        ':pleased:': 'pleased',
+        ':content:': 'contentedly',
+        
+        # Actions - convert to text descriptions
+        ':wave:': 'waving',
+        ':nod:': 'nodding',
+        ':shrug:': 'shrugging',
+        ':clap:': 'clapping',
+        ':thumbsup:': 'approvingly',
+        ':thumbsdown:': 'disapprovingly',
+        ':point:': 'pointing',
+        ':bow:': 'bowing',
+        
+        # Reactions/emotions - remove entirely or convert
+        ':heart:': '',  # Remove - too emoji-like
+        ':sparkles:': '',  # Remove - too emoji-like  
+        ':fire:': '',  # Remove - too emoji-like
+        ':eyes:': 'watching',
+        ':thinking:': 'thoughtfully',
+        ':sleepy:': 'tiredly',
+        ':yawn:': 'yawning',
+        
+        # Common Discord emojis - remove entirely
+        ':joy:': '',
+        ':rofl:': '',
+        ':sweat_smile:': '',
+        ':kissing_heart:': '',
+        ':winking_face:': 'winking',
+        ':stuck_out_tongue:': '',
+        ':sunglasses:': '',
+        ':neutral_face:': '',
+        ':expressionless:': '',
+        ':unamused:': '',
+        ':roll_eyes:': '',
+        ':thinking_face:': 'thoughtfully',
+        ':flushed:': 'flushed',
+        ':disappointed:': 'disappointed',
+        ':worried:': 'worried',
+        ':angry:': 'angrily',
+        ':rage:': 'furiously',
+        ':triumph:': 'triumphantly',
+        ':relieved:': 'relieved',
+        ':tired_face:': 'tiredly',
+        ':sleepy:': 'sleepily',
+        ':sleeping:': 'sleeping',
+        ':mask:': '',
+        ':dizzy_face:': 'dizzily',
+        ':cowboy:': '',
+        ':partying_face:': 'cheerfully',
+        ':star_struck:': 'admiringly',
+        ':money_mouth:': '',
+        ':shushing_face:': 'quietly',
+        ':raised_eyebrow:': 'skeptically',
+        ':monocle:': 'curiously',
+    }
+    
+    # First pass: Handle emojis inside asterisk emotes
+    def process_emote_emojis(match):
+        emote_content = match.group(1)
+        original_emote = emote_content
+        
+        # Replace emoji codes within emotes with text descriptions
+        for emoji_code, replacement in emoji_conversions.items():
+            if emoji_code in emote_content:
+                if replacement:  # If we have a text replacement
+                    emote_content = emote_content.replace(emoji_code, replacement)
+                    print(f"   🎭 EMOJI IN EMOTE: '{emoji_code}' -> '{replacement}' in emote")
+                else:  # If replacement is empty, remove the emoji
+                    emote_content = emote_content.replace(emoji_code, '').strip()
+                    print(f"   🎭 EMOJI REMOVED FROM EMOTE: '{emoji_code}' removed from emote")
+        
+        # Clean up any double spaces or trailing spaces
+        emote_content = re.sub(r'\s+', ' ', emote_content).strip()
+        
+        return f"*{emote_content}*"
+    
+    # Process emojis inside emotes first
+    emote_pattern = r'\*([^*]+)\*'
+    response_text = re.sub(emote_pattern, process_emote_emojis, response_text)
+    
+    # Second pass: Remove any remaining emoji codes outside of emotes
+    emoji_pattern = r':[a-zA-Z0-9_+-]+:'
+    remaining_emojis = re.findall(emoji_pattern, response_text)
+    
+    for emoji in remaining_emojis:
+        if emoji in emoji_conversions:
+            replacement = emoji_conversions[emoji]
+            if replacement:
+                response_text = response_text.replace(emoji, replacement)
+                print(f"   🎭 EMOJI OUTSIDE EMOTE: '{emoji}' -> '{replacement}'")
+            else:
+                response_text = response_text.replace(emoji, '')
+                print(f"   🎭 EMOJI REMOVED: '{emoji}' removed from text")
+        else:
+            # Unknown emoji - remove it entirely
+            response_text = response_text.replace(emoji, '')
+            print(f"   🎭 UNKNOWN EMOJI REMOVED: '{emoji}' removed")
+    
+    # Clean up any double spaces that might result from emoji removal
+    response_text = re.sub(r'\s+', ' ', response_text)
+    response_text = re.sub(r'\s*\.\s*', '. ', response_text)  # Fix spacing around periods
+    response_text = response_text.strip()
+    
+    # Log if any changes were made
+    if response_text != original_text:
+        print(f"   🎭 DISCORD EMOJI FILTERING APPLIED")
+        print(f"      Original length: {len(original_text)} chars")
+        print(f"      Filtered length: {len(response_text)} chars")
+    
+    return response_text
 
 def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
     """
@@ -266,6 +408,9 @@ Stay helpful and informative. When providing database information, be thorough a
             # Convert first-person emotes to third-person for consistent roleplay perspective
             response_text = convert_to_third_person_emotes(response_text)
             
+            # Strip Discord emoji codes to maintain clean roleplay formatting
+            response_text = strip_discord_emojis(response_text)
+            
             rp_state = get_roleplay_state()
             turn_number = len(conversation_history) + 1
             
@@ -292,6 +437,9 @@ Stay helpful and informative. When providing database information, be thorough a
         elif strategy['approach'] == 'roleplay_mock_enhanced':
             # Convert first-person emotes to third-person for consistent roleplay perspective
             response_text = convert_to_third_person_emotes(response_text)
+            
+            # Strip Discord emoji codes to maintain clean roleplay formatting
+            response_text = strip_discord_emojis(response_text)
             
             rp_state = get_roleplay_state()
             turn_number = len(conversation_history) + 1

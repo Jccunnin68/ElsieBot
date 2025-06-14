@@ -93,13 +93,13 @@ def detect_general_personality_context(user_message: str) -> str:
         return "Respond as your complete self - intelligent, sophisticated, with varied interests. Don't default to bartender mode unless drinks are specifically involved."
 
 
-def detect_who_elsie_addressed(response_text: str, user_message: str) -> str:
+def detect_who_elsie_addressed_alt(response_text: str, user_message: str) -> str:
     """
-    Detect who Elsie addressed in her response.
+    Alternative method to detect who Elsie addressed in her response.
     This helps track implicit response chains.
     """
     # First, try to detect who spoke in the user message (likely who Elsie is responding to)
-    from handlers.ai_attention import extract_character_names_from_emotes
+    from handlers.ai_attention.character_tracking import extract_character_names_from_emotes
     
     # Check for [Character Name] format in user message
     bracket_pattern = r'\[([A-Z][a-zA-Z\s]+)\]'
