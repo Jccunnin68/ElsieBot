@@ -410,11 +410,22 @@ class ResponseDecisionEngine:
                 tone = "friendly"
                 
             else:
-                # Standard response - check other conditions from contextual cues
-                should_respond = self._should_respond_standard(contextual_cues)
-                response_type = ResponseType.ACTIVE_DIALOGUE if should_respond else ResponseType.NONE
-                approach = "responsive"
-                tone = "natural"
+                # Check for technical expertise opportunities before standard response
+                technical_expertise_detected = self._check_technical_expertise(contextual_cues)
+                
+                if technical_expertise_detected:
+                    should_respond = True
+                    response_type = ResponseType.TECHNICAL_EXPERTISE
+                    approach = "knowledgeable"
+                    tone = "professional"
+                    reasoning = "Technical expertise opportunity detected"
+                    confidence = 0.8
+                else:
+                    # Standard response - check other conditions from contextual cues
+                    should_respond = self._should_respond_standard(contextual_cues)
+                    response_type = ResponseType.ACTIVE_DIALOGUE if should_respond else ResponseType.NONE
+                    approach = "responsive"
+                    tone = "natural"
             
             # Build comprehensive ResponseDecision
             response_decision = ResponseDecision(
@@ -447,6 +458,36 @@ class ResponseDecisionEngine:
                 reasoning=f"Error building decision: {e}"
             )
     
+    def _check_technical_expertise(self, contextual_cues) -> bool:
+        """
+        Check if this is a technical expertise opportunity (stellar cartography, etc.).
+        
+        FIXED: Implements the missing technical expertise detection from the original system.
+        """
+        try:
+            # Check if both expertise and themes align for stellar cartography
+            current_expertise = getattr(contextual_cues, 'current_expertise', [])
+            conversation_themes = getattr(contextual_cues, 'conversation_dynamics', None)
+            
+            if conversation_themes:
+                themes = getattr(conversation_themes, 'themes', [])
+                
+                # Check for stellar cartography expertise opportunity
+                if 'stellar_cartography' in current_expertise and 'stellar_cartography' in themes:
+                    print(f"   🔬 TECHNICAL EXPERTISE DETECTED: Stellar cartography")
+                    return True
+                
+                # Check for other technical expertise areas
+                if 'ship_operations' in current_expertise and 'ship_operations' in themes:
+                    print(f"   🔬 TECHNICAL EXPERTISE DETECTED: Ship operations")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"   ⚠️  ERROR checking technical expertise: {e}")
+            return False
+
     def _should_respond_standard(self, contextual_cues) -> bool:
         """
         Determine if Elsie should respond in standard cases (non-emotional, non-group).
