@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 SHIP_NAMES = [
     # 22nd Mobile Daedalus Fleet Ships
     'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel',
-    'caelian', 'montagnier', 'faraday', 'cook', 'mjolnir', 'rendino', 
+    'caelian', 'montagnier', 'faraday', 'manta', 'mjolnir', 'rendino', 
     'gigantes', 'banshee',
     
     # Classic Star Trek Ships (for reference/comparison)

@@ -1,0 +1,748 @@
+{
+  "basic_info": {
+    "batchcomplete": "",
+    "query": {
+      "normalized": [
+        {
+          "from": "Political_Timeline",
+          "to": "Political Timeline"
+        }
+      ],
+      "pages": {
+        "2214": {
+          "pageid": 2214,
+          "ns": 0,
+          "title": "Political Timeline",
+          "contentmodel": "wikitext",
+          "pagelanguage": "en",
+          "pagelanguagehtmlcode": "en",
+          "pagelanguagedir": "ltr",
+          "touched": "2025-05-13T15:09:05Z",
+          "lastrevid": 15867,
+          "length": 12156,
+          "fullurl": "https://22ndmobile.fandom.com/wiki/Political_Timeline",
+          "editurl": "https://22ndmobile.fandom.com/wiki/Political_Timeline?action=edit",
+          "canonicalurl": "https://22ndmobile.fandom.com/wiki/Political_Timeline",
+          "categories": [
+            {
+              "ns": 14,
+              "title": "Category:Timelines"
+            }
+          ],
+          "links": [
+            {
+              "ns": 0,
+              "title": "Anevian Incident"
+            },
+            {
+              "ns": 0,
+              "title": "Artesia Gateway"
+            },
+            {
+              "ns": 0,
+              "title": "Avynei"
+            },
+            {
+              "ns": 0,
+              "title": "Beryxian"
+            },
+            {
+              "ns": 0,
+              "title": "Captain"
+            },
+            {
+              "ns": 0,
+              "title": "Cardassian Union"
+            },
+            {
+              "ns": 0,
+              "title": "Dawn Alliance"
+            },
+            {
+              "ns": 0,
+              "title": "Dawnbreaker War"
+            },
+            {
+              "ns": 0,
+              "title": "Deep Space Nine"
+            },
+            {
+              "ns": 0,
+              "title": "Dr Zimmerman"
+            },
+            {
+              "ns": 0,
+              "title": "Elizabeth Razzor"
+            },
+            {
+              "ns": 0,
+              "title": "Fleet Admiral"
+            },
+            {
+              "ns": 0,
+              "title": "Great Retrograde"
+            },
+            {
+              "ns": 0,
+              "title": "HC-19 Incident"
+            },
+            {
+              "ns": 0,
+              "title": "Khitomer Alliance"
+            },
+            {
+              "ns": 0,
+              "title": "Klingon Empire"
+            },
+            {
+              "ns": 0,
+              "title": "Marcus Blaine"
+            },
+            {
+              "ns": 0,
+              "title": "Marzz Razzor"
+            },
+            {
+              "ns": 0,
+              "title": "Milla Deati"
+            },
+            {
+              "ns": 0,
+              "title": "Nyoko Honda"
+            },
+            {
+              "ns": 0,
+              "title": "PhellTalia Zh'Kor"
+            },
+            {
+              "ns": 0,
+              "title": "Project Magellan"
+            },
+            {
+              "ns": 0,
+              "title": "Project Salvation"
+            },
+            {
+              "ns": 0,
+              "title": "Romulan Republic"
+            },
+            {
+              "ns": 0,
+              "title": "Starbase 220"
+            },
+            {
+              "ns": 0,
+              "title": "Starfleet"
+            },
+            {
+              "ns": 0,
+              "title": "Tanausan Imperium"
+            },
+            {
+              "ns": 0,
+              "title": "USS Caelian"
+            },
+            {
+              "ns": 0,
+              "title": "USS Protector"
+            },
+            {
+              "ns": 0,
+              "title": "USS Sentinel"
+            },
+            {
+              "ns": 0,
+              "title": "USS Stardancer"
+            },
+            {
+              "ns": 0,
+              "title": "United Federation of Planets"
+            },
+            {
+              "ns": 0,
+              "title": "United Federation of Planets Marshals Service"
+            },
+            {
+              "ns": 0,
+              "title": "Yanda"
+            }
+          ],
+          "extlinks": [
+            {
+              "*": "https://sto.fandom.com/wiki/Accolade/Lore"
+            }
+          ]
+        }
+      }
+    },
+    "limits": {
+      "categories": 500,
+      "templates": 500,
+      "links": 500,
+      "extlinks": 500
+    }
+  },
+  "parsed_content": {
+    "parse": {
+      "title": "Political Timeline",
+      "pageid": 2214,
+      "text": {
+        "*": "<div class=\"mw-content-ltr mw-parser-output\" lang=\"en\" dir=\"ltr\"><p>Political Timeline\n</p>\n<div id=\"toc\" class=\"toc\" role=\"navigation\" aria-labelledby=\"mw-toc-heading\"><input type=\"checkbox\" role=\"button\" id=\"toctogglecheckbox\" class=\"toctogglecheckbox\" style=\"display:none\" /><div class=\"toctitle\" lang=\"en\" dir=\"ltr\"><h2 id=\"mw-toc-heading\">Contents</h2><span class=\"toctogglespan\"><label class=\"toctogglelabel\" for=\"toctogglecheckbox\"></label></span></div>\n<ul>\n<li class=\"toclevel-1 tocsection-1\"><a href=\"#Prior_to_2409\"><span class=\"tocnumber\">1</span> <span class=\"toctext\">Prior to 2409</span></a></li>\n<li class=\"toclevel-1 tocsection-2\"><a href=\"#2409_to_2428_-_The_Feline_Era\"><span class=\"tocnumber\">2</span> <span class=\"toctext\">2409 to 2428 - The Feline Era</span></a>\n<ul>\n<li class=\"toclevel-2 tocsection-3\"><a href=\"#2413\"><span class=\"tocnumber\">2.1</span> <span class=\"toctext\">2413</span></a></li>\n<li class=\"toclevel-2 tocsection-4\"><a href=\"#2416\"><span class=\"tocnumber\">2.2</span> <span class=\"toctext\">2416</span></a></li>\n<li class=\"toclevel-2 tocsection-5\"><a href=\"#2417\"><span class=\"tocnumber\">2.3</span> <span class=\"toctext\">2417</span></a></li>\n<li class=\"toclevel-2 tocsection-6\"><a href=\"#2419\"><span class=\"tocnumber\">2.4</span> <span class=\"toctext\">2419</span></a></li>\n<li class=\"toclevel-2 tocsection-7\"><a href=\"#2420\"><span class=\"tocnumber\">2.5</span> <span class=\"toctext\">2420</span></a></li>\n<li class=\"toclevel-2 tocsection-8\"><a href=\"#2421\"><span class=\"tocnumber\">2.6</span> <span class=\"toctext\">2421</span></a></li>\n<li class=\"toclevel-2 tocsection-9\"><a href=\"#2426\"><span class=\"tocnumber\">2.7</span> <span class=\"toctext\">2426</span></a></li>\n<li class=\"toclevel-2 tocsection-10\"><a href=\"#2428\"><span class=\"tocnumber\">2.8</span> <span class=\"toctext\">2428</span></a></li>\n</ul>\n</li>\n<li class=\"toclevel-1 tocsection-11\"><a href=\"#2428_to_2450_-_Moving_Forward\"><span class=\"tocnumber\">3</span> <span class=\"toctext\">2428 to 2450 - Moving Forward</span></a>\n<ul>\n<li class=\"toclevel-2 tocsection-12\"><a href=\"#2430\"><span class=\"tocnumber\">3.1</span> <span class=\"toctext\"><b>2430</b></span></a>\n<ul>\n<li class=\"toclevel-3 tocsection-13\"><a href=\"#2433\"><span class=\"tocnumber\">3.1.1</span> <span class=\"toctext\"><b>2433</b></span></a></li>\n<li class=\"toclevel-3 tocsection-14\"><a href=\"#2434\"><span class=\"tocnumber\">3.1.2</span> <span class=\"toctext\">2434</span></a></li>\n<li class=\"toclevel-3 tocsection-15\"><a href=\"#2437\"><span class=\"tocnumber\">3.1.3</span> <span class=\"toctext\">2437</span></a></li>\n<li class=\"toclevel-3 tocsection-16\"><a href=\"#2438\"><span class=\"tocnumber\">3.1.4</span> <span class=\"toctext\">2438</span></a></li>\n<li class=\"toclevel-3 tocsection-17\"><a href=\"#2439\"><span class=\"tocnumber\">3.1.5</span> <span class=\"toctext\">2439</span></a></li>\n</ul>\n</li>\n<li class=\"toclevel-2 tocsection-18\"><a href=\"#2440\"><span class=\"tocnumber\">3.2</span> <span class=\"toctext\">2440</span></a>\n<ul>\n<li class=\"toclevel-3 tocsection-19\"><a href=\"#2441\"><span class=\"tocnumber\">3.2.1</span> <span class=\"toctext\"><b>2441</b></span></a></li>\n<li class=\"toclevel-3 tocsection-20\"><a href=\"#2443\"><span class=\"tocnumber\">3.2.2</span> <span class=\"toctext\">2443</span></a></li>\n<li class=\"toclevel-3 tocsection-21\"><a href=\"#2444\"><span class=\"tocnumber\">3.2.3</span> <span class=\"toctext\"><b>2444</b></span></a></li>\n<li class=\"toclevel-3 tocsection-22\"><a href=\"#2445\"><span class=\"tocnumber\">3.2.4</span> <span class=\"toctext\"><b>2445</b></span></a></li>\n<li class=\"toclevel-3 tocsection-23\"><a href=\"#2446\"><span class=\"tocnumber\">3.2.5</span> <span class=\"toctext\">2446</span></a></li>\n<li class=\"toclevel-3 tocsection-24\"><a href=\"#2447\"><span class=\"tocnumber\">3.2.6</span> <span class=\"toctext\"><b>2447</b></span></a></li>\n<li class=\"toclevel-3 tocsection-25\"><a href=\"#2448\"><span class=\"tocnumber\">3.2.7</span> <span class=\"toctext\"><b>2448</b></span></a></li>\n</ul>\n</li>\n<li class=\"toclevel-2 tocsection-26\"><a href=\"#2450\"><span class=\"tocnumber\">3.3</span> <span class=\"toctext\"><b>2450</b></span></a>\n<ul>\n<li class=\"toclevel-3 tocsection-27\"><a href=\"#2451\"><span class=\"tocnumber\">3.3.1</span> <span class=\"toctext\"><b>2451</b></span></a></li>\n<li class=\"toclevel-3 tocsection-28\"><a href=\"#2452\"><span class=\"tocnumber\">3.3.2</span> <span class=\"toctext\"><b>2452</b></span></a></li>\n</ul>\n</li>\n</ul>\n</li>\n<li class=\"toclevel-1 tocsection-29\"><a href=\"#2454_to_Present_-_The_Next_Generation\"><span class=\"tocnumber\">4</span> <span class=\"toctext\">2454 to Present - The Next Generation</span></a>\n<ul>\n<li class=\"toclevel-2 tocsection-30\"><a href=\"#2455\"><span class=\"tocnumber\">4.1</span> <span class=\"toctext\">2455</span></a></li>\n</ul>\n</li>\n</ul>\n</div>\n\n<h2><span class=\"mw-headline\" id=\"Prior_to_2409\">Prior to 2409</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D1&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h2>\n<ul><li>See <a target=\"_blank\" rel=\"noreferrer noopener\" class=\"text\" href=\"https://sto.fandom.com/wiki/Accolade/Lore\">Star Trek Online: The Path to 2409</a></li></ul>\n<h2><span class=\"mw-headline\" id=\"2409_to_2428_-_The_Feline_Era\">2409 to 2428 - The Feline Era</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D2&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h2>\n<h4><span class=\"mw-headline\" id=\"2413\">2413</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D3&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>Starfleet discovers and stops attempts to create a sterilization virus against the Undine.</li>\n<li>Terrorists attempt to destroy Farpoint Station.</li>\n<li>Undine agents plant false information implicating multiple Starfleet officers in retaliation for previous attacks. These allegations are later proven false.</li>\n<li>An Undine agent impersonating Admiral Valoura attempts to sabotage peace talks between the <a href=\"/wiki/United_Federation_of_Planets\" title=\"United Federation of Planets\">Federation</a> and <a href=\"/wiki/Klingon_Empire\" title=\"Klingon Empire\">Klingon Empire</a> at Trinity Base. These attempts are thwarted, allowing talks to continue.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2416\">2416</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D4&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>Several houses attempt a rebellion against J'mpok's leadership in the Klingon Empire. This rebellion spills over into Federation space, but is eventually quelled.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2417\">2417</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D5&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>A rogue faction within <a href=\"/wiki/Project_Salvation\" title=\"Project Salvation\">Project Salvation</a> is discovered following the <a href=\"/wiki/HC-19_Incident\" title=\"HC-19 Incident\">HC-19 Incident</a>.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2419\">2419</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D6&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>The Iconian War takes place. The Milky Way galaxy is devastated by the sudden invasion with billions dead.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2420\">2420</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D7&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>The rogue faction within Project Salvation is defeated. Information about this faction is released to the general public, embarrassing Starfleet and the Federation.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2421\">2421</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D8&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><a href=\"/wiki/Project_Magellan\" title=\"Project Magellan\">Project Magellan</a> begins, marking a historic moment in cooperation between members of the <a href=\"/wiki/Khitomer_Alliance\" title=\"Khitomer Alliance\">Khitomer Alliance</a>.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2426\">2426</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D9&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>The <a href=\"/wiki/Dawnbreaker_War\" title=\"Dawnbreaker War\">Dawn War</a> begins between the <a href=\"/wiki/Dawn_Alliance\" title=\"Dawn Alliance\">Dawn Alliance</a> and  <a href=\"/wiki/Tanausan_Imperium\" title=\"Tanausan Imperium\">Tanausan Alliance</a>.\n<ul><li>The <a href=\"/wiki/Artesia_Gateway\" title=\"Artesia Gateway\">Artesia Gateway</a> is locked to traffic coming from the Milky Way.</li></ul></li></ul>\n<h4><span class=\"mw-headline\" id=\"2428\">2428</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D10&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>The <a href=\"/wiki/Great_Retrograde\" title=\"Great Retrograde\">Great Retrograde</a> occurs.\n<ul><li>The <a href=\"/wiki/Artesia_Gateway\" title=\"Artesia Gateway\">Artesia Gateway</a> reopens.</li>\n<li>The <a href=\"/wiki/Dawnbreaker_War\" title=\"Dawnbreaker War\">Dawn War</a> ends.</li></ul></li></ul>\n<h2><span class=\"mw-headline\" id=\"2428_to_2450_-_Moving_Forward\">2428 to 2450 - Moving Forward</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D11&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h2>\n<h3><span class=\"mw-headline\" id=\"2430\"><b>2430</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D12&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h3>\n<h4><span class=\"mw-headline\" id=\"2433\"><b>2433</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D13&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>The <a href=\"/wiki/Yanda\" title=\"Yanda\">Yanda</a> join the <a href=\"/wiki/United_Federation_of_Planets\" title=\"United Federation of Planets\">Federation</a>.</li>\n<li><b>February:</b> The New Tanausan States take the world of Duhelen, officially stamping out the last holdout of the <a href=\"/wiki/Tanausan_Imperium\" title=\"Tanausan Imperium\">Tanausan Imperium</a>.</li>\n<li><b>June:</b> <a href=\"/wiki/Khitomer_Alliance\" title=\"Khitomer Alliance\">Khitomer Alliance</a> accords expanded. Alliance vessels are few but act as Ambassadorial vessels and honor guard. They also may act as peace keeping vessels. Admiral <a href=\"/wiki/Nyoko_Honda\" title=\"Nyoko Honda\">Nyoko Honda</a> is placed as Joint Commander while alliance headquartering is located on Qo’nos.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2434\">2434</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D14&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>A group of Colonies within the badlands form the Free Cardassian Conclave. Worlds separate from the Cardassian Central Government. They follow a United Earth style Post scarcity Socialist government. FCC worlds are all independent members.&#160; Khitomer Alliance vessels provide primary peacekeeping forces to ensure the peaceful formation of the new government.</li>\n<li>The <a href=\"/wiki/Beryxian\" title=\"Beryxian\">Beryxians</a> join the <a href=\"/wiki/United_Federation_of_Planets\" title=\"United Federation of Planets\">Federation</a>.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2437\">2437</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D15&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>July 4:</b> The siege of Lorin Minor. A small beryxian colony on the Moon of Lorin Minor came under attack by Zhyx forces, the invasion was swift and brutal but eventually the local Security forces and the last remaining DELTA TRT held out long enough to be reinforced by Nymati shock forces and repel the Zhyx. The the entire Delta Team was lost defending the civilian population against overwhelming odds. With all of them earning the Legion of Honor.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2438\">2438</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D16&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>July 9th:</b> Nirizean Extinction event. An psionic genetic attack was launched against the Nirizean population within the New Tanausan States by what remain of the Chosen, the fanatical followers of the Dark that remained after the end of the war. The nature of the attack was a telepathic plague that rapidly spread through the Nirizean population leaving only those without telepathy or cut off from it alive.\n<ul><li>In an insidious twist the Thought Plague is capable of being carried by nontelepaths completely asymptomatically.</li>\n<li>This lead to a rapid spread across the LMC and a danger to any telepaths connecting with such minds, though for a while it seemed to only manifest within telepathic species native to the LMC.</li>\n<li>The Avynei and Travynei were able to counter the effects in their own kind but being infected meant long recoveries.</li></ul></li>\n<li><b>April - June</b>: Former Ambassador Worf granted the Rank of Dahar Master, designated arbiter of ascension.\n<ul><li>Chancellor Ka’nan son of Former Chancellor Kadrall's  House Kadrall ascends over Duras of house Duras. Ka’nan is seen as a reformer, he is loved by the lower houses and the large number of the houseless klingons. His first act as Chancellor is a controversial one.\n<ul><li>He declares that Scientist and Engineers are the empire’s new warriors.</li>\n<li>Declares a war against ignorance, and the unknown.</li>\n<li>Founds the Qo’nos&#160; Academy of Advanced Sciences and granted Kurak, of house Palkar the rank of Dahar Master of Science, placing her in charge of the Academy.</li>\n<li>House Duras declares this a farce but seems to accept the change in leadership.</li></ul></li></ul></li></ul>\n<h4><span class=\"mw-headline\" id=\"2439\">2439</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D17&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>May 7th</b>: A shuttle carrying Lt Commander Brenda Riens, Rear Admiral <a href=\"/wiki/Elizabeth_Razzor\" title=\"Elizabeth Razzor\">Elizabeth Rendino Razzor</a> and Retired Admiral <a href=\"/wiki/Marzz_Razzor\" title=\"Marzz Razzor\">Marzz Razzor</a> goes missing in transit from the <a href=\"/wiki/USS_Caelian\" title=\"USS Caelian\">USS Caelian</a> to Risa. Evidence found along the shuttle’s flight path suggests a loss of slipstream containment resulting in the destruction of the shuttle.&#160; All three are finally declared KIA.</li>\n<li><b>October 30th:</b> The Betazoid colony on Magros VIII, a commune for the recovery of the Betazoids affected by the <a href=\"/wiki/Dawnbreaker_War\" title=\"Dawnbreaker War\">Dawnbreaker war</a> and all those who had been used to face telepathic incident in Starfleet's many wars suffered an outbreak of the Chosen plague killing all 15,000 Betazoids and other telepaths on the colony.\n<ul><li>After this incident, Starfleet issued a regulatory ban on the use of telepathy unless the risk was deemed acceptable.</li>\n<li>Betazoid culture shifted to defense against intrusion. Telepathy is seen as very risky with non telepaths as any could be a carrier.</li></ul></li></ul>\n<h3><span class=\"mw-headline\" id=\"2440\">2440</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D18&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h3>\n<ul><li>The <a href=\"https://memory-alpha.fandom.com/wiki/The_Doctor\" class=\"extiw\" title=\"startrekwiki:The Doctor\">Voyager EMH</a> who has chosen to go by the name <a href=\"/wiki/Dr_Zimmerman\" title=\"Dr Zimmerman\">Zimmerman</a> , in his recently elected position as a federation councilman, submitted a bill formally changing the definition of life to include all life, no matter its origin such that sufficient sentience could be determined. The Ripple-effect from this bill passing was a temporary ban on further holographic creations until new ethical use rules could be put in place.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2441\"><b>2441</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D19&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>August</b>: The <a href=\"/wiki/Anevian_Incident\" title=\"Anevian Incident\">Anevian Incident</a> occurs.&#160; The <a href=\"/wiki/USS_Caelian\" title=\"USS Caelian\">U.S.S. Caelian</a> is lost with all hands and the Irdinia Black Hole forms.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2443\">2443</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D20&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>A Beryxian ambassador is assassinated during a visit to <a href=\"/wiki/Starbase_220\" title=\"Starbase 220\">Starbase 220</a>.\n<ul><li>Beryxian authorities demand justice and threaten to leave the Federation if protection cannot be provided.</li>\n<li>Starfleet security arrests a <a href=\"/wiki/Milla_Deati\" title=\"Milla Deati\">Starfleet officer</a> in connection to the assassination.</li>\n<li>The Director of Starfleet Intelligence resigns due to their failure to detect or stop the attempt.</li></ul></li></ul>\n<h4><span class=\"mw-headline\" id=\"2444\"><b>2444</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D21&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>November:</b> A Reactionary Religious Government wins power on Bajor. While still members of the Federation the Bajorans populist groups within the Bajoran citizenry are starting to blame the federation for the focus on rebuilding Cardassia and former enemies from the Dominion War. Due to the near 75 year gap from the end of the dominion war and the current lifetime. Revisionism is common. The idea that Bajor has constantly just been a pawn at play to be used by the Federation starts to take root.</li>\n<li>Holodeck usage resumed once anti emergence protocols could be installed. Holodecks that have the upgrades saw a loss in fidelity of holographic characters. Unauthorized holodecks become illegal within the <a href=\"/wiki/United_Federation_of_Planets\" title=\"United Federation of Planets\">Federation</a>.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2445\"><b>2445</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D22&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>March - June</b>&#160;: The Kzari Chancellor is killed in an industrial accident. The New Kzari election leads to the selecting of a far more Federation wary Chancellor. Kzari Leadership in the Citadel Conclave takes a more antagonistic stance towards Milky Way races. Accusations of former party allegiances in the chancellor’s parents' past are put aside after an investigation by the <a href=\"/wiki/USS_Sentinel\" title=\"USS Sentinel\">USS Sentinel</a>. Kzari Rhetoric softens.</li>\n<li><b>June 2445</b> - Cardassian President Populist Kenor Tamor elected to take over the <a href=\"/wiki/Cardassian_Union\" title=\"Cardassian Union\">Cardassian Union</a>. Her policies drive the Cardassian Union more towards a expansionist state as full recovery from the Dominion War and trade with the federation and galactic peace provides a large amount of surplus.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2446\">2446</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D23&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>March:</b> Cardassian Union forces Annex the Free Cardassian Conclave world of Malto VI. Claiming that an extremist government had recently won an election threatening to bring back True Way logic. In reality Federation Officials believe the Government was planning to apply for federation membership.</li>\n<li><b>March</b>: Gorn Hegemony granted independence from the Klingon Empire. Orion Syndicates also leave the empire peacefully. Chancellor Ka’nan offers to maintain open trade policies with both peoples.</li>\n<li><b>June</b>: The five remaining&#160; FCC worlds jointly apply for membership in the federation to guard against Cardassian Union attempts to annex.\n<ul><li>Surprisingly, Bajor vetoes their joining and claims that these worlds are actually ancient Bajoran Territories and thus the Cardassian colonies have no&#160;claim to them.</li>\n<li>FCC worlds are instead added as protectorates which do not require a local majority. This is seen as circumventing the wishes of the Bajoran people and leads to further rifts.</li></ul></li></ul>\n<h4><span class=\"mw-headline\" id=\"2447\"><b>2447</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D24&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>August:</b> The Cardassian Union and Bajor officially announce formal trade deals and a shared defense pact. The Old <a href=\"/wiki/Deep_Space_Nine\" title=\"Deep Space Nine\">DS9</a> scheduled to transition back to Joint Cardassian Union and Bajoran control. A new Federation Starbase DS9 construction begins.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2448\"><b>2448</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D25&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>The United Nymati Clans engage the Zhyx in a war of conquest and liberation for the insectoids’ enslaved species.&#160; Though the Federation never officially enters this war, there are several battles and key moments that the <a href=\"/wiki/USS_Protector\" title=\"USS Protector\">Protector</a> under <a href=\"/wiki/Captain\" title=\"Captain\">Captain</a> <a href=\"/wiki/Marcus_Blaine\" title=\"Marcus Blaine\">Blaine</a> “happens to be nearby” for.</li></ul>\n<h3><span class=\"mw-headline\" id=\"2450\"><b>2450</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D26&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h3>\n<ul><li><b>April</b>: Chancellor Ka’nan of the <a href=\"/wiki/Klingon_Empire\" title=\"Klingon Empire\">Klingon Empire</a> announced the intent to hold an open referendum in half a year towards the intent to create a Parliamentary Republic led by the Klingons of all current Klingon empire planets and vassal races.</li>\n<li><b>September</b>: The Klingon referendum passes with 67 percent participation. A transitory council is formed with the aid of federation advisors. It is estimated it will be a 10 year transition period. With the targeted first elections to be held in 2454.&#160;\n<ul><li>In protest, Houses Duras, Kor, and Mokai break away from the Klingon Empire and retreat to house Duras’s holdings. Chancellor Ka’nan chooses to follow a containment policy, increasing patrols and isolating the breakaways rather than war.</li></ul></li></ul>\n<h4><span class=\"mw-headline\" id=\"2451\"><b>2451</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D27&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>July:</b> The Reunificationist within the <a href=\"/wiki/Romulan_Republic\" title=\"Romulan Republic\">Romulan Republic</a> win a plurality of the government seats in the Republic senate through coalition. The First patriated Vulcan is elected to a government position within the Romulan Executor Branch.</li></ul>\n<h4><span class=\"mw-headline\" id=\"2452\"><b>2452</b></span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D28&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li><b>January:</b> <a href=\"/wiki/Fleet_Admiral\" title=\"Fleet Admiral\">Admiral</a> <a href=\"/wiki/PhellTalia_Zh%27Kor\" title=\"PhellTalia Zh&#39;Kor\">PhellTalia zh’Kor</a> steps down as head of <a href=\"/wiki/Starfleet\" title=\"Starfleet\">Starfleet</a>, joins an exploration initiative with the <a href=\"/wiki/Avynei\" title=\"Avynei\">Avynei</a> heading across the gap between galaxies.</li></ul>\n<h2><span class=\"mw-headline\" id=\"2454_to_Present_-_The_Next_Generation\">2454 to Present - The Next Generation</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D29&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h2>\n<h4><span class=\"mw-headline\" id=\"2455\">2455</span><span class=\"mw-editsection\"><span class=\"mw-editsection-bracket\">[</span><a title=\"Sign in to edit\" class=\"mw-editsection-visualeditor\" data-tracking-label=\"log-in-edit-section\" data-action=\"edit-section\" href=\"https://auth.fandom.com/signin?redirect=https%3A%2F%2F22ndmobile.fandom.com%2Fwiki%2FPolitical_Timeline%3Fveaction%3Dedit%26section%3D30&amp;uselang=en\" data-testid=\"log-in-edit-section\"><svg class=\"wds-icon wds-icon-tiny\"><use xlink:href=\"#wds-icons-pencil-tiny\"></use></svg></a><span class=\"mw-editsection-bracket\">]</span></span></h4>\n<ul><li>Bajoran terrorists launch several attacks across the <a href=\"/wiki/United_Federation_of_Planets\" title=\"United Federation of Planets\">Federation</a>.\n<ul><li>The <a href=\"/wiki/USS_Stardancer\" title=\"USS Stardancer\">USS Stardancer</a> suffers an attack that leaves 14 crewmembers dead or seriously injured, including the Captain and his daughter. A subsequent investigation involving Starfleet and the <a href=\"/wiki/United_Federation_of_Planets_Marshals_Service\" title=\"United Federation of Planets Marshals Service\">UFP Marshals</a> discovers that at least one orb was stolen and used to transport a Pah Wraith. The orb was later recovered, and at least one suspect was arrested in connection with these terrorist activities.</li></ul></li></ul>\n<ul><li class=\"mw-empty-elt\"></li></ul>\n<!-- \nNewPP limit report\nCached time: 20250613094940\nCache expiry: 1209600\nReduced expiry: false\nComplications: [show‐toc]\nCPU time usage: 0.021 seconds\nReal time usage: 0.025 seconds\nPreprocessor visited node count: 133/1000000\nPost‐expand include size: 0/2097152 bytes\nTemplate argument size: 0/2097152 bytes\nHighest expansion depth: 2/100\nExpensive parser function count: 0/100\nUnstrip recursion depth: 0/20\nUnstrip post‐expand size: 0/5000000 bytes\n-->\n<!--\nTransclusion expansion time report (%,ms,calls,template)\n100.00%    0.000      1 -total\n-->\n\n<!-- Saved in parser cache with key 1.43.1_prod_22ndmobile:pcache:idhash:2214-0!sseVary=RegularPage!FandomDesktop!LegacyGalleries and timestamp 20250613094940 and revision id 15867. Rendering was triggered because: page-view\n -->\n</div>"
+      },
+      "categories": [
+        {
+          "sortkey": "",
+          "missing": "",
+          "known": "",
+          "*": "Timelines"
+        }
+      ],
+      "links": [
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Anevian Incident"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Artesia Gateway"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Avynei"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Beryxian"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Captain"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Cardassian Union"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Dawn Alliance"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Dawnbreaker War"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Deep Space Nine"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Dr Zimmerman"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Elizabeth Razzor"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Fleet Admiral"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Great Retrograde"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "HC-19 Incident"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Khitomer Alliance"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Klingon Empire"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Marcus Blaine"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Marzz Razzor"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Milla Deati"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Nyoko Honda"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "PhellTalia Zh'Kor"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Project Magellan"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Project Salvation"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Romulan Republic"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Starbase 220"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Starfleet"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Tanausan Imperium"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "USS Caelian"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "USS Protector"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "USS Sentinel"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "USS Stardancer"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "United Federation of Planets"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "United Federation of Planets Marshals Service"
+        },
+        {
+          "ns": 0,
+          "exists": "",
+          "*": "Yanda"
+        }
+      ],
+      "templates": [],
+      "externallinks": [
+        "https://sto.fandom.com/wiki/Accolade/Lore"
+      ],
+      "sections": [
+        {
+          "toclevel": 1,
+          "level": "2",
+          "line": "Prior to 2409",
+          "number": "1",
+          "index": "1",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 20,
+          "anchor": "Prior_to_2409",
+          "linkAnchor": "Prior_to_2409"
+        },
+        {
+          "toclevel": 1,
+          "level": "2",
+          "line": "2409 to 2428 - The Feline Era",
+          "number": "2",
+          "index": "2",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 127,
+          "anchor": "2409_to_2428_-_The_Feline_Era",
+          "linkAnchor": "2409_to_2428_-_The_Feline_Era"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2413",
+          "number": "2.1",
+          "index": "3",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 164,
+          "anchor": "2413",
+          "linkAnchor": "2413"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2416",
+          "number": "2.2",
+          "index": "4",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 717,
+          "anchor": "2416",
+          "linkAnchor": "2416"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2417",
+          "number": "2.3",
+          "index": "5",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 899,
+          "anchor": "2417",
+          "linkAnchor": "2417"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2419",
+          "number": "2.4",
+          "index": "6",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1011,
+          "anchor": "2419",
+          "linkAnchor": "2419"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2420",
+          "number": "2.5",
+          "index": "7",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1137,
+          "anchor": "2420",
+          "linkAnchor": "2420"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2421",
+          "number": "2.6",
+          "index": "8",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1321,
+          "anchor": "2421",
+          "linkAnchor": "2421"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2426",
+          "number": "2.7",
+          "index": "9",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1456,
+          "anchor": "2426",
+          "linkAnchor": "2426"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2428",
+          "number": "2.8",
+          "index": "10",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1667,
+          "anchor": "2428",
+          "linkAnchor": "2428"
+        },
+        {
+          "toclevel": 1,
+          "level": "2",
+          "line": "2428 to 2450 - Moving Forward",
+          "number": "3",
+          "index": "11",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1797,
+          "anchor": "2428_to_2450_-_Moving_Forward",
+          "linkAnchor": "2428_to_2450_-_Moving_Forward"
+        },
+        {
+          "toclevel": 2,
+          "level": "3",
+          "line": "<b>2430</b>",
+          "number": "3.1",
+          "index": "12",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1834,
+          "anchor": "2430",
+          "linkAnchor": "2430"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2433</b>",
+          "number": "3.1.1",
+          "index": "13",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 1854,
+          "anchor": "2433",
+          "linkAnchor": "2433"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "2434",
+          "number": "3.1.2",
+          "index": "14",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 2365,
+          "anchor": "2434",
+          "linkAnchor": "2434"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "2437",
+          "number": "3.1.3",
+          "index": "15",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 2826,
+          "anchor": "2437",
+          "linkAnchor": "2437"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "2438",
+          "number": "3.1.4",
+          "index": "16",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 3301,
+          "anchor": "2438",
+          "linkAnchor": "2438"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "2439",
+          "number": "3.1.5",
+          "index": "17",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 4932,
+          "anchor": "2439",
+          "linkAnchor": "2439"
+        },
+        {
+          "toclevel": 2,
+          "level": "3",
+          "line": "2440",
+          "number": "3.2",
+          "index": "18",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 5941,
+          "anchor": "2440",
+          "linkAnchor": "2440"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2441</b>",
+          "number": "3.2.1",
+          "index": "19",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 6423,
+          "anchor": "2441",
+          "linkAnchor": "2441"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "2443",
+          "number": "3.2.2",
+          "index": "20",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 6588,
+          "anchor": "2443",
+          "linkAnchor": "2443"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2444</b>",
+          "number": "3.2.3",
+          "index": "21",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 6998,
+          "anchor": "2444",
+          "linkAnchor": "2444"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2445</b>",
+          "number": "3.2.4",
+          "index": "22",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 7780,
+          "anchor": "2445",
+          "linkAnchor": "2445"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "2446",
+          "number": "3.2.5",
+          "index": "23",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 8538,
+          "anchor": "2446",
+          "linkAnchor": "2446"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2447</b>",
+          "number": "3.2.6",
+          "index": "24",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 9559,
+          "anchor": "2447",
+          "linkAnchor": "2447"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2448</b>",
+          "number": "3.2.7",
+          "index": "25",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 9854,
+          "anchor": "2448",
+          "linkAnchor": "2448"
+        },
+        {
+          "toclevel": 2,
+          "level": "3",
+          "line": "<b>2450</b>",
+          "number": "3.3",
+          "index": "26",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 10200,
+          "anchor": "2450",
+          "linkAnchor": "2450"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2451</b>",
+          "number": "3.3.1",
+          "index": "27",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 10974,
+          "anchor": "2451",
+          "linkAnchor": "2451"
+        },
+        {
+          "toclevel": 3,
+          "level": "4",
+          "line": "<b>2452</b>",
+          "number": "3.3.2",
+          "index": "28",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 11245,
+          "anchor": "2452",
+          "linkAnchor": "2452"
+        },
+        {
+          "toclevel": 1,
+          "level": "2",
+          "line": "2454 to Present - The Next Generation",
+          "number": "4",
+          "index": "29",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 11481,
+          "anchor": "2454_to_Present_-_The_Next_Generation",
+          "linkAnchor": "2454_to_Present_-_The_Next_Generation"
+        },
+        {
+          "toclevel": 2,
+          "level": "4",
+          "line": "2455",
+          "number": "4.1",
+          "index": "30",
+          "fromtitle": "Political_Timeline",
+          "byteoffset": 11526,
+          "anchor": "2455",
+          "linkAnchor": "2455"
+        }
+      ],
+      "showtoc": "",
+      "displaytitle": "<span class=\"mw-page-title-main\">Political Timeline</span>"
+    }
+  },
+  "raw_wikitext": {
+    "batchcomplete": "",
+    "query": {
+      "normalized": [
+        {
+          "from": "Political_Timeline",
+          "to": "Political Timeline"
+        }
+      ],
+      "pages": {
+        "2214": {
+          "pageid": 2214,
+          "ns": 0,
+          "title": "Political Timeline",
+          "revisions": [
+            {
+              "slots": {
+                "main": {
+                  "contentmodel": "wikitext",
+                  "contentformat": "text/x-wiki",
+                  "*": "Political Timeline\n\n== Prior to 2409 ==\n\n* See [https://sto.fandom.com/wiki/Accolade/Lore Star Trek Online: The Path to 2409]\n\n== 2409 to 2428 - The Feline Era ==\n\n==== 2413 ====\n\n* Starfleet discovers and stops attempts to create a sterilization virus against the Undine.\n* Terrorists attempt to destroy Farpoint Station.\n* Undine agents plant false information implicating multiple Starfleet officers in retaliation for previous attacks. These allegations are later proven false.\n* An Undine agent impersonating Admiral Valoura attempts to sabotage peace talks between the [[United Federation of Planets|Federation]] and [[Klingon Empire]] at Trinity Base. These attempts are thwarted, allowing talks to continue.\n\n==== 2416 ====\n\n* Several houses attempt a rebellion against J'mpok's leadership in the Klingon Empire. This rebellion spills over into Federation space, but is eventually quelled.\n\n==== 2417 ====\n\n* A rogue faction within [[Project Salvation]] is discovered following the [[HC-19 Incident]].\n\n==== 2419 ====\n\n* The Iconian War takes place. The Milky Way galaxy is devastated by the sudden invasion with billions dead.\n\n==== 2420 ====\n\n* The rogue faction within Project Salvation is defeated. Information about this faction is released to the general public, embarrassing Starfleet and the Federation.\n\n==== 2421 ====\n\n* [[Project Magellan]] begins, marking a historic moment in cooperation between members of the [[Khitomer Alliance]].\n\n==== 2426 ====\n\n* The [[Dawnbreaker War|Dawn War]] begins between the [[Dawn Alliance]] and  [[Tanausan Imperium|Tanausan Alliance]].\n** The [[Artesia Gateway]] is locked to traffic coming from the Milky Way. \n\n==== 2428 ====\n\n* The [[Great Retrograde]] occurs.\n** The [[Artesia Gateway]] reopens.\n** The [[Dawnbreaker War|Dawn War]] ends.\n\n== 2428 to 2450 - Moving Forward ==\n\n=== '''2430''' ===\n\n==== '''2433''' ====\n\n* The [[Yanda]] join the [[United Federation of Planets|Federation]].\n* '''February:''' The New Tanausan States take the world of Duhelen, officially stamping out the last holdout of the [[Tanausan Imperium]].\n* '''June:''' [[Khitomer Alliance]] accords expanded. Alliance vessels are few but act as Ambassadorial vessels and honor guard. They also may act as peace keeping vessels. Admiral [[Nyoko Honda]] is placed as Joint Commander while alliance headquartering is located on Qo’nos.\n\n==== 2434 ====\n\n* A group of Colonies within the badlands form the Free Cardassian Conclave. Worlds separate from the Cardassian Central Government. They follow a United Earth style Post scarcity Socialist government. FCC worlds are all independent members.  Khitomer Alliance vessels provide primary peacekeeping forces to ensure the peaceful formation of the new government.\n* The [[Beryxian|Beryxians]] join the [[United Federation of Planets|Federation]].\n\n==== 2437 ====\n\n* '''July 4:''' The siege of Lorin Minor. A small beryxian colony on the Moon of Lorin Minor came under attack by Zhyx forces, the invasion was swift and brutal but eventually the local Security forces and the last remaining DELTA TRT held out long enough to be reinforced by Nymati shock forces and repel the Zhyx. The the entire Delta Team was lost defending the civilian population against overwhelming odds. With all of them earning the Legion of Honor.\n\n==== 2438 ====\n\n* '''July 9th:''' Nirizean Extinction event. An psionic genetic attack was launched against the Nirizean population within the New Tanausan States by what remain of the Chosen, the fanatical followers of the Dark that remained after the end of the war. The nature of the attack was a telepathic plague that rapidly spread through the Nirizean population leaving only those without telepathy or cut off from it alive. \n** In an insidious twist the Thought Plague is capable of being carried by nontelepaths completely asymptomatically. \n** This lead to a rapid spread across the LMC and a danger to any telepaths connecting with such minds, though for a while it seemed to only manifest within telepathic species native to the LMC. \n** The Avynei and Travynei were able to counter the effects in their own kind but being infected meant long recoveries.\n* '''April - June''': Former Ambassador Worf granted the Rank of Dahar Master, designated arbiter of ascension. \n** Chancellor Ka’nan son of Former Chancellor Kadrall's  House Kadrall ascends over Duras of house Duras. Ka’nan is seen as a reformer, he is loved by the lower houses and the large number of the houseless klingons. His first act as Chancellor is a controversial one. \n*** He declares that Scientist and Engineers are the empire’s new warriors. \n*** Declares a war against ignorance, and the unknown. \n*** Founds the Qo’nos  Academy of Advanced Sciences and granted Kurak, of house Palkar the rank of Dahar Master of Science, placing her in charge of the Academy. \n*** House Duras declares this a farce but seems to accept the change in leadership.\n\n==== 2439 ====\n\n* '''May 7th''': A shuttle carrying Lt Commander Brenda Riens, Rear Admiral [[Elizabeth Razzor|Elizabeth Rendino Razzor]] and Retired Admiral [[Marzz Razzor]] goes missing in transit from the [[USS Caelian]] to Risa. Evidence found along the shuttle’s flight path suggests a loss of slipstream containment resulting in the destruction of the shuttle.  All three are finally declared KIA.\n* '''October 30th:''' The Betazoid colony on Magros VIII, a commune for the recovery of the Betazoids affected by the [[Dawnbreaker War|Dawnbreaker war]] and all those who had been used to face telepathic incident in Starfleet's many wars suffered an outbreak of the Chosen plague killing all 15,000 Betazoids and other telepaths on the colony. \n** After this incident, Starfleet issued a regulatory ban on the use of telepathy unless the risk was deemed acceptable. \n** Betazoid culture shifted to defense against intrusion. Telepathy is seen as very risky with non telepaths as any could be a carrier.\n\n=== 2440 ===\n* The [[startrekwiki: The Doctor|Voyager EMH]] who has chosen to go by the name [[Dr Zimmerman|Zimmerman]] , in his recently elected position as a federation councilman, submitted a bill formally changing the definition of life to include all life, no matter its origin such that sufficient sentience could be determined. The Ripple-effect from this bill passing was a temporary ban on further holographic creations until new ethical use rules could be put in place. \n\n==== '''2441''' ====\n\n* '''August''': The [[Anevian Incident]] occurs.  The [[USS Caelian|U.S.S. Caelian]] is lost with all hands and the Irdinia Black Hole forms.\n\n==== 2443 ====\n\n* A Beryxian ambassador is assassinated during a visit to [[Starbase 220]]. \n** Beryxian authorities demand justice and threaten to leave the Federation if protection cannot be provided. \n** Starfleet security arrests a [[Milla Deati|Starfleet officer]] in connection to the assassination. \n** The Director of Starfleet Intelligence resigns due to their failure to detect or stop the attempt.\n\n==== '''2444''' ====\n\n* '''November:''' A Reactionary Religious Government wins power on Bajor. While still members of the Federation the Bajorans populist groups within the Bajoran citizenry are starting to blame the federation for the focus on rebuilding Cardassia and former enemies from the Dominion War. Due to the near 75 year gap from the end of the dominion war and the current lifetime. Revisionism is common. The idea that Bajor has constantly just been a pawn at play to be used by the Federation starts to take root.\n* Holodeck usage resumed once anti emergence protocols could be installed. Holodecks that have the upgrades saw a loss in fidelity of holographic characters. Unauthorized holodecks become illegal within the [[United Federation of Planets|Federation]].\n\n==== '''2445''' ====\n\n* '''March - June''' : The Kzari Chancellor is killed in an industrial accident. The New Kzari election leads to the selecting of a far more Federation wary Chancellor. Kzari Leadership in the Citadel Conclave takes a more antagonistic stance towards Milky Way races. Accusations of former party allegiances in the chancellor’s parents' past are put aside after an investigation by the [[USS Sentinel]]. Kzari Rhetoric softens.\n* '''June 2445''' - Cardassian President Populist Kenor Tamor elected to take over the [[Cardassian Union]]. Her policies drive the Cardassian Union more towards a expansionist state as full recovery from the Dominion War and trade with the federation and galactic peace provides a large amount of surplus.\n\n==== 2446 ====\n\n* '''March:''' Cardassian Union forces Annex the Free Cardassian Conclave world of Malto VI. Claiming that an extremist government had recently won an election threatening to bring back True Way logic. In reality Federation Officials believe the Government was planning to apply for federation membership.\n* '''March''': Gorn Hegemony granted independence from the Klingon Empire. Orion Syndicates also leave the empire peacefully. Chancellor Ka’nan offers to maintain open trade policies with both peoples.\n* '''June''': The five remaining  FCC worlds jointly apply for membership in the federation to guard against Cardassian Union attempts to annex. \n** Surprisingly, Bajor vetoes their joining and claims that these worlds are actually ancient Bajoran Territories and thus the Cardassian colonies have no claim to them. \n** FCC worlds are instead added as protectorates which do not require a local majority. This is seen as circumventing the wishes of the Bajoran people and leads to further rifts.\n\n==== '''2447''' ====\n\n* '''August:''' The Cardassian Union and Bajor officially announce formal trade deals and a shared defense pact. The Old [[Deep Space Nine|DS9]] scheduled to transition back to Joint Cardassian Union and Bajoran control. A new Federation Starbase DS9 construction begins.\n\n==== '''2448''' ====\n\n* The United Nymati Clans engage the Zhyx in a war of conquest and liberation for the insectoids’ enslaved species.  Though the Federation never officially enters this war, there are several battles and key moments that the [[USS Protector|Protector]] under [[Captain]] [[Marcus Blaine|Blaine]] “happens to be nearby” for.\n\n=== '''2450''' ===\n\n* '''April''': Chancellor Ka’nan of the [[Klingon Empire]] announced the intent to hold an open referendum in half a year towards the intent to create a Parliamentary Republic led by the Klingons of all current Klingon empire planets and vassal races.\n* '''September''': The Klingon referendum passes with 67 percent participation. A transitory council is formed with the aid of federation advisors. It is estimated it will be a 10 year transition period. With the targeted first elections to be held in 2454.  \n** In protest, Houses Duras, Kor, and Mokai break away from the Klingon Empire and retreat to house Duras’s holdings. Chancellor Ka’nan chooses to follow a containment policy, increasing patrols and isolating the breakaways rather than war.\n\n==== '''2451''' ====\n\n* '''July:''' The Reunificationist within the [[Romulan Republic]] win a plurality of the government seats in the Republic senate through coalition. The First patriated Vulcan is elected to a government position within the Romulan Executor Branch.\n\n==== '''2452''' ====\n\n* '''January:''' [[Fleet Admiral|Admiral]] [[PhellTalia Zh'Kor|PhellTalia zh’Kor]] steps down as head of [[Starfleet]], joins an exploration initiative with the [[Avynei]] heading across the gap between galaxies.\n\n== 2454 to Present - The Next Generation ==\n\n==== 2455 ====\n\n* Bajoran terrorists launch several attacks across the [[United Federation of Planets|Federation]]. \n** The [[USS Stardancer]] suffers an attack that leaves 14 crewmembers dead or seriously injured, including the Captain and his daughter. A subsequent investigation involving Starfleet and the [[United Federation of Planets Marshals Service|UFP Marshals]] discovers that at least one orb was stolen and used to transport a Pah Wraith. The orb was later recovered, and at least one suspect was arrested in connection with these terrorist activities.\n\n*\n\n[[Category:Timelines]]"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "combined_data": {
+    "title": "Political_Timeline",
+    "page_id": 2214,
+    "extract": "",
+    "raw_wikitext": "Political Timeline\n\n== Prior to 2409 ==\n\n* See [https://sto.fandom.com/wiki/Accolade/Lore Star Trek Online: The Path to 2409]\n\n== 2409 to 2428 - The Feline Era ==\n\n==== 2413 ====\n\n* Starfleet discovers and stops attempts to create a sterilization virus against the Undine.\n* Terrorists attempt to destroy Farpoint Station.\n* Undine agents plant false information implicating multiple Starfleet officers in retaliation for previous attacks. These allegations are later proven false.\n* An Undine agent impersonating Admiral Valoura attempts to sabotage peace talks between the [[United Federation of Planets|Federation]] and [[Klingon Empire]] at Trinity Base. These attempts are thwarted, allowing talks to continue.\n\n==== 2416 ====\n\n* Several houses attempt a rebellion against J'mpok's leadership in the Klingon Empire. This rebellion spills over into Federation space, but is eventually quelled.\n\n==== 2417 ====\n\n* A rogue faction within [[Project Salvation]] is discovered following the [[HC-19 Incident]].\n\n==== 2419 ====\n\n* The Iconian War takes place. The Milky Way galaxy is devastated by the sudden invasion with billions dead.\n\n==== 2420 ====\n\n* The rogue faction within Project Salvation is defeated. Information about this faction is released to the general public, embarrassing Starfleet and the Federation.\n\n==== 2421 ====\n\n* [[Project Magellan]] begins, marking a historic moment in cooperation between members of the [[Khitomer Alliance]].\n\n==== 2426 ====\n\n* The [[Dawnbreaker War|Dawn War]] begins between the [[Dawn Alliance]] and  [[Tanausan Imperium|Tanausan Alliance]].\n** The [[Artesia Gateway]] is locked to traffic coming from the Milky Way. \n\n==== 2428 ====\n\n* The [[Great Retrograde]] occurs.\n** The [[Artesia Gateway]] reopens.\n** The [[Dawnbreaker War|Dawn War]] ends.\n\n== 2428 to 2450 - Moving Forward ==\n\n=== '''2430''' ===\n\n==== '''2433''' ====\n\n* The [[Yanda]] join the [[United Federation of Planets|Federation]].\n* '''February:''' The New Tanausan States take the world of Duhelen, officially stamping out the last holdout of the [[Tanausan Imperium]].\n* '''June:''' [[Khitomer Alliance]] accords expanded. Alliance vessels are few but act as Ambassadorial vessels and honor guard. They also may act as peace keeping vessels. Admiral [[Nyoko Honda]] is placed as Joint Commander while alliance headquartering is located on Qo’nos.\n\n==== 2434 ====\n\n* A group of Colonies within the badlands form the Free Cardassian Conclave. Worlds separate from the Cardassian Central Government. They follow a United Earth style Post scarcity Socialist government. FCC worlds are all independent members.  Khitomer Alliance vessels provide primary peacekeeping forces to ensure the peaceful formation of the new government.\n* The [[Beryxian|Beryxians]] join the [[United Federation of Planets|Federation]].\n\n==== 2437 ====\n\n* '''July 4:''' The siege of Lorin Minor. A small beryxian colony on the Moon of Lorin Minor came under attack by Zhyx forces, the invasion was swift and brutal but eventually the local Security forces and the last remaining DELTA TRT held out long enough to be reinforced by Nymati shock forces and repel the Zhyx. The the entire Delta Team was lost defending the civilian population against overwhelming odds. With all of them earning the Legion of Honor.\n\n==== 2438 ====\n\n* '''July 9th:''' Nirizean Extinction event. An psionic genetic attack was launched against the Nirizean population within the New Tanausan States by what remain of the Chosen, the fanatical followers of the Dark that remained after the end of the war. The nature of the attack was a telepathic plague that rapidly spread through the Nirizean population leaving only those without telepathy or cut off from it alive. \n** In an insidious twist the Thought Plague is capable of being carried by nontelepaths completely asymptomatically. \n** This lead to a rapid spread across the LMC and a danger to any telepaths connecting with such minds, though for a while it seemed to only manifest within telepathic species native to the LMC. \n** The Avynei and Travynei were able to counter the effects in their own kind but being infected meant long recoveries.\n* '''April - June''': Former Ambassador Worf granted the Rank of Dahar Master, designated arbiter of ascension. \n** Chancellor Ka’nan son of Former Chancellor Kadrall's  House Kadrall ascends over Duras of house Duras. Ka’nan is seen as a reformer, he is loved by the lower houses and the large number of the houseless klingons. His first act as Chancellor is a controversial one. \n*** He declares that Scientist and Engineers are the empire’s new warriors. \n*** Declares a war against ignorance, and the unknown. \n*** Founds the Qo’nos  Academy of Advanced Sciences and granted Kurak, of house Palkar the rank of Dahar Master of Science, placing her in charge of the Academy. \n*** House Duras declares this a farce but seems to accept the change in leadership.\n\n==== 2439 ====\n\n* '''May 7th''': A shuttle carrying Lt Commander Brenda Riens, Rear Admiral [[Elizabeth Razzor|Elizabeth Rendino Razzor]] and Retired Admiral [[Marzz Razzor]] goes missing in transit from the [[USS Caelian]] to Risa. Evidence found along the shuttle’s flight path suggests a loss of slipstream containment resulting in the destruction of the shuttle.  All three are finally declared KIA.\n* '''October 30th:''' The Betazoid colony on Magros VIII, a commune for the recovery of the Betazoids affected by the [[Dawnbreaker War|Dawnbreaker war]] and all those who had been used to face telepathic incident in Starfleet's many wars suffered an outbreak of the Chosen plague killing all 15,000 Betazoids and other telepaths on the colony. \n** After this incident, Starfleet issued a regulatory ban on the use of telepathy unless the risk was deemed acceptable. \n** Betazoid culture shifted to defense against intrusion. Telepathy is seen as very risky with non telepaths as any could be a carrier.\n\n=== 2440 ===\n* The [[startrekwiki: The Doctor|Voyager EMH]] who has chosen to go by the name [[Dr Zimmerman|Zimmerman]] , in his recently elected position as a federation councilman, submitted a bill formally changing the definition of life to include all life, no matter its origin such that sufficient sentience could be determined. The Ripple-effect from this bill passing was a temporary ban on further holographic creations until new ethical use rules could be put in place. \n\n==== '''2441''' ====\n\n* '''August''': The [[Anevian Incident]] occurs.  The [[USS Caelian|U.S.S. Caelian]] is lost with all hands and the Irdinia Black Hole forms.\n\n==== 2443 ====\n\n* A Beryxian ambassador is assassinated during a visit to [[Starbase 220]]. \n** Beryxian authorities demand justice and threaten to leave the Federation if protection cannot be provided. \n** Starfleet security arrests a [[Milla Deati|Starfleet officer]] in connection to the assassination. \n** The Director of Starfleet Intelligence resigns due to their failure to detect or stop the attempt.\n\n==== '''2444''' ====\n\n* '''November:''' A Reactionary Religious Government wins power on Bajor. While still members of the Federation the Bajorans populist groups within the Bajoran citizenry are starting to blame the federation for the focus on rebuilding Cardassia and former enemies from the Dominion War. Due to the near 75 year gap from the end of the dominion war and the current lifetime. Revisionism is common. The idea that Bajor has constantly just been a pawn at play to be used by the Federation starts to take root.\n* Holodeck usage resumed once anti emergence protocols could be installed. Holodecks that have the upgrades saw a loss in fidelity of holographic characters. Unauthorized holodecks become illegal within the [[United Federation of Planets|Federation]].\n\n==== '''2445''' ====\n\n* '''March - June''' : The Kzari Chancellor is killed in an industrial accident. The New Kzari election leads to the selecting of a far more Federation wary Chancellor. Kzari Leadership in the Citadel Conclave takes a more antagonistic stance towards Milky Way races. Accusations of former party allegiances in the chancellor’s parents' past are put aside after an investigation by the [[USS Sentinel]]. Kzari Rhetoric softens.\n* '''June 2445''' - Cardassian President Populist Kenor Tamor elected to take over the [[Cardassian Union]]. Her policies drive the Cardassian Union more towards a expansionist state as full recovery from the Dominion War and trade with the federation and galactic peace provides a large amount of surplus.\n\n==== 2446 ====\n\n* '''March:''' Cardassian Union forces Annex the Free Cardassian Conclave world of Malto VI. Claiming that an extremist government had recently won an election threatening to bring back True Way logic. In reality Federation Officials believe the Government was planning to apply for federation membership.\n* '''March''': Gorn Hegemony granted independence from the Klingon Empire. Orion Syndicates also leave the empire peacefully. Chancellor Ka’nan offers to maintain open trade policies with both peoples.\n* '''June''': The five remaining  FCC worlds jointly apply for membership in the federation to guard against Cardassian Union attempts to annex. \n** Surprisingly, Bajor vetoes their joining and claims that these worlds are actually ancient Bajoran Territories and thus the Cardassian colonies have no claim to them. \n** FCC worlds are instead added as protectorates which do not require a local majority. This is seen as circumventing the wishes of the Bajoran people and leads to further rifts.\n\n==== '''2447''' ====\n\n* '''August:''' The Cardassian Union and Bajor officially announce formal trade deals and a shared defense pact. The Old [[Deep Space Nine|DS9]] scheduled to transition back to Joint Cardassian Union and Bajoran control. A new Federation Starbase DS9 construction begins.\n\n==== '''2448''' ====\n\n* The United Nymati Clans engage the Zhyx in a war of conquest and liberation for the insectoids’ enslaved species.  Though the Federation never officially enters this war, there are several battles and key moments that the [[USS Protector|Protector]] under [[Captain]] [[Marcus Blaine|Blaine]] “happens to be nearby” for.\n\n=== '''2450''' ===\n\n* '''April''': Chancellor Ka’nan of the [[Klingon Empire]] announced the intent to hold an open referendum in half a year towards the intent to create a Parliamentary Republic led by the Klingons of all current Klingon empire planets and vassal races.\n* '''September''': The Klingon referendum passes with 67 percent participation. A transitory council is formed with the aid of federation advisors. It is estimated it will be a 10 year transition period. With the targeted first elections to be held in 2454.  \n** In protest, Houses Duras, Kor, and Mokai break away from the Klingon Empire and retreat to house Duras’s holdings. Chancellor Ka’nan chooses to follow a containment policy, increasing patrols and isolating the breakaways rather than war.\n\n==== '''2451''' ====\n\n* '''July:''' The Reunificationist within the [[Romulan Republic]] win a plurality of the government seats in the Republic senate through coalition. The First patriated Vulcan is elected to a government position within the Romulan Executor Branch.\n\n==== '''2452''' ====\n\n* '''January:''' [[Fleet Admiral|Admiral]] [[PhellTalia Zh'Kor|PhellTalia zh’Kor]] steps down as head of [[Starfleet]], joins an exploration initiative with the [[Avynei]] heading across the gap between galaxies.\n\n== 2454 to Present - The Next Generation ==\n\n==== 2455 ====\n\n* Bajoran terrorists launch several attacks across the [[United Federation of Planets|Federation]]. \n** The [[USS Stardancer]] suffers an attack that leaves 14 crewmembers dead or seriously injured, including the Captain and his daughter. A subsequent investigation involving Starfleet and the [[United Federation of Planets Marshals Service|UFP Marshals]] discovers that at least one orb was stolen and used to transport a Pah Wraith. The orb was later recovered, and at least one suspect was arrested in connection with these terrorist activities.\n\n*\n\n[[Category:Timelines]]",
+    "page_exists": true
+  }
+}
