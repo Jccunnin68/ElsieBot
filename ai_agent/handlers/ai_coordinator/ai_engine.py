@@ -259,14 +259,14 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         if strategy['approach'] == 'roleplay_active':
             # ALL roleplay_active responses should use enhanced roleplay context
             print(f"🎭 ROLEPLAY ACTIVE - Using enhanced roleplay context generation")
-            from handlers.ai_wisdom.roleplay_contexts import get_enhanced_roleplay_context
+            from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
             context = get_enhanced_roleplay_context(strategy, user_message)
         
         elif strategy['approach'] == 'roleplay_mock_enhanced':
             # Roleplay mock enhanced responses also use enhanced roleplay context
             mock_type = strategy.get('mock_response_type', 'unknown')
             print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with enhanced roleplay context")
-            from handlers.ai_wisdom.roleplay_contexts import get_enhanced_roleplay_context
+            from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
             context = get_enhanced_roleplay_context(strategy, user_message)
         
         elif strategy['needs_database']:
