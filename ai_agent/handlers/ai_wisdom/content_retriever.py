@@ -4,6 +4,422 @@ from database_controller import get_db_controller
 from typing import Optional
 import requests
 from urllib.parse import quote
+import re
+from .log_patterns import CHARACTER_CORRECTIONS, SHIP_NAMES
+from .llm_query_processor import get_llm_processor, should_process_data, is_fallback_response
+
+def determine_query_type(function_name: str, content_type: str = None) -> str:
+    """Map function types to LLM processor query types"""
+    if 'log' in function_name.lower():
+        return "logs"
+    elif content_type == 'personnel' or 'character' in str(content_type or ''):
+        return "character" 
+    else:
+        return "general"
+
+def create_query_description(function_name: str, **kwargs) -> str:
+    """Generate descriptive query for LLM processing context"""
+    descriptions = {
+        'get_ship_information': f"ship information for {kwargs.get('ship_name', 'unknown ship')}",
+        'get_recent_logs': f"recent logs" + (f" for {kwargs.get('ship_name')}" if kwargs.get('ship_name') else ""),
+        'search_by_type': f"{kwargs.get('content_type', 'content')} matching '{kwargs.get('query', '')}'",
+        'get_tell_me_about_content': f"information about {kwargs.get('subject', 'unknown subject')}",
+        'search_memory_alpha': f"external wiki information about '{kwargs.get('query', '')}'",
+        'get_random_log_content': f"random log" + (f" from {kwargs.get('ship_name')}" if kwargs.get('ship_name') else "")
+    }
+    return descriptions.get(function_name, "database query results")
+
+def _get_roleplay_context_from_caller() -> bool:
+    """
+    Detect if we're in roleplay context by examining the call stack.
+    This avoids threading roleplay parameters through all content functions.
+    """
+    import inspect
+    
+    try:
+        # Check call stack for roleplay indicators
+        frame = inspect.currentframe()
+        while frame:
+            frame_info = inspect.getframeinfo(frame)
+            filename = frame_info.filename
+            
+            # Look for ai_wisdom_handler.py in call stack
+            if 'ai_wisdom_handler.py' in filename:
+                # Check if the calling function has roleplay context
+                local_vars = frame.f_locals
+                if 'is_roleplay' in local_vars:
+                    return local_vars['is_roleplay']
+                # Also check for other roleplay indicators
+                if 'roleplay' in str(local_vars.get('context', '')).lower():
+                    return True
+                break
+            frame = frame.f_back
+    except Exception:
+        # If anything goes wrong with call stack inspection, default to False
+        pass
+    finally:
+        # Clean up frame reference to prevent memory leaks
+        if 'frame' in locals():
+            del frame
+    
+    return False  # Default to non-roleplay
+
+def is_ship_log_title(title: str) -> bool:
+    """Enhanced ship log title detection supporting multiple formats:
+    - Ship Name Date
+    - Date Ship Name Log  
+    - Date Ship Name
+    - Ship Name Date Log
+    - Something like 'The Anevian Incident' Log
+    """
+    title_lower = title.lower().strip()
+    
+    # Basic log patterns for any ship name
+    for ship in SHIP_NAMES:
+        ship_lower = ship.lower()
+        
+        # Pattern 1: Ship Name Date (e.g., "Adagio 2024/01/06")
+        date_patterns = [
+            f"^{ship_lower}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}",  # ship 2024/01/06
+            f"^{ship_lower}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}",   # ship 1/6/2024
+            f"^{ship_lower}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}",   # ship 2024-01-06
+            f"^{ship_lower}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}",   # ship 1-6-2024
+        ]
+        
+        for pattern in date_patterns:
+            if re.match(pattern, title_lower):
+                return True
+        
+        # Pattern 2: Date Ship Name (e.g., "2024/01/06 Adagio")
+        date_ship_patterns = [
+            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship_lower}",   # 2024/01/06 ship
+            f"^\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+{ship_lower}",   # 1/6/2024 ship
+            f"^\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+{ship_lower}",   # 2024-01-06 ship
+            f"^\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+{ship_lower}",   # 1-6-2024 ship
+        ]
+        
+        for pattern in date_ship_patterns:
+            if re.match(pattern, title_lower):
+                return True
+        
+        # Pattern 3: Ship Name Date Log (e.g., "Adagio 2024/01/06 Log")
+        date_log_patterns = [
+            f"^{ship_lower}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+log",
+            f"^{ship_lower}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+log",
+            f"^{ship_lower}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+log",
+            f"^{ship_lower}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+log",
+        ]
+        
+        for pattern in date_log_patterns:
+            if re.match(pattern, title_lower):
+                return True
+        
+        # Pattern 4: Date Ship Name Log (e.g., "2024/01/06 Adagio Log") 
+        date_ship_log_patterns = [
+            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship_lower}\\s+log",
+            f"^\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+{ship_lower}\\s+log",
+            f"^\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+{ship_lower}\\s+log",
+            f"^\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+{ship_lower}\\s+log",
+        ]
+        
+        for pattern in date_ship_log_patterns:
+            if re.match(pattern, title_lower):
+                return True
+    
+    # Pattern 5: Named incidents/events ending with "Log" (e.g., "The Anevian Incident Log")
+    if title_lower.endswith(' log') and len(title_lower) > 4:
+        # Check if it contains words that suggest it's an event/incident
+        event_indicators = ['incident', 'event', 'mission', 'encounter', 'crisis', 'affair', 'operation']
+        if any(indicator in title_lower for indicator in event_indicators):
+            return True
+        
+        # Check if it contains "the" at the beginning, suggesting a named event
+        if title_lower.startswith('the ') and len(title_lower.split()) >= 3:
+            return True
+    
+    # Pattern 6: Any title with ship name and "log" anywhere
+    for ship in SHIP_NAMES:
+        ship_lower = ship.lower()
+        if ship_lower in title_lower and 'log' in title_lower:
+            return True
+    
+    return False
+
+
+def correct_character_name(name: str) -> str:
+    """Apply character corrections and rank/title fixes"""
+    if not name:
+        return name
+        
+    name_lower = name.lower().strip()
+    
+    # Direct lookup first
+    if name_lower in CHARACTER_CORRECTIONS:
+        return CHARACTER_CORRECTIONS[name_lower]
+    
+    # Check for partial matches (last name only)
+    for key, corrected in CHARACTER_CORRECTIONS.items():
+        if ' ' in key:  # Full name entries
+            last_name = key.split()[-1]
+            if name_lower == last_name:
+                return corrected
+    
+    # If no correction found, return original with proper capitalization
+    return ' '.join(word.capitalize() for word in name.split())
+
+def apply_text_corrections(text: str) -> str:
+    """Apply character name corrections to free text"""
+    corrected_text = text
+    
+    # Replace character references in text
+    for incorrect, correct in CHARACTER_CORRECTIONS.items():
+        # Case-insensitive replacement while preserving case
+        pattern = re.compile(re.escape(incorrect), re.IGNORECASE)
+        corrected_text = pattern.sub(correct, corrected_text)
+    
+    return corrected_text
+
+def parse_log_characters(log_content: str) -> str:
+    """Parse log content to identify speaking characters and add context with rank/title corrections
+    
+    Enhanced to handle new gamemaster format:
+    - characterName@AccountName: [Actual Character] - Extract actual character from brackets
+    - If no [Actual Character], use characterName before @
+    - Things with * or in ** ** are actions, not dialogue
+    - Lines ending with > > or continuation from same character@account are follow ups with dialogue having \"
+    """
+    
+    # First apply the new enhanced character dialogue parsing
+    enhanced_content = parse_character_dialogue(log_content)
+    
+    lines = enhanced_content.split('\n')
+    parsed_lines = []
+    current_speaker = None
+    
+    for line in lines:
+        original_line = line
+        
+        # Check for playername.tag pattern followed by [<Name>] or direct speech
+        playername_pattern = r'^([^@:]+)@([^:]+):'
+        playername_match = re.match(playername_pattern, line)
+        
+        if playername_match:
+            player_name = playername_match.group(1)
+            tag = playername_match.group(2)
+            
+            # Check if this is @Captain_Riens (game master)
+            if '@Captain_Rien' in line:
+                # Mark as Game Master
+                line = line.replace('@Captain_Rien:', '[GAME MASTER]:')
+                current_speaker = "Game Master"
+            else:
+                # Look for [<Character Name>] pattern in the rest of the line
+                remaining_line = line[playername_match.end():]
+                character_pattern = r'\[([^\]]+)\]'
+                character_match = re.search(character_pattern, remaining_line)
+                
+                if character_match:
+                    character_name = correct_character_name(character_match.group(1))
+                    current_speaker = character_name
+                    # Replace the line to show character clearly
+                    clean_dialogue = remaining_line.replace(character_match.group(0), '').strip()
+                    clean_dialogue = apply_text_corrections(clean_dialogue)
+                    line = f"[{character_name}]: {clean_dialogue}"
+                else:
+                    # No character designation, use corrected player name or last speaker
+                    if current_speaker:
+                        clean_dialogue = apply_text_corrections(remaining_line.strip())
+                        line = f"[{current_speaker}]: {clean_dialogue}"
+                    else:
+                        corrected_player = correct_character_name(player_name)
+                        current_speaker = corrected_player
+                        clean_dialogue = apply_text_corrections(remaining_line.strip())
+                        line = f"[{corrected_player}]: {clean_dialogue}"
+        
+        # Check for standalone [<Character Name>] pattern
+        elif re.match(r'^\[([^\]]+)\]:', line):
+            character_match = re.match(r'^\[([^\]]+)\]:', line)
+            corrected_name = correct_character_name(character_match.group(1))
+            current_speaker = corrected_name
+            # Update the line with corrected name
+            rest_of_line = line[character_match.end():].strip()
+            rest_of_line = apply_text_corrections(rest_of_line)
+            line = f"[{corrected_name}]: {rest_of_line}"
+        
+        # If no speaker designation but we have a current speaker, and line looks like dialogue
+        elif current_speaker and line.strip() and not line.startswith(('*', '/', '#', '=', '-')):
+            # Check if it's a continuation of speech (starts with quote or lowercase)
+            stripped = line.strip()
+            if (stripped.startswith('"') or 
+                stripped.startswith("'") or 
+                (stripped and stripped[0].islower()) or
+                stripped.startswith('*')):
+                corrected_line = apply_text_corrections(line)
+                line = f"[{current_speaker}]: {corrected_line}"
+        
+        # Apply corrections to any remaining text
+        else:
+            line = apply_text_corrections(line)
+        
+        parsed_lines.append(line)
+    
+    return '\n'.join(parsed_lines)
+
+def parse_character_dialogue(log_content: str) -> str:
+    """
+    Parse mission log content to extract proper character names and format dialogue/actions.
+    
+    Rules:
+    - characterName@AccountName: [Actual Character] - Extract actual character from brackets
+    - If no [Actual Character], use characterName before @
+    - Things with * or in ** ** are actions, not dialogue
+    - Lines ending with > > or continuation from same character@account are emotes
+    """
+    if not log_content:
+        return log_content
+    
+    lines = log_content.split('\n')
+    processed_lines = []
+    last_speaker = None
+    last_account = None
+    
+    # Pattern to match character@account: format
+    speaker_pattern = r'^([^@\s]+)@([^:\s]+):\s*(.*)$'
+    # Pattern to match [Actual Character] in the content
+    actual_character_pattern = r'^\[([^\]]+)\]\s*(.*)$'
+    
+    for line in lines:
+        # Skip empty lines and preserve them
+        if not line.strip():
+            processed_lines.append(line)
+            continue
+        
+        # Check if this line matches the character@account: format
+        speaker_match = re.match(speaker_pattern, line.strip())
+        
+        if speaker_match:
+            character_name = speaker_match.group(1)
+            account_name = speaker_match.group(2)
+            content = speaker_match.group(3)
+            
+            # Check if content starts with [Actual Character]
+            actual_char_match = re.match(actual_character_pattern, content)
+            
+            if actual_char_match:
+                # Use the actual character name from brackets
+                actual_speaker = correct_character_name(actual_char_match.group(1))
+                remaining_content = actual_char_match.group(2)
+            else:
+                # Use the character name before @
+                actual_speaker = correct_character_name(character_name)
+                remaining_content = content
+            
+            # Apply text corrections to content
+            remaining_content = apply_text_corrections(remaining_content)
+            
+            # Update tracking for continuation lines
+            last_speaker = actual_speaker
+            last_account = account_name
+            
+            # Process the content to identify actions vs dialogue
+            formatted_content = format_content_type(remaining_content)
+            
+            # Create the formatted line
+            if formatted_content:
+                processed_lines.append(f"{actual_speaker}: {formatted_content}")
+            else:
+                processed_lines.append(f"{actual_speaker}:")
+        
+        elif line.strip().endswith('> >'):
+            # This is an emote line, likely a continuation
+            emote_content = line.strip()[:-3].strip()  # Remove > >
+            if last_speaker:
+                formatted_emote = format_content_type(emote_content, is_emote=True)
+                processed_lines.append(f"{last_speaker}: {formatted_emote}")
+            else:
+                processed_lines.append(line)
+        
+        elif last_speaker and last_account and not re.match(speaker_pattern, line.strip()):
+            # This might be a continuation line from the same speaker
+            # Check if it looks like a continuation (starts with space, indented, or doesn't end with period)
+            stripped_line = line.strip()
+            is_continuation = (
+                line.startswith(' ') or 
+                line.startswith('\t') or 
+                not stripped_line.endswith('.') or
+                not stripped_line.endswith('!') or
+                not stripped_line.endswith('?') or
+                len(stripped_line.split()) <= 3  # Short phrases are likely continuations
+            )
+            
+            if is_continuation and stripped_line:
+                # Apply text corrections before formatting
+                corrected_content = apply_text_corrections(stripped_line)
+                formatted_content = format_content_type(corrected_content)
+                if formatted_content:
+                    processed_lines.append(f"{last_speaker}: {formatted_content}")
+                else:
+                    processed_lines.append(line)
+            else:
+                # Not a continuation, reset speaker tracking
+                last_speaker = None
+                last_account = None
+                processed_lines.append(line)
+        
+        else:
+            # Regular line, not matching any patterns
+            processed_lines.append(line)
+    
+    return '\n'.join(processed_lines)
+
+def format_content_type(content: str, is_emote: bool = False) -> str:
+    """
+    Format content to distinguish between actions and dialogue.
+    
+    Rules:
+    - Content starting with * or in ** ** brackets are actions
+    - Everything else is dialogue
+    - Emotes are formatted as actions
+    """
+    if not content.strip():
+        return content
+    
+    content = content.strip()
+    
+    # Check if it's already in action format (starts with * or wrapped in **)
+    if content.startswith('*') or (content.startswith('**') and content.endswith('**')):
+        return f"*{content.strip('*').strip()}*"  # Normalize to single asterisks
+    
+    # Check if it's an emote
+    if is_emote:
+        return f"*{content}*"
+    
+    # Check for common action verbs and patterns
+    action_patterns = [
+        r'^(walks?|runs?|sits?|stands?|looks?|turns?|moves?|enters?|exits?|approaches?)',
+        r'^(nods?|smiles?|frowns?|laughs?|sighs?|shrugs?)',
+        r'^(grabs?|picks? up|puts? down|places?|holds?|drops?)',
+        r'^(points?|gestures?|waves?|raises?|lowers?)',
+        r'^\*.*\*$',  # Already wrapped in asterisks
+        r'^.*\btaps?\b.*',
+        r'^.*\bpresses?\b.*',
+        r'^.*\bactivates?\b.*'
+    ]
+    
+    # Check if content matches action patterns
+    for pattern in action_patterns:
+        if re.match(pattern, content.lower()):
+            # Don't double-wrap if already wrapped
+            if content.startswith('*') and content.endswith('*'):
+                return content
+            return f"*{content}*"
+    
+    # Check for action indicators within the content
+    if any(indicator in content.lower() for indicator in ['*action*', '*emote*', '*does*', '*performs*']):
+        return f"*{content}*"
+    
+    # Otherwise, treat as dialogue
+    return content
 
 def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool = False) -> str:
     """
@@ -109,6 +525,17 @@ def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool
             final_content = '\n\n---\n\n'.join(all_content)
             
         print(f"✅ WIKI SEARCH COMPLETE: {len(final_content)} characters from {len(all_content)} articles")
+        
+        # Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_type = determine_query_type('search_memory_alpha')
+            query_description = create_query_description('search_memory_alpha', query=query)
+            is_roleplay = _get_roleplay_context_from_caller()
+            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            return result.content
+        
         return final_content
         
     except requests.RequestException as e:
@@ -145,29 +572,47 @@ def debug_schema_info():
         print(f"✗ Error getting schema info: {e}")
         return {}
 
-def get_log_content(query: str, mission_logs_only: bool = False) -> str:
+def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
     """Get full log content using hierarchical search (titles first, then content) - NO TRUNCATION
     
     Args:
         query: Search query
         mission_logs_only: If True, only search mission_log type pages, ignore other types
+        is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
-        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
+        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
         
-        # Search for different types of logs using hierarchical search
-        if mission_logs_only:
-            log_types = ["mission_log"]
-            print(f"   🎯 SPECIFIC LOG REQUEST: Only searching mission_log type pages")
-        else:
-            log_types = ["mission_log"]
-            print(f"   📊 GENERAL LOG REQUEST: Comprehensive search including fallback")
+        # Check for log selection queries first
+        from ..ai_logic.query_detection import detect_log_selection_query
+        is_selection, selection_type, ship_name = detect_log_selection_query(query)
+        
+        if is_selection:
+            print(f"   🎯 LOG SELECTION DETECTED: type='{selection_type}', ship='{ship_name}'")
+            
+            if selection_type == 'random':
+                # Get one random log
+                return get_random_log_content(ship_name, is_roleplay)
+            elif selection_type in ['latest', 'recent']:
+                # Get most recent logs
+                return get_temporal_log_content(selection_type, ship_name, limit=5, is_roleplay=is_roleplay)
+            elif selection_type in ['first', 'earliest', 'oldest']:
+                # Get oldest logs  
+                return get_temporal_log_content(selection_type, ship_name, limit=5, is_roleplay=is_roleplay)
+            elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
+                # Get date-filtered logs
+                return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
+        
+        # Standard log search with mission logs only enforcement
+        log_types = ["mission_log"]
+        print(f"   📊 STANDARD LOG REQUEST: Searching mission_log type pages only")
         
         all_results = []
         
         for log_type in log_types:
-            results = controller.search_pages(query, page_type=log_type, limit=10)  # Increased limit
+            # Force mission logs only for all log queries
+            results = controller.search_pages(query, page_type=log_type, limit=20, force_mission_logs_only=True)
             print(f"   📊 {log_type} hierarchical search returned {len(results)} results")
             all_results.extend(results)
         
@@ -194,7 +639,6 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
                 content_preview = r['raw_content'][:50] + "..." if len(r['raw_content']) > 50 else r['raw_content']
                 
                 # Use enhanced ship log detection
-                from handlers.ai_logic.log_processor import is_ship_log_title
                 if is_ship_log_title(title):
                     log_results.append(r)
                     print(f"   ✓ Detected ship log: '{title}' Content='{content_preview}'")
@@ -224,7 +668,6 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
             print(f"   📄 Processing {page_type}: '{title}' ({len(content)} chars)")
             
             # Parse character speaking patterns in the log using enhanced dialogue parsing
-            from handlers.ai_logic.log_processor import parse_log_characters
             parsed_content = parse_log_characters(content)
             
             # Format the log with title and parsed content
@@ -239,18 +682,27 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
         
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ HIERARCHICAL LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("logs", final_content, query, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
         print(f"✗ Error getting log content: {e}")
         return ""
 
-def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> str:
+def get_relevant_wiki_context(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
     """Get relevant wiki content using hierarchical search (titles first, then content) - NO TRUNCATION
     
     Args:
         query: Search query
         mission_logs_only: If True, only search mission_log type pages when detecting log queries
+        is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
@@ -267,7 +719,7 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
         is_log_query_result = any(indicator in query.lower() for indicator in log_indicators)
         
         if is_log_query_result:
-            log_content = get_log_content(query, mission_logs_only=mission_logs_only)
+            log_content = get_log_content(query, mission_logs_only=mission_logs_only, is_roleplay=is_roleplay)
             if log_content:
                 log_type_msg = "mission logs only" if mission_logs_only else "all log types"
                 print(f"✓ Log query detected, retrieved {len(log_content)} chars of log content ({log_type_msg})")
@@ -277,7 +729,7 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
                 print(f"⚠️  Log query detected but no log content found ({log_type_msg})")
         
         # Use hierarchical database search for better results
-        print(f"🔍 HIERARCHICAL WIKI SEARCH: '{query}'")
+        print(f"🔍 HIERARCHICAL WIKI SEARCH: '{query}' (roleplay={is_roleplay})")
         results = controller.search_pages(query, limit=20)  # Increased limit
         
         if not results:
@@ -297,6 +749,14 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
         
         final_context = '\n\n---\n\n'.join(context_parts)
         print(f"✅ HIERARCHICAL WIKI SEARCH COMPLETE: {len(final_context)} characters from {len(context_parts)} pages")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_context):
+            print(f"🔄 Content size ({len(final_context)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("general", final_context, query, is_roleplay)
+            return result.content
+        
         return final_context
         
     except Exception as e:
@@ -304,7 +764,7 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
         return ""
 
 def get_ship_information(ship_name: str) -> str:
-    """Get detailed information about a specific ship - NO TRUNCATION"""
+    """Get detailed information about a specific ship"""
     try:
         controller = get_db_controller()
         results = controller.get_ship_info(ship_name)
@@ -316,12 +776,23 @@ def get_ship_information(ship_name: str) -> str:
 
         for result in results:
             title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
+            content = result['raw_content']
 
             page_text = f"**{title}**\n{content}"
             ship_info.append(page_text)
 
         final_content = '\n\n---\n\n'.join(ship_info)
+        
+        # Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_type = determine_query_type('get_ship_information')
+            query_description = create_query_description('get_ship_information', ship_name=ship_name)
+            is_roleplay = _get_roleplay_context_from_caller()
+            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
@@ -329,7 +800,7 @@ def get_ship_information(ship_name: str) -> str:
         return ""
 
 def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
-    """Get recent mission logs - NO TRUNCATION"""
+    """Get recent mission logs"""
     try:
         controller = get_db_controller()
         results = controller.get_recent_logs(ship_name=ship_name, limit=limit)
@@ -341,13 +812,24 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
 
         for result in results:
             title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
+            content = result['raw_content']
             log_date = result['log_date']
 
             log_entry = f"**{title}** ({log_date})\n{content}"
             log_summaries.append(log_entry)
 
         final_content = '\n\n---\n\n'.join(log_summaries)
+        
+        # Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_type = determine_query_type('get_recent_logs')
+            query_description = create_query_description('get_recent_logs', ship_name=ship_name)
+            is_roleplay = _get_roleplay_context_from_caller()
+            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
@@ -355,7 +837,7 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
         return ""
 
 def search_by_type(query: str, content_type: str) -> str:
-    """Search for specific type of content - NO TRUNCATION"""
+    """Search for specific type of content"""
     try:
         controller = get_db_controller()
         results = controller.search_pages(query, page_type=content_type, limit=10)  # Increased limit
@@ -367,12 +849,23 @@ def search_by_type(query: str, content_type: str) -> str:
 
         for result in results:
             title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
+            content = result['raw_content']
 
             page_text = f"**{title}**\n{content}"
             search_results.append(page_text)
 
         final_content = '\n\n---\n\n'.join(search_results)
+        
+        # Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_type = determine_query_type('search_by_type', content_type)
+            query_description = create_query_description('search_by_type', query=query, content_type=content_type)
+            is_roleplay = _get_roleplay_context_from_caller()
+            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
@@ -380,7 +873,7 @@ def search_by_type(query: str, content_type: str) -> str:
         return ""
 
 def get_tell_me_about_content(subject: str) -> str:
-    """Enhanced 'tell me about' functionality using hierarchical search - NO TRUNCATION"""
+    """Enhanced 'tell me about' functionality using hierarchical search"""
     try:
         controller = get_db_controller()
         print(f"🔍 HIERARCHICAL 'TELL ME ABOUT' SEARCH: '{subject}'")
@@ -409,7 +902,7 @@ def get_tell_me_about_content(subject: str) -> str:
 
         for result in results:  # Include ALL results
             title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
+            content = result['raw_content']
             page_type = result.get('page_type', 'general')
             
             # Add type indicator for clarity
@@ -426,17 +919,28 @@ def get_tell_me_about_content(subject: str) -> str:
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ HIERARCHICAL 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
+        
+        # Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_type = determine_query_type('get_tell_me_about_content')
+            query_description = create_query_description('get_tell_me_about_content', subject=subject)
+            is_roleplay = _get_roleplay_context_from_caller()
+            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
         print(f"✗ Error getting 'tell me about' content: {e}")
         return ""
 
-def get_tell_me_about_content_prioritized(subject: str) -> str:
+def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = False) -> str:
     """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs - NO TRUNCATION"""
     try:
         controller = get_db_controller()
-        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}'")
+        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}' (roleplay={is_roleplay})")
         
         # Step 1: Search for ship info specifically first
         ship_info_results = []
@@ -505,6 +1009,14 @@ def get_tell_me_about_content_prioritized(subject: str) -> str:
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("character", final_content, subject, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
@@ -723,6 +1235,109 @@ def get_log_url(search_query: str) -> str:
     except Exception as e:
         print(f"✗ Error searching for page URL: {e}")
         return f"Error retrieving URL for '{search_query}': {e}"
+
+def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = False) -> str:
+    """Get one random mission log formatted for display"""
+    try:
+        controller = get_db_controller()
+        print(f"🎲 RANDOM LOG SELECTION: ship='{ship_name}'")
+        
+        random_log = controller.get_random_log(ship_name)
+        
+        if not random_log:
+            ship_msg = f" for {ship_name.upper()}" if ship_name else ""
+            print(f"   ❌ No random log found{ship_msg}")
+            return f"No mission logs found{ship_msg} in the database."
+        
+        title = random_log['title']
+        content = random_log['raw_content']
+        log_date = random_log.get('log_date', 'Unknown Date')
+        ship = random_log.get('ship_name', 'Unknown Ship')
+        
+        # Parse character speaking patterns in the log
+        parsed_content = parse_log_characters(content)
+        
+        # Format the random log with special indicator
+        formatted_log = f"**{title}** [Random Selection - {log_date}] ({ship.upper()})\n{parsed_content}"
+        
+        print(f"   ✅ Random log selected: '{title}' ({len(formatted_log)} chars)")
+        
+        # Process large content through LLM if needed
+        if should_process_data(formatted_log):
+            print(f"🔄 Content size ({len(formatted_log)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_type = determine_query_type('get_random_log_content')
+            query_description = create_query_description('get_random_log_content', ship_name=ship_name)
+            is_roleplay = _get_roleplay_context_from_caller()
+            result = processor.process_query_results(query_type, formatted_log, query_description, is_roleplay)
+            return result.content
+        
+        return formatted_log
+        
+    except Exception as e:
+        print(f"✗ Error getting random log content: {e}")
+        return f"Error retrieving random log: {e}"
+
+
+def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5, is_roleplay: bool = False) -> str:
+    """Get temporally ordered logs (newest or oldest first)"""
+    try:
+        controller = get_db_controller()
+        print(f"📅 TEMPORAL LOG SELECTION: type='{selection_type}', ship='{ship_name}', limit={limit}")
+        
+        results = controller.get_selected_logs(selection_type, ship_name, limit)
+        
+        if not results:
+            ship_msg = f" for {ship_name.upper()}" if ship_name else ""
+            print(f"   ❌ No {selection_type} logs found{ship_msg}")
+            return f"No {selection_type} mission logs found{ship_msg} in the database."
+        
+        log_contents = []
+        
+        for result in results:
+            title = result['title']
+            content = result['raw_content']
+            log_date = result.get('log_date', 'Unknown Date')
+            ship = result.get('ship_name', 'Unknown Ship')
+            
+            # Parse character speaking patterns in the log
+            parsed_content = parse_log_characters(content)
+            
+            # Format with temporal indicator
+            temporal_label = {
+                'latest': 'Latest',
+                'recent': 'Recent', 
+                'first': 'First',
+                'earliest': 'Earliest',
+                'oldest': 'Oldest',
+                'today': 'Today',
+                'yesterday': 'Yesterday',
+                'this_week': 'This Week',
+                'last_week': 'Last Week'
+            }.get(selection_type, selection_type.title())
+            
+            formatted_log = f"**{title}** [{temporal_label} - {log_date}] ({ship.upper()})\n{parsed_content}"
+            log_contents.append(formatted_log)
+            
+            print(f"   ✓ Added {selection_type} log: '{title}'")
+        
+        final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
+        print(f"✅ TEMPORAL LOG SELECTION COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_description = f"{selection_type} logs" + (f" for {ship_name}" if ship_name else "")
+            result = processor.process_query_results("logs", final_content, query_description, is_roleplay)
+            return result.content
+        
+        return final_content
+        
+    except Exception as e:
+        print(f"✗ Error getting temporal log content: {e}")
+        return f"Error retrieving {selection_type} logs: {e}"
+
 
 def get_recent_log_url(search_query: str) -> str:
     """Get recent log URL - redirects to get_log_url for consistency"""

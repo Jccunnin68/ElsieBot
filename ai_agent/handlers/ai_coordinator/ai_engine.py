@@ -14,14 +14,11 @@ from config import GEMMA_API_KEY
 from handlers.handlers_utils import estimate_token_count
 from handlers.ai_logic import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
 from handlers.handlers_utils import (
-    
-    chunk_prompt_for_tokens,
     filter_meeting_info,
     convert_earth_date_to_star_trek,
-    
+    estimate_token_count
 )
 from handlers.ai_attention.state_manager import get_roleplay_state
-from handlers.ai_logic.query_detection import is_stardancer_query
 from handlers.ai_coordinator.conversation_utils import format_conversation_history_with_dgm_elsie
 from handlers.ai_emotion import get_mock_response
 from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
@@ -259,14 +256,14 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         if strategy['approach'] == 'roleplay_active':
             # ALL roleplay_active responses should use enhanced roleplay context
             print(f"🎭 ROLEPLAY ACTIVE - Using enhanced roleplay context generation")
-            from handlers.ai_wisdom.roleplay_contexts import get_enhanced_roleplay_context
+            from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
             context = get_enhanced_roleplay_context(strategy, user_message)
         
         elif strategy['approach'] == 'roleplay_mock_enhanced':
             # Roleplay mock enhanced responses also use enhanced roleplay context
             mock_type = strategy.get('mock_response_type', 'unknown')
             print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with enhanced roleplay context")
-            from handlers.ai_wisdom.roleplay_contexts import get_enhanced_roleplay_context
+            from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
             context = get_enhanced_roleplay_context(strategy, user_message)
         
         elif strategy['needs_database']:
@@ -283,16 +280,6 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         
         # Set default context for simple chats and cases without specific context
         if not context:
-            stardancer_mentioned = is_stardancer_query(user_message) or (wiki_info and 'stardancer' in wiki_info.lower())
-            
-            stardancer_guard_rail = ""
-            if stardancer_mentioned:
-                stardancer_guard_rail = """
-IMPORTANT USS STARDANCER GUARD RAIL:
-- When discussing the USS Stardancer, use database information when available
-- Only avoid inventing details if no database information is provided
-- If you have relevant Stardancer information from the database context, share it confidently"""
-            
             # Detect personality context for non-roleplay conversations
             personality_context = detect_general_personality_context(user_message)
             
@@ -325,7 +312,6 @@ COMMUNICATION STYLE:
 - Keep the holographic bartender roleplay elements minimal unless specifically relevant
 
 CURRENT SETTING: You're aboard the USS Stardancer with access to ship databases and Federation archives. When users ask for information, you can provide detailed, comprehensive responses without artificial length restrictions.
-{stardancer_guard_rail}
 
 {f"AVAILABLE INFORMATION: {wiki_info}" if wiki_info else ""}
 
@@ -344,33 +330,9 @@ Stay helpful and informative. When providing database information, be thorough a
         prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
         
 
-        # Check token count and chunk if necessary
+        # With increased context window, use full context without chunking
         estimated_tokens = estimate_token_count(prompt)
-        print(f"🧮 Estimated token count: {estimated_tokens}")
-        
-        # Increased token limit for more comprehensive responses
-        # Only chunk if we're significantly over the limit (was 7192, now much more conservative)
-        max_allowed_tokens = 7000  # Leave room for response generation
-        
-        if estimated_tokens > max_allowed_tokens:
-            print(f"⚠️  Prompt too large ({estimated_tokens} tokens), implementing chunking strategy...")
-            
-            essential_prompt = f"{context}\n\nCustomer: {user_message}\nElsie:"
-            essential_tokens = estimate_token_count(essential_prompt)
-            
-            if essential_tokens <= max_allowed_tokens:
-                prompt = essential_prompt
-                print(f"   📦 Using essential prompt: {essential_tokens} tokens")
-            else:
-                # Use much larger chunks (6800 tokens instead of 7192) to maximize content
-                # This allows for comprehensive responses while leaving room for the prompt structure
-                large_chunk_size = 6800
-                chunks = chunk_prompt_for_tokens(context, large_chunk_size)
-                print(f"   📦 Context chunked into {len(chunks)} parts using LARGE chunks ({large_chunk_size} tokens each)")
-                
-                prompt = f"{chunks[0]}\n\nCustomer: {user_message}\nElsie:"
-                final_tokens = estimate_token_count(prompt)
-                print(f"   📦 Using first LARGE chunk: {final_tokens} tokens (chunk contains {estimate_token_count(chunks[0])} tokens of content)")
+        print(f"🧮 Estimated token count: {estimated_tokens} (using full context - no chunking)")
         
         # Generate response
         response = model.generate_content(prompt)
@@ -389,13 +351,18 @@ Stay helpful and informative. When providing database information, be thorough a
                 print(f"🛑 Filtered out AI-generated conversation continuation")
                 break
         
-        # Filter meeting information unless it's an OOC schedule query
-        if strategy['approach'] != 'ooc' or (strategy['approach'] == 'ooc' and 
-            not any(word in user_message.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master'])):
+        # Determine if this is a roleplay response (should use Star Trek dates)
+        is_roleplay_response = strategy.get('approach', '').startswith('roleplay')
+        
+        # Filter meeting information unless it's a non-roleplay schedule query
+        schedule_terms = ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']
+        is_schedule_query = any(word in user_message.lower() for word in schedule_terms)
+        if is_roleplay_response or not is_schedule_query:
             response_text = filter_meeting_info(response_text)
         
-        # Apply date conversion EXCEPT for OOC queries
-        if strategy['approach'] != 'ooc':
+        # Apply Star Trek date conversion ONLY for roleplay queries
+        # Non-roleplay queries preserve real Earth dates for accuracy
+        if is_roleplay_response:
             response_text = convert_earth_date_to_star_trek(response_text)
         
         # Check for poetic short circuit during casual dialogue

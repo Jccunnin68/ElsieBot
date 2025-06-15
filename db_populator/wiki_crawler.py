@@ -112,7 +112,7 @@ class WikiCrawlerContainer:
                 # Calculate content hash
                 content_hash = self.content_processor.calculate_content_hash(page_data['raw_content'])
                 
-                # Update metadata first (before saving pages that might split)
+                # Update metadata
                 self.db_ops.upsert_page_metadata(
                     page_data['title'],
                     page_data['url'],
@@ -120,7 +120,7 @@ class WikiCrawlerContainer:
                     status='active'
                 )
                 
-                # Save to database (may create multiple entries for split content)
+                # Save to database
                 if self.db_ops.save_page_to_database(page_data, self.content_processor):
                     successful_crawls += 1
                     updated_pages += 1
@@ -197,7 +197,7 @@ def main():
             page_data = crawler.extract_page_content(specific_page)
             if page_data:
                 content_hash = crawler.content_processor.calculate_content_hash(page_data['raw_content'])
-                # Update metadata first (before saving pages that might split)
+                # Update metadata
                 crawler.db_ops.upsert_page_metadata(
                     page_data['title'],
                     page_data['url'],

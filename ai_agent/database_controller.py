@@ -40,13 +40,19 @@ class FleetDatabaseController:
             print(f"  Make sure the elsiebrain database exists and is accessible")
     
     def search_pages(self, query: str, page_type: Optional[str] = None, 
-                    ship_name: Optional[str] = None, limit: int = 10) -> List[Dict]:
+                    ship_name: Optional[str] = None, limit: int = 10, 
+                    force_mission_logs_only: bool = False) -> List[Dict]:
         """Enhanced search with better ship name handling and fallbacks"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     
-                    print(f"🔍 ENHANCED SEARCH - Query: '{query}'")
+                    print(f"🔍 ENHANCED SEARCH - Query: '{query}' (force_mission_logs_only: {force_mission_logs_only})")
+                    
+                    # Override page_type if force_mission_logs_only is True
+                    if force_mission_logs_only:
+                        page_type = 'mission_log'
+                        print(f"   🎯 FORCING MISSION LOGS ONLY - page_type set to 'mission_log'")
                     
                     all_results = []
                     
@@ -199,61 +205,41 @@ class FleetDatabaseController:
             print(f"✗ Error in enhanced search: {e}")
             return []
     
-    def get_log_content(self, query: str, max_chars: int = 8000) -> str:
-        """Get mission log content for a query"""
+    def get_log_content(self, query: str) -> str:
+        """Get mission log content for a query (no truncation)"""
         # Search specifically for mission logs
-        results = self.search_pages(query, page_type="mission_log", limit=5)
+        results = self.search_pages(query, page_type="mission_log", limit=20)  # Increased limit
         
         if not results:
             return ""
         
         log_contents = []
-        total_chars = 0
         
         for result in results:
             title = result['title']
             content = result['raw_content']
             
-            # Format the log
+            # Format the log - full content, no truncation
             formatted_log = f"**{title}**\n{content}"
-            
-            if total_chars + len(formatted_log) <= max_chars:
-                log_contents.append(formatted_log)
-                total_chars += len(formatted_log)
-            else:
-                # Add partial content if it fits
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 200:
-                    log_contents.append(formatted_log[:remaining_chars] + "...[LOG TRUNCATED]")
-                break
+            log_contents.append(formatted_log)
         
         return '\n\n---\n\n'.join(log_contents)
     
-    def get_relevant_context(self, query: str, max_chars: int = 3000) -> str:
-        """Get relevant wiki context for general queries"""
-        results = self.search_pages(query, limit=10)
+    def get_relevant_context(self, query: str) -> str:
+        """Get relevant wiki context for general queries (no truncation)"""
+        results = self.search_pages(query, limit=20)  # Increased limit
         
         if not results:
             return ""
         
         context_parts = []
-        total_chars = 0
         
         for result in results:
             title = result['title']
-            content = result['raw_content'][:30000]  # Limit individual content
+            content = result['raw_content']  # Full content, no individual limits
             
             page_text = f"**{title}**\n{content}"
-            
-            if total_chars + len(page_text) <= max_chars:
-                context_parts.append(page_text)
-                total_chars += len(page_text)
-            else:
-                # Add partial content if it fits
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 100:
-                    context_parts.append(page_text[:remaining_chars] + "...")
-                break
+            context_parts.append(page_text)
         
         return '\n\n---\n\n'.join(context_parts)
     
@@ -277,7 +263,7 @@ class FleetDatabaseController:
                         query += " AND ship_name = %s"
                         params.append(ship_name.lower())
                     
-                    query += " ORDER BY log_date DESC LIMIT %s"
+                    query += " ORDER BY log_date DESC NULLS LAST LIMIT %s"
                     params.append(limit)
                     
                     cur.execute(query, params)
@@ -293,6 +279,84 @@ class FleetDatabaseController:
         except Exception as e:
             print(f"✗ Error getting recent logs: {e}")
             return []
+
+    def get_selected_logs(self, selection_type: str, ship_name: Optional[str] = None, 
+                         limit: int = 5, date_filter: Optional[str] = None) -> List[Dict]:
+        """
+        Get logs based on selection criteria with proper ordering and filtering
+        
+        Args:
+            selection_type: 'latest', 'first', 'random', 'today', etc.
+            ship_name: Optional ship filter
+            limit: Number of results (1 for random selection)
+            date_filter: Optional date range filter
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    print(f"🎯 SELECTED LOG SEARCH: type='{selection_type}', ship='{ship_name}', limit={limit}")
+                    
+                    # Base query - ONLY mission logs
+                    query = """
+                        SELECT id, title, raw_content, ship_name, log_date, url, page_type
+                        FROM wiki_pages 
+                        WHERE page_type = 'mission_log'
+                    """
+                    params = []
+                    
+                    # Add ship filter
+                    if ship_name:
+                        query += " AND ship_name = %s"
+                        params.append(ship_name.lower())
+                    
+                    # Add date filters for date-based selections
+                    if selection_type == 'today':
+                        query += " AND DATE(log_date) = CURRENT_DATE"
+                    elif selection_type == 'yesterday':
+                        query += " AND DATE(log_date) = CURRENT_DATE - INTERVAL '1 day'"
+                    elif selection_type == 'this_week':
+                        query += " AND log_date >= DATE_TRUNC('week', CURRENT_DATE)"
+                    elif selection_type == 'last_week':
+                        query += " AND log_date >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '1 week' AND log_date < DATE_TRUNC('week', CURRENT_DATE)"
+                    
+                    # Add ordering based on selection type
+                    if selection_type == 'random':
+                        query += " ORDER BY RANDOM()"
+                        limit = 1  # Random selection always returns 1
+                    elif selection_type in ['latest', 'recent']:
+                        query += " ORDER BY log_date DESC NULLS LAST"
+                    elif selection_type in ['first', 'earliest', 'oldest']:
+                        query += " ORDER BY log_date ASC NULLS LAST"
+                    elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
+                        query += " ORDER BY log_date DESC NULLS LAST"  # Most recent within date range
+                    else:
+                        # Default to recent
+                        query += " ORDER BY log_date DESC NULLS LAST"
+                    
+                    query += " LIMIT %s"
+                    params.append(limit)
+                    
+                    print(f"   📊 Executing query with {len(params)} parameters")
+                    cur.execute(query, params)
+                    results = [dict(row) for row in cur.fetchall()]
+                    
+                    print(f"   ✅ Found {len(results)} selected logs")
+                    
+                    # Track content access for returned logs
+                    if results:
+                        page_ids = [result['id'] for result in results]
+                        self.update_content_accessed(page_ids)
+                    
+                    return results
+                    
+        except Exception as e:
+            print(f"✗ Error getting selected logs: {e}")
+            return []
+
+    def get_random_log(self, ship_name: Optional[str] = None) -> Optional[Dict]:
+        """Get one random mission log, optionally filtered by ship"""
+        results = self.get_selected_logs('random', ship_name, limit=1)
+        return results[0] if results else None
     
     def update_content_accessed(self, page_ids: List[int]) -> bool:
         """Update content_accessed counter for the given page IDs"""

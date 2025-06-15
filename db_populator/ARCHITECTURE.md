@@ -184,28 +184,26 @@ general      ← All other content
 **Responsibilities**:
 - Manage database connections and configuration
 - Handle page metadata tracking
-- Implement intelligent content splitting for large pages
+- Save complete content without size restrictions
 - Provide database statistics and monitoring
 - Handle page persistence with classification
 
 **Key Methods**:
 - `get_connection()` - Database connection management
 - `ensure_database_connection()` - Connection verification with retries
-- `save_page_to_database()` - **Core**: Page persistence with content splitting
+- `save_page_to_database()` - **Core**: Page persistence without content splitting
 - `get_page_metadata()` / `upsert_page_metadata()` - Metadata management
 - `should_update_page()` - Change detection for efficiency
 - `get_database_stats()` - Performance monitoring
 
-**Content Splitting Algorithm**:
+**Content Handling**:
 ```
-MAX_CONTENT_LENGTH = 25,000 characters
+No content length restrictions - complete content saved as single entry
 
-1. Try section-based splitting (## headers)
-2. Fall back to subsection splitting (### headers)  
-3. Fall back to paragraph splitting (\n\n)
-4. Fall back to sentence splitting ([.!?]+\s+)
-
-Each part labeled: "Title (Part X/Y)"
+1. Save full content regardless of size
+2. Use complete content for page classification
+3. Single database entry per logical page
+4. No artificial splitting or truncation
 ```
 
 **Database Schema Integration**:

@@ -25,6 +25,7 @@ The entire project is configured using a single `.env` file in the root director
     -   `GEMMA_API_KEY`: Your API key for the Google Gemma service.
     -   `DB_PASSWORD`: A secure password for the PostgreSQL database.
     -   `DB_PORT`: The port for the database (default: 5432).
+    -   `DB_NAME`: The name of the database to use (e.g., `elsie`)
 
 ## 3. Discord Bot Setup
 
@@ -136,7 +137,7 @@ Once the bot is running and in your Discord server, you can interact with it.
 -   **AI Agent Errors**:
     -   Check the `GEMMA_API_KEY` in your `.env` file.
     -   View the `ai_agent` container logs for errors: `docker-compose logs -f ai_agent`.
-    -   To test the DB connection from the agent container: `docker-compose exec ai_agent python -c "from content_retrieval_db import check_elsiebrain_connection; check_elsiebrain_connection()"`
+    -   To test the DB connection from the agent container: `docker-compose exec ai_agent python -c "from handlers.ai_wisdom.content_retriever import check_elsiebrain_connection; check_elsiebrain_connection()"`
 -   **Database Issues**:
     -   Ensure the database credentials in `.env` are correct.
     -   Check the `elsiebrain_db` container logs: `docker-compose logs -f elsiebrain_db`.

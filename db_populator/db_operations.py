@@ -102,126 +102,58 @@ class DatabaseOperations:
         return metadata.get('content_hash') != new_content_hash
     
     def save_page_to_database(self, page_data: Dict, content_processor) -> bool:
-        """Save page data to the database"""
+        """Save page data to the database (no content splitting)"""
         try:
-            # Check content length
             content = page_data['raw_content']
-            content_parts = []
-            
-            # If content is too long (>25000 chars), split it into parts
-            MAX_CONTENT_LENGTH = 25000  # Reduced from 50000
-            if len(content) > MAX_CONTENT_LENGTH:
-                # First try to split on major section headers
-                sections = re.split(r'(##\s+[^\n]+\n)', content)
-                current_part = ""
-                
-                for section in sections:
-                    # If adding this section would exceed the limit
-                    if len(current_part) + len(section) > MAX_CONTENT_LENGTH:
-                        # If the current section itself is too big
-                        if len(section) > MAX_CONTENT_LENGTH:
-                            # Split on subsections
-                            subsections = re.split(r'(###\s+[^\n]+\n)', section)
-                            for subsection in subsections:
-                                # If subsection would exceed limit
-                                if len(current_part) + len(subsection) > MAX_CONTENT_LENGTH:
-                                    # If subsection itself is too big
-                                    if len(subsection) > MAX_CONTENT_LENGTH:
-                                        # Split on paragraphs
-                                        paragraphs = subsection.split('\n\n')
-                                        for paragraph in paragraphs:
-                                            # If paragraph would exceed limit
-                                            if len(current_part) + len(paragraph) + 2 > MAX_CONTENT_LENGTH:
-                                                # If paragraph itself is too big
-                                                if len(paragraph) > MAX_CONTENT_LENGTH:
-                                                    # Split on sentences
-                                                    sentences = re.split(r'([.!?]+\s+)', paragraph)
-                                                    for sentence in sentences:
-                                                        if len(current_part) + len(sentence) > MAX_CONTENT_LENGTH:
-                                                            if current_part:
-                                                                content_parts.append(current_part.strip())
-                                                            current_part = sentence
-                                                        else:
-                                                            current_part += sentence
-                                                else:
-                                                    if current_part:
-                                                        content_parts.append(current_part.strip())
-                                                    current_part = paragraph + '\n\n'
-                                            else:
-                                                current_part += paragraph + '\n\n'
-                                    else:
-                                        if current_part:
-                                            content_parts.append(current_part.strip())
-                                        current_part = subsection
-                                else:
-                                    current_part += subsection
-                        else:
-                            if current_part:
-                                content_parts.append(current_part.strip())
-                            current_part = section
-                    else:
-                        current_part += section
-                
-                # Add the last part if it exists
-                if current_part:
-                    content_parts.append(current_part.strip())
-            else:
-                content_parts = [content]
+            title = page_data['title']
             
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Classify the page
+                    # Classify the page using full content
                     page_type, ship_name, log_date = content_processor.classify_page_type(
-                        page_data['title'], content_parts[0]  # Use first part for classification
+                        title, content
                     )
                     
-                    # Process each content part
-                    for i, part_content in enumerate(content_parts, 1):
-                        # Modify title for parts after the first
-                        title = page_data['title']
-                        if len(content_parts) > 1:
-                            title = f"{title} (Part {i}/{len(content_parts)})"
-                        
-                        # Check if this part already exists
+                    # Check if page already exists
+                    cur.execute("""
+                        SELECT id FROM wiki_pages WHERE title = %s
+                    """, (title,))
+                    
+                    existing_page = cur.fetchone()
+                    
+                    if existing_page:
+                        # Update existing page
                         cur.execute("""
-                            SELECT id FROM wiki_pages WHERE title = %s
-                        """, (title,))
-                        
-                        existing_page = cur.fetchone()
-                        
-                        if existing_page:
-                            # Update existing page
-                            cur.execute("""
-                                UPDATE wiki_pages 
-                                SET raw_content = %s, url = %s, crawl_date = %s,
-                                    page_type = %s, ship_name = %s, log_date = %s, updated_at = NOW()
-                                WHERE title = %s
-                            """, (
-                                part_content,
-                                page_data['url'],
-                                page_data['crawled_at'],
-                                page_type,
-                                ship_name,
-                                log_date,
-                                title
-                            ))
-                            print(f"  ✓ Updated existing page: {title}")
-                        else:
-                            # Insert new page
-                            cur.execute("""
-                                INSERT INTO wiki_pages 
-                                (title, raw_content, url, crawl_date, page_type, ship_name, log_date)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                            """, (
-                                title,
-                                part_content,
-                                page_data['url'],
-                                page_data['crawled_at'],
-                                page_type,
-                                ship_name,
-                                log_date
-                            ))
-                            print(f"  ✓ Inserted new page: {title}")
+                            UPDATE wiki_pages 
+                            SET raw_content = %s, url = %s, crawl_date = %s,
+                                page_type = %s, ship_name = %s, log_date = %s, updated_at = NOW()
+                            WHERE title = %s
+                        """, (
+                            content,
+                            page_data['url'],
+                            page_data['crawled_at'],
+                            page_type,
+                            ship_name,
+                            log_date,
+                            title
+                        ))
+                        print(f"  ✓ Updated existing page: {title} ({len(content):,} chars, type: {page_type})")
+                    else:
+                        # Insert new page
+                        cur.execute("""
+                            INSERT INTO wiki_pages 
+                            (title, raw_content, url, crawl_date, page_type, ship_name, log_date)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            title,
+                            content,
+                            page_data['url'],
+                            page_data['crawled_at'],
+                            page_type,
+                            ship_name,
+                            log_date
+                        ))
+                        print(f"  ✓ Inserted new page: {title} ({len(content):,} chars, type: {page_type})")
                     
                     conn.commit()
                     return True

@@ -26,9 +26,9 @@ The AI agent is built using a modular, handler-based architecture to separate co
 
 -   **`main.py`**: The main FastAPI application file. It defines the API endpoints (`/process`, `/health`), manages the application lifecycle (startup/shutdown), and handles incoming requests.
 
--   **`database_controller.py`**: The low-level controller for database interactions. It manages the connection pool to the `elsiebrain` PostgreSQL database and executes raw SQL queries.
+-   **`database_controller.py`**: The low-level controller for all database interactions. It manages the connection pool to the `elsiebrain` PostgreSQL database and is responsible for executing all SQL queries.
 
--   **`content_retrieval_db.py`**: A high-level abstraction layer that sits on top of the `database_controller`. It provides simple, purpose-built functions (e.g., `get_character_context`, `get_log_content`) that the rest of the application can use without needing to know the database schema.
+-   **`content_retriever.py`**: A high-level abstraction layer that sits on top of the `database_controller`. It provides simple, purpose-built functions (e.g., `get_character_context`, `get_log_content`) that the rest of the application can call without needing to know about the underlying database schema.
 
 -   **`log_processor.py`**: A utility module for parsing and cleaning raw log content retrieved from the database.
 
@@ -38,7 +38,7 @@ The AI agent is built using a modular, handler-based architecture to separate co
     -   **`ai_act` & `ai_coordinator`**: The top-level coordinators that interface with `main.py`, receive requests, and direct them through the processing pipeline. `ai_act.py` specifically handles the interface with the Discord bot's data structures.
     -   **`ai_logic`**: Contains the "inner monologue" of the bot. It uses the `strategy_engine` to determine the high-level response strategy and `query_detection` to identify specific user intents.
     -   **`ai_attention`**: Manages all aspects of roleplay, including state management (`state_manager.py`), DGM command handling, character tracking, and response logic for social situations.
-    -   **`ai_wisdom`**: Responsible for gathering and coordinating context from `content_retrieval_db.py` to build rich, informative prompts for the AI.
+    -   **`ai_wisdom`**: Responsible for gathering and coordinating context from `content_retriever.py` to build rich, informative prompts for the AI. It has a `context_coordinator.py` that routes requests to either a `roleplay_context_builder.py` or a `non_roleplay_context_builder.py`.
     -   **`ai_emotion`**: Contains handlers for pre-generated "canned" responses. This gives Elsie a consistent personality for simple interactions (like greetings or drink orders) without needing to call the full AI model, making the system highly efficient.
     -   **`ai_engine`**: The final step in the "smart" pipeline. This module constructs the final prompt and performs the expensive call to the external AI (Gemma) API.
 
@@ -61,7 +61,7 @@ graph TD
     end
 
     subgraph "Database Layer"
-        G -- "get_context()" --> J(content_retrieval_db.py);
+        G -- "get_context()" --> J(content_retriever.py);
         J -- "SELECT..." --> K(database_controller.py);
         K -- "SQL" --> L[(elsiebrain DB)];
     end
@@ -90,7 +90,7 @@ graph TD
 4.  A crucial decision is made:
     -   **Fast Path (No AI)**: If the strategy is simple (a greeting, a DGM post, a drink order), a pre-generated response is retrieved from the **`ai_emotion`** package and returned immediately.
     -   **Slow Path (AI Needed)**: For complex queries, the **`ai_wisdom`** layer is engaged.
-5.  `ai_wisdom` fetches relevant information by calling functions in **`content_retrieval_db.py`**, which in turn uses the **`database_controller`** to query the database.
+5.  `ai_wisdom` fetches relevant information by calling functions in **`content_retriever.py`**, which in turn uses the **`database_controller`** to query the database.
 6.  The retrieved context is passed to the **`ai_engine`**, which builds a final prompt and sends it to the external LLM for generation.
 7.  The final response is passed back up the chain and sent out via the API.
 

@@ -1,25 +1,22 @@
 """
-Roleplay Contexts - Roleplay-Specific Context Generation
-========================================================
+Roleplay Context Builder - Enhanced Roleplay Context Generation
+==============================================================
 
-This module handles context generation specifically for roleplay scenarios,
-including personality detection and database integration for roleplay queries.
+This module handles context generation for roleplay scenarios with enhanced
+emotional intelligence integration and character relationship awareness.
 """
 
 from typing import Dict, Any, List
 
-from handlers.ai_wisdom.content_retrieval_db import (
-    get_log_content,
+from .content_retriever import (
+    get_relevant_wiki_context, 
     search_by_type,
     get_tell_me_about_content_prioritized,
-    get_ship_information
+    get_ship_information,
+    is_fallback_response
 )
-from handlers.ai_logic.query_detection import (
-    is_stardancer_query,
-    is_character_query,
-    extract_tell_me_about_subject,
-    is_log_query
-)
+# Note: Using local imports to avoid circular dependency with query_detection
+from ..handlers_utils import convert_earth_date_to_star_trek
 
 
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
@@ -679,76 +676,103 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
 
 
 def _get_roleplay_database_context(user_message: str) -> str:
-    """
-    Get relevant database context for roleplay scenarios.
-    Enhanced to prioritize ship/character info that should be delivered in-character.
-    """
-    context_parts = []
-    message_lower = user_message.lower()
+    """Get database context for roleplay scenarios with character focus"""
+    print(f"🎭 ROLEPLAY DATABASE CONTEXT: '{user_message}'")
     
-    # PRIORITY 1: Check for Stardancer/ship queries first
-    stardancer_keywords = ['stardancer', 'stardancer ship', 'this ship', 'our ship', 'the ship', 'vessel', 'starship']
-    if any(keyword in message_lower for keyword in stardancer_keywords):
-        print(f"   🚀 SHIP QUERY IN ROLEPLAY - Getting Stardancer info")
-        stardancer_info = get_ship_information("stardancer")
-        if stardancer_info:
-            context_parts.append(f"**USS Stardancer Information (In-Character Context):**\n{stardancer_info}")
+    # Check if this is a character query
+    from ..ai_logic.query_detection import is_character_query, extract_tell_me_about_subject
     
-    # PRIORITY 2: Check for crew/character queries
-    crew_keywords = ['captain', 'commander', 'officer', 'crew', 'blaine', 'marcus', 'sif', 'daly', 'shay']
-    character_query_detected = False
+    is_char_query, character_name = is_character_query(user_message)
+    tell_me_about_subject = extract_tell_me_about_subject(user_message)
     
-    for keyword in crew_keywords:
-        if keyword in message_lower:
-            character_query_detected = True
-            break
-    
-    if character_query_detected:
-        print(f"   👥 CREW QUERY IN ROLEPLAY - Getting character info")
-        # Try to extract specific character names
-        potential_chars = ['blaine', 'marcus', 'sif', 'daly', 'shay', 'luka']
-        for char_name in potential_chars:
-            if char_name in message_lower:
-                char_info = search_by_type(char_name, 'personnel')
-                if char_info:
-                    context_parts.append(f"**Character Information - {char_name.title()} (In-Character Context):**\n{char_info}")
-                    break
+    if is_char_query and character_name:
+        print(f"   🧑 CHARACTER QUERY DETECTED: '{character_name}'")
+        # Use prioritized search for character information
+        character_info = get_tell_me_about_content_prioritized(character_name, is_roleplay=True)
         
-        # If no specific character found, get general crew info
-        if not any(char_name in message_lower for char_name in potential_chars):
-            crew_info = search_by_type("stardancer crew", 'personnel')
-            if crew_info:
-                context_parts.append(f"**Stardancer Crew Information (In-Character Context):**\n{crew_info}")
+        # Check if this is a fallback response
+        if is_fallback_response(character_info):
+            print(f"   ⚠️  Fallback response detected for character query")
+            return f"""
+ROLEPLAY DATABASE CONTEXT - CHARACTER QUERY:
+Subject: {character_name}
+Status: Processing limitations encountered
+
+{character_info}
+
+ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing her memory banks about this person.
+"""
+        
+        return f"""
+ROLEPLAY DATABASE CONTEXT - CHARACTER QUERY:
+Subject: {character_name}
+Database Results: {len(character_info)} characters
+
+{character_info}
+
+ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what she knows about this person from her databases.
+"""
     
-    # PRIORITY 3: Check for mission/exploration queries
-    mission_keywords = ['mission', 'objective', 'exploration', 'magellanic', 'where are we', 'current location']
-    if any(keyword in message_lower for keyword in mission_keywords):
-        print(f"   🎯 MISSION QUERY IN ROLEPLAY - Getting mission info")
-        log_info = get_log_content(user_message, mission_logs_only=True)
-        if log_info:
-            context_parts.append(f"**Current Mission Information (In-Character Context):**\n{log_info}")
+    elif tell_me_about_subject:
+        print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
+        # Use prioritized search for general subjects
+        subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject, is_roleplay=True)
+        
+        # Check if this is a fallback response
+        if is_fallback_response(subject_info):
+            print(f"   ⚠️  Fallback response detected for tell me about query")
+            return f"""
+ROLEPLAY DATABASE CONTEXT - GENERAL QUERY:
+Subject: {tell_me_about_subject}
+Status: Processing limitations encountered
+
+{subject_info}
+
+ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing information about this topic.
+"""
+        
+        return f"""
+ROLEPLAY DATABASE CONTEXT - GENERAL QUERY:
+Subject: {tell_me_about_subject}
+Database Results: {len(subject_info)} characters
+
+{subject_info}
+
+ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her knowledge about this topic.
+"""
     
-    # PRIORITY 4: Check for drink service scenarios - provide crew interaction context
-    drink_service_keywords = ['orders', 'requests', 'asks for', 'motions for', 'signals for']
-    drink_keywords = ['drink', 'beverage', 'service', 'bartender']
-    
-    has_service_action = any(keyword in message_lower for keyword in drink_service_keywords)
-    has_drink_mention = any(keyword in message_lower for keyword in drink_keywords)
-    
-    if has_service_action and has_drink_mention:
-        print(f"   🍺 DRINK SERVICE IN ROLEPLAY - Getting crew interaction context")
-        # Get Stardancer crew information for appropriate service context
-        crew_info = search_by_type("stardancer crew", 'personnel')
-        if crew_info:
-            context_parts.append(f"**Crew Service Context (Know Your Customers):**\n{crew_info}")
-    
-    # FALLBACK: Check for standard "tell me about" queries if nothing else matched
-    if not context_parts:
-        tell_me_subject = extract_tell_me_about_subject(user_message)
-        if tell_me_subject:
-            print(f"   📚 GENERAL QUERY IN ROLEPLAY - Getting info about: {tell_me_subject}")
-            general_info = get_tell_me_about_content_prioritized(tell_me_subject)
-            if general_info:
-                context_parts.append(f"**Information about {tell_me_subject} (In-Character Context):**\n{general_info}")
-    
-    return "\n\n".join(context_parts) if context_parts else "" 
+    else:
+        print(f"   📋 GENERAL ROLEPLAY CONTEXT")
+        # Use general wiki context for other queries
+        general_info = get_relevant_wiki_context(user_message, is_roleplay=True)
+        
+        # Check if this is a fallback response
+        if is_fallback_response(general_info):
+            print(f"   ⚠️  Fallback response detected for general query")
+            return f"""
+ROLEPLAY DATABASE CONTEXT - GENERAL:
+Query: {user_message}
+Status: Processing limitations encountered
+
+{general_info}
+
+ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing her databases right now.
+"""
+        
+        if general_info:
+            return f"""
+ROLEPLAY DATABASE CONTEXT - GENERAL:
+Query: {user_message}
+Database Results: {len(general_info)} characters
+
+{general_info}
+
+ROLEPLAY INSTRUCTION: Use this information naturally in your roleplay response as Elsie's knowledge.
+"""
+        else:
+            return """
+ROLEPLAY DATABASE CONTEXT - GENERAL:
+No specific database information found for this query.
+
+ROLEPLAY INSTRUCTION: Respond naturally without specific database information, focusing on character interaction.
+""" 

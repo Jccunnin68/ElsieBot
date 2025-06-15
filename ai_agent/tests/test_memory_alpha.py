@@ -7,7 +7,14 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'ai_agent'))
 
-from handlers.ai_wisdom.content_retrieval_db import search_memory_alpha
+import unittest
+from unittest.mock import patch, MagicMock
+
+# Import the function to be tested
+from handlers.ai_wisdom.content_retriever import search_memory_alpha
+
+# Mock the database controller
+mock_db_controller = MagicMock()
 
 def test_memory_alpha_search():
     """Test the Memory Alpha search functionality"""

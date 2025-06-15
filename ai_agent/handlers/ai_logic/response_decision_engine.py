@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import traceback
 
 from handlers.ai_logic.response_decision import ResponseDecision
+from ..ai_wisdom.llm_query_processor import is_fallback_response
 
 
 class ResponseDecisionEngine:
@@ -515,6 +516,8 @@ class ResponseDecisionEngine:
         Check if this is a character-to-character interaction where Elsie should listen.
         
         FIXED: Adds missing character-to-character detection with higher priority than technical expertise.
+        ENHANCED: Now properly handles responses to Elsie's questions.
+        CRITICAL FIX: Check for direct character addressing BEFORE general question patterns.
         """
         try:
             # Get addressing context
@@ -533,9 +536,8 @@ class ResponseDecisionEngine:
             if not current_message:
                 return False
             
-            # Look for pattern: [Character] "Other Character, ..."
-            import re
-            # Pattern to detect character addressing another character
+            # PRIORITY 1: Check for direct character addressing patterns FIRST
+            # This must come before general question detection to catch "Zarina, what do you think"
             addressing_pattern = r'\[([^\]]+)\]\s*["\']([A-Z][a-z]+)[,\s]'
             match = re.search(addressing_pattern, current_message)
             
@@ -543,10 +545,62 @@ class ResponseDecisionEngine:
                 speaker = match.group(1).strip()
                 addressed = match.group(2).strip()
                 
+                # ENHANCED VALIDATION: Make sure addressed isn't a question word
+                question_words = ['can', 'could', 'would', 'will', 'do', 'did', 'does', 'what', 'where', 'when', 'why', 'who', 'how']
+                if addressed.lower() in question_words:
+                    print(f"   ❌ REJECTED CHARACTER-TO-CHARACTER: '{addressed}' is a question word, not a character name")
+                    return False
+                
                 # Make sure it's not addressing Elsie
                 if addressed.lower() not in ['elsie', 'el']:
                     print(f"   👥 CHARACTER-TO-CHARACTER DETECTED: {speaker} addressing {addressed}")
                     return True
+            
+            # PRIORITY 2: Check if this is a direct question to Elsie (only after checking for character addressing)
+            elsie_question_patterns = [
+                r'\bcan\s+you\s+(?:tell|show|explain|help|get|find)',
+                r'\bwould\s+you\s+(?:mind|please|be\s+able)',
+                r'\bcould\s+you\s+(?:tell|show|explain|help|get|find)',
+                r'\bdo\s+you\s+(?:know|have|remember)',
+                r'\bwhat\s+(?:do\s+you\s+)?(?:know|think|remember)',
+                r'\bhow\s+(?:do\s+you|can\s+you)',
+                r'\bwhere\s+(?:is|are|can\s+i\s+find)',
+                r'\bwhen\s+(?:did|was|will)',
+                r'\bwhy\s+(?:did|is|are)',
+                r'\bwho\s+(?:is|was|are)',
+            ]
+            
+            message_lower = current_message.lower()
+            for pattern in elsie_question_patterns:
+                if re.search(pattern, message_lower):
+                    print(f"   🎯 DIRECT QUESTION TO ELSIE DETECTED: '{pattern}' - not character-to-character")
+                    return False
+            
+            # PRIORITY 3: Check if this is a response to Elsie's previous question/statement
+            # Get recent activity to see if Elsie was the last speaker
+            recent_activity = getattr(contextual_cues, 'recent_activity', [])
+            if recent_activity:
+                # Check if the last activity was from Elsie
+                last_activity = recent_activity[-1] if recent_activity else ""
+                if 'elsie' in last_activity.lower():
+                    # Check for response patterns that indicate answering Elsie's question
+                    elsie_response_patterns = [
+                        r'\b(?:yes|yeah|yep|yup|uh-huh|mhm),?\s',  # Affirmative responses
+                        r'\b(?:no|nope|nah|uh-uh),?\s',  # Negative responses
+                        r'\bthat\'?s\s+(?:right|correct|true|wrong|false|not\s+right)',  # Confirmation/denial
+                        r'\bi\s+(?:think|believe|guess|suppose)',  # Opinion responses
+                        r'\bmaybe|perhaps|possibly|probably',  # Uncertain responses
+                        r'\bwell,?\s',  # Thoughtful responses
+                        r'\bactually,?\s',  # Clarifying responses
+                        r'\bof\s+course',  # Obvious responses
+                        r'\babsolutely|definitely|certainly',  # Strong affirmatives
+                        r'\bnot\s+really|not\s+exactly|not\s+quite',  # Qualified negatives
+                    ]
+                    
+                    for pattern in elsie_response_patterns:
+                        if re.search(pattern, message_lower):
+                            print(f"   💬 RESPONSE TO ELSIE DETECTED: '{pattern}' - not character-to-character")
+                            return False
             
             return False
             
@@ -699,7 +753,7 @@ class ResponseDecisionEngine:
         """
         try:
             # Import AI wisdom coordinator
-            from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
+            from ..ai_wisdom.context_coordinator import get_context_for_strategy
             
             # Build strategy dict for AI wisdom
             wisdom_strategy = {
@@ -719,6 +773,11 @@ class ResponseDecisionEngine:
             # Get wisdom context
             wisdom_context_str = get_context_for_strategy(wisdom_strategy, current_message)
             
+            # Check if this is a fallback response and handle appropriately
+            if is_fallback_response(wisdom_context_str):
+                print(f"   ⚠️  AI WISDOM FALLBACK DETECTED - adjusting response strategy")
+                response_decision = self._handle_fallback_response(response_decision, wisdom_context_str, contextual_cues)
+            
             # Parse context into structured data
             parsed_context = self._parse_wisdom_context(wisdom_context_str)
             
@@ -733,6 +792,76 @@ class ResponseDecisionEngine:
             print(f"   ❌ ERROR getting AI wisdom context: {e}")
             return {'database_facts': [], 'context_cues': []}
     
+    def _handle_fallback_response(self, response_decision, fallback_content: str, contextual_cues):
+        """
+        Handle fallback responses from the LLM query processor.
+        Adjusts response strategy to work with limited information.
+        """
+        print(f"   🔄 HANDLING FALLBACK RESPONSE")
+        
+        # Determine if this is a roleplay context
+        session_mode = getattr(contextual_cues, 'session_mode', None)
+        is_roleplay_context = session_mode and 'roleplay' in str(session_mode).lower()
+        
+        if is_roleplay_context:
+            # For roleplay contexts, adjust to handle the fallback naturally
+            response_decision.approach = "fallback_roleplay"
+            response_decision.tone = "apologetic_but_natural"
+            
+            # Add fallback handling instructions
+            fallback_instructions = [
+                "FALLBACK SCENARIO: Database processing encountered limitations.",
+                "Present the limitation naturally as Elsie having difficulty with her systems.",
+                "Use the provided fallback response as guidance for your in-character response.",
+                "Maintain roleplay immersion while acknowledging the limitation."
+            ]
+            
+            if not response_decision.knowledge_to_use:
+                response_decision.knowledge_to_use = []
+            response_decision.knowledge_to_use.extend(fallback_instructions)
+            
+            # Add fallback theme
+            if not response_decision.suggested_themes:
+                response_decision.suggested_themes = []
+            response_decision.suggested_themes.append("system_limitation_roleplay")
+            
+        else:
+            # For non-roleplay contexts, be direct about the limitation
+            response_decision.approach = "fallback_direct"
+            response_decision.tone = "informative"
+            
+            # Add direct fallback instructions
+            fallback_instructions = [
+                "FALLBACK SCENARIO: Database processing is currently limited.",
+                "Present the limitation directly and suggest alternatives.",
+                "Use the provided fallback response as your primary response.",
+                "Suggest the user try again later or rephrase their query."
+            ]
+            
+            if not response_decision.knowledge_to_use:
+                response_decision.knowledge_to_use = []
+            response_decision.knowledge_to_use.extend(fallback_instructions)
+            
+            # Add fallback theme
+            if not response_decision.suggested_themes:
+                response_decision.suggested_themes = []
+            response_decision.suggested_themes.append("system_limitation_direct")
+        
+        # Update reasoning to reflect fallback handling
+        response_decision.reasoning += " | Fallback response handling activated"
+        
+        print(f"      - Fallback approach: {response_decision.approach}")
+        print(f"      - Fallback tone: {response_decision.tone}")
+        print(f"      - Roleplay context: {is_roleplay_context}")
+        
+        # For now, return basic structure
+        # TODO: Enhance with actual parsing of context sections
+        return {
+            'database_facts': ['AI wisdom context available'],
+            'context_cues': ['Database information integrated'],
+            'full_context': fallback_content
+        }
+
     def _parse_wisdom_context(self, context_str: str) -> Dict:
         """
         Parse AI wisdom context string into structured data.
@@ -744,7 +873,6 @@ class ResponseDecisionEngine:
             'context_cues': ['Database information integrated'],
             'full_context': context_str
         }
-
 
     def _apply_fabrication_controls(self, response_decision, contextual_cues):
         """
