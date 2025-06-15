@@ -243,7 +243,7 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         strategy = decision.strategy
         
         # Create the model
-        model = genai.GenerativeModel('Gemma3-27B-it')
+        model = genai.GenerativeModel('gemma-3-27b-it')
         
         # Detect topic changes for conversation flow
         is_topic_change = detect_topic_change(user_message, conversation_history)

@@ -204,8 +204,17 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     """Generate context for log queries."""
     print(f"📋 SEARCHING LOG DATA")
     
+    # Check for log selection queries first
+    from handlers.ai_logic.query_detection import detect_log_selection_query
+    is_selection, selection_type, ship_name = detect_log_selection_query(user_message)
+    
+    if is_selection:
+        print(f"   🎯 LOG SELECTION QUERY: type='{selection_type}', ship='{ship_name}'")
+        wiki_info = get_log_content(user_message, mission_logs_only=True)
+        print(f"   - Retrieved LOG SELECTION content length: {len(wiki_info)} chars")
+    
     # Check for enhanced log-specific search strategies
-    if strategy.get('ship_logs_only'):
+    elif strategy.get('ship_logs_only'):
         target_ship = strategy.get('target_ship')
         log_type = strategy.get('log_type')
         print(f"   🚢📋 SHIP LOGS ONLY: searching logs for '{target_ship}' (log_type: {log_type})")
@@ -215,9 +224,9 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
             from handlers.ai_wisdom.content_retriever import get_db_controller
             controller = get_db_controller()
             
-            # Search for logs that mention the target ship
+            # Search for logs that mention the target ship - FORCE MISSION LOGS ONLY
             search_query = f"{target_ship} {log_type}" if log_type else target_ship
-            results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            results = controller.search_pages(search_query, page_type='mission_log', limit=10, force_mission_logs_only=True)
             
             if results:
                 wiki_info = ""
@@ -252,9 +261,9 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
             from handlers.ai_wisdom.content_retriever import get_db_controller
             controller = get_db_controller()
             
-            # Search for logs that mention the target character
+            # Search for logs that mention the target character - FORCE MISSION LOGS ONLY
             search_query = f"{target_character} {log_type}" if log_type else target_character
-            results = controller.search_pages(search_query, page_type='mission_log', limit=10)
+            results = controller.search_pages(search_query, page_type='mission_log', limit=10, force_mission_logs_only=True)
             
             if results:
                 wiki_info = ""
@@ -279,29 +288,33 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
             wiki_info = f"Error searching for {target_character} logs: {e}"
     
     else:
-        # Standard log search behavior
-        mission_logs_only = strategy.get('log_specific', False)
-        if mission_logs_only:
-            wiki_info = get_log_content(user_message, mission_logs_only=True)
-            print(f"   - Retrieved MISSION LOGS ONLY content length: {len(wiki_info)} chars")
-        else:
-            wiki_info = get_relevant_wiki_context(user_message)
-            print(f"   - Retrieved general log content length: {len(wiki_info)} chars")
+        # Standard log search behavior - ALWAYS FORCE MISSION LOGS ONLY
+        wiki_info = get_log_content(user_message, mission_logs_only=True)
+        print(f"   - Retrieved MISSION LOGS ONLY content length: {len(wiki_info)} chars")
     
     total_found = wiki_info.count("**") if wiki_info else 0
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
-    # Determine log type description based on strategy
-    if strategy.get('ship_logs_only'):
+    # Determine log type description based on strategy and selection
+    if is_selection:
+        if selection_type == 'random':
+            log_type_description = f"random mission log{' for ' + ship_name.upper() if ship_name else ''}"
+        elif selection_type in ['latest', 'recent']:
+            log_type_description = f"most recent mission logs{' for ' + ship_name.upper() if ship_name else ''}"
+        elif selection_type in ['first', 'earliest', 'oldest']:
+            log_type_description = f"earliest mission logs{' for ' + ship_name.upper() if ship_name else ''}"
+        elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
+            log_type_description = f"mission logs from {selection_type.replace('_', ' ')}{' for ' + ship_name.upper() if ship_name else ''}"
+        else:
+            log_type_description = f"{selection_type} mission logs{' for ' + ship_name.upper() if ship_name else ''}"
+    elif strategy.get('ship_logs_only'):
         log_type_description = f"logs mentioning {strategy.get('target_ship')}"
     elif strategy.get('character_logs_only'):
         log_type_description = f"logs mentioning {strategy.get('target_character')}"
-    elif strategy.get('log_specific'):
-        log_type_description = "mission logs only"
     else:
-        log_type_description = "logs and related content"
+        log_type_description = "mission logs only"
     
     return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with access to comprehensive ship databases.
 

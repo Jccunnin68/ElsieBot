@@ -515,18 +515,35 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
         controller = get_db_controller()
         print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
         
-        # Search for different types of logs using hierarchical search
-        if mission_logs_only:
-            log_types = ["mission_log"]
-            print(f"   🎯 SPECIFIC LOG REQUEST: Only searching mission_log type pages")
-        else:
-            log_types = ["mission_log"]
-            print(f"   📊 GENERAL LOG REQUEST: Comprehensive search including fallback")
+        # Check for log selection queries first
+        from handlers.ai_logic.query_detection import detect_log_selection_query
+        is_selection, selection_type, ship_name = detect_log_selection_query(query)
+        
+        if is_selection:
+            print(f"   🎯 LOG SELECTION DETECTED: type='{selection_type}', ship='{ship_name}'")
+            
+            if selection_type == 'random':
+                # Get one random log
+                return get_random_log_content(ship_name)
+            elif selection_type in ['latest', 'recent']:
+                # Get most recent logs
+                return get_temporal_log_content(selection_type, ship_name, limit=5)
+            elif selection_type in ['first', 'earliest', 'oldest']:
+                # Get oldest logs  
+                return get_temporal_log_content(selection_type, ship_name, limit=5)
+            elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
+                # Get date-filtered logs
+                return get_temporal_log_content(selection_type, ship_name, limit=10)
+        
+        # Standard log search with mission logs only enforcement
+        log_types = ["mission_log"]
+        print(f"   📊 STANDARD LOG REQUEST: Searching mission_log type pages only")
         
         all_results = []
         
         for log_type in log_types:
-            results = controller.search_pages(query, page_type=log_type, limit=10)  # Increased limit
+            # Force mission logs only for all log queries
+            results = controller.search_pages(query, page_type=log_type, limit=20, force_mission_logs_only=True)
             print(f"   📊 {log_type} hierarchical search returned {len(results)} results")
             all_results.extend(results)
         
@@ -1080,6 +1097,89 @@ def get_log_url(search_query: str) -> str:
     except Exception as e:
         print(f"✗ Error searching for page URL: {e}")
         return f"Error retrieving URL for '{search_query}': {e}"
+
+def get_random_log_content(ship_name: Optional[str] = None) -> str:
+    """Get one random mission log formatted for display"""
+    try:
+        controller = get_db_controller()
+        print(f"🎲 RANDOM LOG SELECTION: ship='{ship_name}'")
+        
+        random_log = controller.get_random_log(ship_name)
+        
+        if not random_log:
+            ship_msg = f" for {ship_name.upper()}" if ship_name else ""
+            print(f"   ❌ No random log found{ship_msg}")
+            return f"No mission logs found{ship_msg} in the database."
+        
+        title = random_log['title']
+        content = random_log['raw_content']
+        log_date = random_log.get('log_date', 'Unknown Date')
+        ship = random_log.get('ship_name', 'Unknown Ship')
+        
+        # Parse character speaking patterns in the log
+        parsed_content = parse_log_characters(content)
+        
+        # Format the random log with special indicator
+        formatted_log = f"**{title}** [Random Selection - {log_date}] ({ship.upper()})\n{parsed_content}"
+        
+        print(f"   ✅ Random log selected: '{title}' ({len(formatted_log)} chars)")
+        return formatted_log
+        
+    except Exception as e:
+        print(f"✗ Error getting random log content: {e}")
+        return f"Error retrieving random log: {e}"
+
+
+def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5) -> str:
+    """Get temporally ordered logs (newest or oldest first)"""
+    try:
+        controller = get_db_controller()
+        print(f"📅 TEMPORAL LOG SELECTION: type='{selection_type}', ship='{ship_name}', limit={limit}")
+        
+        results = controller.get_selected_logs(selection_type, ship_name, limit)
+        
+        if not results:
+            ship_msg = f" for {ship_name.upper()}" if ship_name else ""
+            print(f"   ❌ No {selection_type} logs found{ship_msg}")
+            return f"No {selection_type} mission logs found{ship_msg} in the database."
+        
+        log_contents = []
+        
+        for result in results:
+            title = result['title']
+            content = result['raw_content']
+            log_date = result.get('log_date', 'Unknown Date')
+            ship = result.get('ship_name', 'Unknown Ship')
+            
+            # Parse character speaking patterns in the log
+            parsed_content = parse_log_characters(content)
+            
+            # Format with temporal indicator
+            temporal_label = {
+                'latest': 'Latest',
+                'recent': 'Recent', 
+                'first': 'First',
+                'earliest': 'Earliest',
+                'oldest': 'Oldest',
+                'today': 'Today',
+                'yesterday': 'Yesterday',
+                'this_week': 'This Week',
+                'last_week': 'Last Week'
+            }.get(selection_type, selection_type.title())
+            
+            formatted_log = f"**{title}** [{temporal_label} - {log_date}] ({ship.upper()})\n{parsed_content}"
+            log_contents.append(formatted_log)
+            
+            print(f"   ✓ Added {selection_type} log: '{title}'")
+        
+        final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
+        print(f"✅ TEMPORAL LOG SELECTION COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
+        return final_content
+        
+    except Exception as e:
+        print(f"✗ Error getting temporal log content: {e}")
+        return f"Error retrieving {selection_type} logs: {e}"
+
 
 def get_recent_log_url(search_query: str) -> str:
     """Get recent log URL - redirects to get_log_url for consistency"""

@@ -268,6 +268,77 @@ def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
     return None
 
 
+def detect_log_selection_query(user_message: str) -> Tuple[bool, str, Optional[str]]:
+    """
+    Detect log selection queries with temporal and random selection
+    Returns (is_selection_query, selection_type, ship_name)
+    
+    Selection types:
+    - 'latest'/'last'/'most_recent' → Most recent by date DESC
+    - 'first'/'earliest'/'oldest' → Oldest by date ASC  
+    - 'random'/'pick' → Random selection from results
+    - 'today'/'yesterday'/'this_week' → Date-filtered
+    """
+    message = user_message.strip().lower()
+    
+    # Only process if this contains log indicators
+    if not any(indicator in message for indicator in LOG_SPECIFIC_INDICATORS + ['log', 'logs', 'mission']):
+        return False, "", None
+    
+    # Extract ship name if present
+    detected_ship = None
+    for ship in SHIP_NAMES:
+        if ship.lower() in message:
+            detected_ship = ship.lower()
+            break
+    
+    # Check for random selection keywords
+    random_patterns = [
+        'pick a log', 'pick', 'random log', 'any log', 'surprise me',
+        'choose a log', 'select a log', 'give me a log'
+    ]
+    
+    for pattern in random_patterns:
+        if pattern in message:
+            print(f"   🎲 Random log selection detected: '{pattern}' (ship: {detected_ship})")
+            return True, 'random', detected_ship
+    
+    # Check for temporal recent keywords (DESC order)
+    recent_patterns = [
+        'latest', 'last', 'most recent', 'newest', 'current', 'recent'
+    ]
+    
+    for pattern in recent_patterns:
+        if pattern in message:
+            print(f"   📅 Recent temporal query detected: '{pattern}' (ship: {detected_ship})")
+            return True, 'latest', detected_ship
+    
+    # Check for temporal old keywords (ASC order)
+    old_patterns = [
+        'first', 'earliest', 'oldest', 'original', 'initial'
+    ]
+    
+    for pattern in old_patterns:
+        if pattern in message:
+            print(f"   📅 Historical temporal query detected: '{pattern}' (ship: {detected_ship})")
+            return True, 'first', detected_ship
+    
+    # Check for date-based keywords
+    date_patterns = {
+        'today': 'today',
+        'yesterday': 'yesterday', 
+        'this week': 'this_week',
+        'last week': 'last_week'
+    }
+    
+    for pattern, selection_type in date_patterns.items():
+        if pattern in message:
+            print(f"   📅 Date-based query detected: '{pattern}' (ship: {detected_ship})")
+            return True, selection_type, detected_ship
+    
+    return False, "", None
+
+
 def extract_url_request(user_message: str) -> Tuple[bool, Optional[str]]:
     """
     Check if this is a request for a log URL and extract search terms.
@@ -540,6 +611,8 @@ def get_query_type(user_message: str) -> str:
         return "continuation"
     elif extract_url_request(user_message)[0]:
         return "url_request"
+    elif detect_log_selection_query(user_message)[0]:
+        return "log_selection"
     elif is_character_query(user_message)[0]:
         return "character"
     elif is_stardancer_query(user_message):
