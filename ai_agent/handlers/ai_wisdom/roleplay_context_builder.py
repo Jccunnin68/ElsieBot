@@ -8,7 +8,7 @@ including personality detection and database integration for roleplay queries.
 
 from typing import Dict, Any, List
 
-from handlers.ai_wisdom.content_retrieval_db import (
+from handlers.ai_wisdom.content_retriever import (
     get_log_content,
     search_by_type,
     get_tell_me_about_content_prioritized,

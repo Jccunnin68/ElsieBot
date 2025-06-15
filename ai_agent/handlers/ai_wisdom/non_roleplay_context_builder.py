@@ -1,25 +1,29 @@
 """
-Database Contexts - Standard Database Context Generation
-========================================================
+Non-Roleplay Context Builder - Standard and OOC Context Generation
+====================================================================
 
-This module handles context generation for standard database queries
-including character info, logs, ship data, and general information.
+This module handles context generation for all standard (non-roleplay) 
+database queries including character info, logs, ship data, OOC, and 
+general information.
 """
 
 from typing import Dict, Any
 
-from handlers.ai_wisdom.content_retrieval_db import (
+from handlers.ai_wisdom.content_retriever import (
     get_log_content,
     get_relevant_wiki_context,
     get_ship_information,
     search_by_type,
     get_tell_me_about_content_prioritized,
-    search_memory_alpha
+    search_memory_alpha,
+    get_log_url
 )
 from handlers.ai_logic.query_detection import (
     is_character_query,
     extract_tell_me_about_subject,
-    extract_ship_log_query
+    extract_ship_log_query,
+    extract_ooc_log_url_request, 
+    is_ooc_query
 )
 from handlers.handlers_utils import convert_earth_date_to_star_trek
 
@@ -115,7 +119,7 @@ def _get_character_info_optimized(character_name: str) -> str:
     to prevent massive context chunking for character queries.
     """
     try:
-        from handlers.ai_wisdom.content_retrieval_db import get_db_controller
+        from handlers.ai_wisdom.content_retriever import get_db_controller
         
         controller = get_db_controller()
         print(f"🎯 OPTIMIZED CHARACTER SEARCH: '{character_name}'")
@@ -204,7 +208,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
         
         # Use database controller to search ship-specific logs only
         try:
-            from handlers.ai_wisdom.content_retrieval_db import get_db_controller
+            from handlers.ai_wisdom.content_retriever import get_db_controller
             controller = get_db_controller()
             
             # Search for logs that mention the target ship
@@ -241,7 +245,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
         
         # Use database controller to search character-specific logs only
         try:
-            from handlers.ai_wisdom.content_retrieval_db import get_db_controller
+            from handlers.ai_wisdom.content_retriever import get_db_controller
             controller = get_db_controller()
             
             # Search for logs that mention the target character
@@ -469,4 +473,57 @@ def get_general_with_context(user_message: str) -> str:
     wiki_info = get_relevant_wiki_context(user_message)
     print(f"   - Retrieved general context length: {len(wiki_info)} chars")
     
-    return convert_earth_date_to_star_trek(wiki_info) if wiki_info else "" 
+    return convert_earth_date_to_star_trek(wiki_info) if wiki_info else ""
+
+
+def handle_ooc_url_request(user_message: str) -> str:
+    """Handle OOC URL requests directly."""
+    is_url_request, search_query = extract_ooc_log_url_request(user_message)
+    if not is_url_request:
+        return "I can't seem to figure out which URL you need. Could you be more specific?"
+        
+    print(f"🔗 EXECUTING OOC URL STRATEGY: '{search_query}'")
+    print(f"   ⚠️  OOC URL Request: Will preserve real Earth dates in response")
+    url_response = get_log_url(search_query)
+    print(f"   - URL response: {url_response}")
+    return url_response
+
+
+def get_ooc_context(user_message: str) -> str:
+    """Generate context for OOC queries."""
+    print(f"📋 SEARCHING OOC DATA")
+    wiki_info = get_relevant_wiki_context(user_message)
+    print(f"   - Retrieved OOC context length: {len(wiki_info)} chars")
+    
+    print(f"   ⚠️  OOC Query: Skipping date conversion to preserve real Earth dates")
+    
+    ooc_query = is_ooc_query(user_message)[1]
+    if any(word in ooc_query.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']):
+        return f"""You are Elsie, providing Out-Of-Character (OOC) information about game schedules and meetings.
+
+CRITICAL INSTRUCTIONS FOR OOC SCHEDULE QUERIES:
+- Provide complete information about meeting times, schedules, and Game Masters
+- Include all relevant scheduling details
+- Be direct and clear about times, dates, and frequencies
+- Specify time zones when mentioned
+- List all relevant GMs and their roles
+- Use REAL EARTH DATES - do not convert to Star Trek era dates
+- Keep all scheduling information in actual Earth calendar format
+
+{f"SCHEDULE INFORMATION: {wiki_info}" if wiki_info else ""}
+
+Respond with the complete scheduling information requested using real Earth dates and times."""
+    else:
+        return f"""You are Elsie, providing Out-Of-Character (OOC) information from the Players Handbook.
+
+CRITICAL INSTRUCTIONS FOR OOC QUERIES:
+- Focus on rules, mechanics, species traits, and character creation details
+- Be direct and factual in your responses
+- Keep responses clear and concise
+- Use REAL EARTH DATES where applicable - do not convert to Star Trek era dates
+
+{f"PLAYERS HANDBOOK QUERY: {ooc_query}" if ooc_query else ""}
+
+{f"HANDBOOK INFORMATION: {wiki_info}" if wiki_info else ""}
+
+Respond with ONLY the relevant Players Handbook information using real Earth dates.""" 

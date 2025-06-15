@@ -80,8 +80,9 @@ This section provides a more detailed breakdown of the internal architecture of 
 ### Core Components
 
 -   **`main.py`**: The main FastAPI application file. It defines the API endpoints (`/process`, `/health`), manages the application lifecycle (startup/shutdown), and handles incoming requests.
--   **`database_controller.py`**: The low-level controller for database interactions. It manages the connection pool to the `elsiebrain` PostgreSQL database and executes raw SQL queries.
--   **`content_retrieval_db.py`**: A high-level abstraction layer that provides simple, purpose-built functions (e.g., `get_character_context`) that the rest of the application can use.
+-   **`database_controller.py`**: A low-level module that handles direct communication with the PostgreSQL database. It uses `psycopg2` for connections and queries.
+-   **`content_retriever.py`**: A high-level abstraction layer that provides simple, purpose-built functions (e.g., `get_character_context`) that the rest of the application can use.
+-   **`__init__.py`**: Exposes the necessary functions from the `database` package to the rest of the application, simplifying imports.
 -   **`handlers/`**: This directory contains the core intelligence of the AI agent:
     -   **`ai_act` & `ai_coordinator`**: The top-level coordinators that interface with `main.py` and direct requests through the processing pipeline.
     -   **`ai_logic`**: Contains the "inner monologue" of the bot, determining response strategy and detecting user intent.
@@ -109,8 +110,8 @@ graph TD
     end
 
     subgraph "Database Layer"
-        G -- "get_context()" --> J(content_retrieval_db.py);
-        J -- "SELECT..." --> K(database_controller.py);
+        G -- "get_context()" --> J(content_retriever.py);
+        J -- "query()" --> K(database_controller.py);
         K -- "SQL" --> L[(elsiebrain DB)];
     end
     

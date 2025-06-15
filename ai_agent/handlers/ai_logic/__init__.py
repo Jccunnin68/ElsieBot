@@ -29,8 +29,6 @@ from .non_roleplay_handler import handle_non_roleplay_message
 # Utility imports
 try:
     from .query_detection import *
-    from .log_patterns import *
-    from .log_processor import *
     from .context_detection import *
 except ImportError as e:
     print(f"Warning: Could not import some ai_logic utilities: {e}")

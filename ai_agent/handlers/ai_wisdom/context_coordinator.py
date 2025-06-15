@@ -3,13 +3,13 @@ Context Coordinator - Main Database Context Coordination
 ========================================================
 
 This module contains the main coordination logic for database context
-generation, routing different types of queries to appropriate handlers.
+generation, routing between roleplay and non-roleplay context builders.
 """
 
 from typing import Dict, Any
 
-from .roleplay_contexts import get_enhanced_roleplay_context
-from .database_contexts import (
+from .roleplay_context_builder import get_enhanced_roleplay_context
+from .non_roleplay_context_builder import (
     get_character_context,
     get_logs_context,
     get_tell_me_about_context,
@@ -17,63 +17,61 @@ from .database_contexts import (
     get_stardancer_info_context,
     get_ship_logs_context,
     get_general_with_context,
-    get_focused_continuation_context
+    get_focused_continuation_context,
+    get_ooc_context
 )
-from .ooc_handlers import get_ooc_context
-
 
 def get_context_for_strategy(strategy: Dict[str, Any], user_message: str) -> str:
     """
-    SIMPLIFIED context coordinator - routes based on approach type.
-    
-    The new architecture routes based on mode:
-    - Roleplay approaches → use roleplay_contexts.py (EXISTING)
-    - Database approaches → use database_contexts.py (EXISTING)
+    Routes the request to the appropriate context builder based on the strategy.
+    - Roleplay approaches are handled by the roleplay_context_builder.
+    - All other database/OOC approaches are handled by the non_roleplay_context_builder.
     """
     approach = strategy.get('approach')
     
     print(f"🎯 CONTEXT COORDINATOR: Routing approach '{approach}'")
     
-    # Roleplay approaches → use enhanced roleplay context system
-    if approach in ['roleplay_active', 'roleplay_mock_enhanced'] or approach.startswith('roleplay'):
-        print(f"   🎭 ROLEPLAY CONTEXT: Using enhanced roleplay context system")
+    # Route to Roleplay Context Builder
+    if approach and approach.startswith('roleplay'):
+        print(f"   🎭 ROUTING TO: Roleplay Context Builder")
         return get_enhanced_roleplay_context(strategy, user_message)
     
-    # Database approaches → use database_contexts.py (EXISTING)
+    # Route to Non-Roleplay Context Builder for specific database queries
     elif approach == 'character_info':
-        print(f"   📚 DATABASE CONTEXT: Character info")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Character Info)")
         return get_character_context(user_message, strategy)
     elif approach == 'federation_archives':
-        print(f"   📚 DATABASE CONTEXT: Federation archives")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Federation Archives)")
         return get_federation_archives_context(user_message)
     elif approach == 'logs':
-        print(f"   📚 DATABASE CONTEXT: Logs")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Logs)")
         return get_logs_context(user_message, strategy)
     elif approach == 'tell_me_about':
-        print(f"   📚 DATABASE CONTEXT: Tell me about")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Tell Me About)")
         return get_tell_me_about_context(user_message)
     elif approach == 'stardancer_info':
-        print(f"   📚 DATABASE CONTEXT: Stardancer info")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Stardancer Info)")
         return get_stardancer_info_context(user_message, strategy)
     elif approach == 'ship_logs':
-        print(f"   📚 DATABASE CONTEXT: Ship logs")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Ship Logs)")
         return get_ship_logs_context(user_message)
     elif approach == 'ooc':
-        print(f"   📚 DATABASE CONTEXT: OOC")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (OOC)")
         return get_ooc_context(user_message)
     elif approach == 'general_with_context':
-        print(f"   📚 DATABASE CONTEXT: General with context")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (General)")
         return get_general_with_context(user_message)
     elif approach == 'focused_continuation':
-        print(f"   📚 DATABASE CONTEXT: Focused continuation")
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (Focused Continuation)")
         return get_focused_continuation_context(strategy)
     
-    # Mock approaches don't need context
-    elif approach.startswith('mock_') or approach in ['menu_request', 'reset']:
-        print(f"   🤖 NO CONTEXT: Mock response '{approach}'")
+    # Mock approaches or approaches that don't require context
+    elif approach and (approach.startswith('mock_') or approach in ['menu_request', 'reset']):
+        print(f"   🤖 NO CONTEXT: Mock or menu response for approach '{approach}'")
         return ""
     
-    print(f"   ❓ UNKNOWN APPROACH: '{approach}' - no context provided")
+    # Fallback for any unknown approach
+    print(f"   ❓ UNKNOWN/NO-CONTEXT APPROACH: '{approach}' - no context will be provided.")
     return ""
 
 
