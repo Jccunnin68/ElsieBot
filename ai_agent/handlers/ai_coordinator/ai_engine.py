@@ -19,7 +19,6 @@ from handlers.handlers_utils import (
     estimate_token_count
 )
 from handlers.ai_attention.state_manager import get_roleplay_state
-from handlers.ai_logic.query_detection import is_stardancer_query
 from handlers.ai_coordinator.conversation_utils import format_conversation_history_with_dgm_elsie
 from handlers.ai_emotion import get_mock_response
 from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
@@ -281,16 +280,6 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         
         # Set default context for simple chats and cases without specific context
         if not context:
-            stardancer_mentioned = is_stardancer_query(user_message) or (wiki_info and 'stardancer' in wiki_info.lower())
-            
-            stardancer_guard_rail = ""
-            if stardancer_mentioned:
-                stardancer_guard_rail = """
-IMPORTANT USS STARDANCER GUARD RAIL:
-- When discussing the USS Stardancer, use database information when available
-- Only avoid inventing details if no database information is provided
-- If you have relevant Stardancer information from the database context, share it confidently"""
-            
             # Detect personality context for non-roleplay conversations
             personality_context = detect_general_personality_context(user_message)
             
@@ -323,7 +312,6 @@ COMMUNICATION STYLE:
 - Keep the holographic bartender roleplay elements minimal unless specifically relevant
 
 CURRENT SETTING: You're aboard the USS Stardancer with access to ship databases and Federation archives. When users ask for information, you can provide detailed, comprehensive responses without artificial length restrictions.
-{stardancer_guard_rail}
 
 {f"AVAILABLE INFORMATION: {wiki_info}" if wiki_info else ""}
 
