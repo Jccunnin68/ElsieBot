@@ -5,9 +5,11 @@ Test script for Elsie's poetic short circuit feature
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'ai_agent'))
 
-from ai_agent.handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
+# Add the parent directory to the path so we can import the handlers
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
 
 def test_poetic_circuits():
     """Test the poetic short circuit functionality"""

@@ -6,10 +6,16 @@ This script demonstrates how the new conversation memory system works
 to enhance Elsie's roleplay responses with better continuity and context.
 """
 
-from ai_agent.handlers.ai_attention.conversation_memory import ConversationMemory, getNextResponse, track_elsie_response, format_conversation_for_context
-from ai_agent.handlers.ai_logic.response_decision_engine import create_response_decision_engine
-from ai_agent.handlers.ai_attention.context_gatherer import build_contextual_cues
-from ai_agent.handlers.ai_attention.state_manager import get_roleplay_state
+import sys
+import os
+
+# Add the parent directory to the path so we can import the handlers
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from handlers.ai_attention.conversation_memory import ConversationMemory, getNextResponse, track_elsie_response, format_conversation_for_context
+from handlers.ai_logic.response_decision_engine import create_response_decision_engine
+from handlers.ai_attention.context_gatherer import build_contextual_cues
+from handlers.ai_attention.state_manager import get_roleplay_state
 
 
 def demo_conversation_flow():

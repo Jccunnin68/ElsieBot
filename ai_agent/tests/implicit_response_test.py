@@ -6,9 +6,15 @@ Test script to verify that implicit response functionality works correctly
 in DGM sessions with the new conversation memory system.
 """
 
-from ai_agent.handlers.ai_attention.state_manager import RoleplayStateManager
-from ai_agent.handlers.ai_attention.conversation_memory import ConversationMemory
-from ai_agent.handlers.ai_logic.response_router import route_message_to_handler
+import sys
+import os
+
+# Add the parent directory to the path so we can import the handlers
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from handlers.ai_attention.state_manager import RoleplayStateManager
+from handlers.ai_attention.conversation_memory import ConversationMemory
+from handlers.ai_logic.response_router import route_message_to_handler
 
 
 def test_dgm_implicit_response():

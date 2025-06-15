@@ -5,7 +5,7 @@ from typing import Optional
 import requests
 from urllib.parse import quote
 import re
-from ai_agent.handlers.ai_wisdom.log_patterns import CHARACTER_CORRECTIONS, SHIP_NAMES
+from .log_patterns import CHARACTER_CORRECTIONS, SHIP_NAMES
 
 def is_ship_log_title(title: str) -> bool:
     """Enhanced ship log title detection supporting multiple formats:

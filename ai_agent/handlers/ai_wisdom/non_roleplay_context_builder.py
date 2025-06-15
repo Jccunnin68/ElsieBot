@@ -18,13 +18,7 @@ from handlers.ai_wisdom.content_retriever import (
     search_memory_alpha,
     get_log_url
 )
-from handlers.ai_logic.query_detection import (
-    is_character_query,
-    extract_tell_me_about_subject,
-    extract_ship_log_query,
-    extract_ooc_log_url_request, 
-    is_ooc_query
-)
+# Note: Using local imports to avoid circular dependency with query_detection
 from handlers.handlers_utils import convert_earth_date_to_star_trek
 
 
@@ -78,6 +72,8 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None) ->
     if strategy and 'character_name' in strategy:
         character_name = strategy['character_name']
     else:
+        # Local import to avoid circular dependency
+        from handlers.ai_logic.query_detection import is_character_query
         is_character, character_name = is_character_query(user_message)
     
     print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}'")
@@ -330,6 +326,8 @@ Present a comprehensive summary of the log content provided above. Be thorough a
 
 def get_tell_me_about_context(user_message: str) -> str:
     """Generate context for 'tell me about' queries."""
+    # Local import to avoid circular dependency
+    from handlers.ai_logic.query_detection import extract_tell_me_about_subject
     tell_me_about_subject = extract_tell_me_about_subject(user_message)
     print(f"📖 SEARCHING TELL ME ABOUT DATA: '{tell_me_about_subject}'")
     wiki_info = get_tell_me_about_content_prioritized(tell_me_about_subject)
@@ -365,6 +363,8 @@ Provide a comprehensive and detailed response focusing on the people and stories
 
 def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any]) -> str:
     """Generate context for Stardancer information queries."""
+    # Local import to avoid circular dependency
+    from handlers.ai_logic.query_detection import extract_tell_me_about_subject
     tell_me_about_subject = extract_tell_me_about_subject(user_message) or "USS Stardancer"
     is_command_query = strategy.get('command_query', False)
     
@@ -426,6 +426,8 @@ Respond with your warm, personable, and engaging manner while strictly adhering 
 
 def get_ship_logs_context(user_message: str) -> str:
     """Generate context for ship log queries."""
+    # Local import to avoid circular dependency
+    from handlers.ai_logic.query_detection import extract_ship_log_query
     is_ship_log, ship_details = extract_ship_log_query(user_message)
     ship_name = ship_details['ship']
     print(f"🚢 SEARCHING COMPREHENSIVE SHIP DATA: {ship_name.upper()}")
@@ -478,6 +480,8 @@ def get_general_with_context(user_message: str) -> str:
 
 def handle_ooc_url_request(user_message: str) -> str:
     """Handle OOC URL requests directly."""
+    # Local import to avoid circular dependency
+    from handlers.ai_logic.query_detection import extract_ooc_log_url_request
     is_url_request, search_query = extract_ooc_log_url_request(user_message)
     if not is_url_request:
         return "I can't seem to figure out which URL you need. Could you be more specific?"
@@ -497,6 +501,8 @@ def get_ooc_context(user_message: str) -> str:
     
     print(f"   ⚠️  OOC Query: Skipping date conversion to preserve real Earth dates")
     
+    # Local import to avoid circular dependency
+    from handlers.ai_logic.query_detection import is_ooc_query
     ooc_query = is_ooc_query(user_message)[1]
     if any(word in ooc_query.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']):
         return f"""You are Elsie, providing Out-Of-Character (OOC) information about game schedules and meetings.

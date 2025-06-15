@@ -5,10 +5,12 @@ Test script for enhanced query detection logic
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'ai_agent'))
+
+# Add the parent directory to the path so we can import the handlers
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 try:
-    from ai_agent.handlers.ai_logic.query_detection import (
+    from handlers.ai_logic.query_detection import (
         should_prioritize_logs_over_general_info,
         is_ship_plus_log_query,
         is_character_plus_log_query,

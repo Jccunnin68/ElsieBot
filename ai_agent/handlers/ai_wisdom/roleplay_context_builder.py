@@ -14,12 +14,8 @@ from handlers.ai_wisdom.content_retriever import (
     get_tell_me_about_content_prioritized,
     get_ship_information
 )
-from handlers.ai_logic.query_detection import (
-    is_stardancer_query,
-    is_character_query,
-    extract_tell_me_about_subject,
-    is_log_query
-)
+# Note: Using local imports to avoid circular dependency with query_detection
+from handlers.ai_wisdom.log_patterns import is_log_query
 
 
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
@@ -744,6 +740,8 @@ def _get_roleplay_database_context(user_message: str) -> str:
     
     # FALLBACK: Check for standard "tell me about" queries if nothing else matched
     if not context_parts:
+        # Local import to avoid circular dependency
+        from handlers.ai_logic.query_detection import extract_tell_me_about_subject
         tell_me_subject = extract_tell_me_about_subject(user_message)
         if tell_me_subject:
             print(f"   📚 GENERAL QUERY IN ROLEPLAY - Getting info about: {tell_me_subject}")

@@ -26,13 +26,6 @@ from .response_decision import ResponseDecision
 
 from .non_roleplay_handler import handle_non_roleplay_message
 
-# Utility imports
-try:
-    from .query_detection import *
-    from .context_detection import *
-except ImportError as e:
-    print(f"Warning: Could not import some ai_logic utilities: {e}")
-
 # Context detection utilities
 from .context_detection import (
     detect_who_elsie_addressed,

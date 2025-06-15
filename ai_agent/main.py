@@ -1,14 +1,11 @@
 """Main FastAPI application for the AI Agent"""
 
 import os
-import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from handlers.ai_coordinator import coordinate_response
-from config import get_config
-from database_controller import check_db_connection, close_db_connection, get_db_controller
 from handlers.ai_wisdom.content_retriever import check_elsiebrain_connection, run_database_cleanup
 import traceback
 
