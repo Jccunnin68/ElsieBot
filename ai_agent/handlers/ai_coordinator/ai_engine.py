@@ -389,13 +389,18 @@ Stay helpful and informative. When providing database information, be thorough a
                 print(f"🛑 Filtered out AI-generated conversation continuation")
                 break
         
-        # Filter meeting information unless it's an OOC schedule query
-        if strategy['approach'] != 'ooc' or (strategy['approach'] == 'ooc' and 
-            not any(word in user_message.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master'])):
+        # Determine if this is a roleplay response (should use Star Trek dates)
+        is_roleplay_response = strategy.get('approach', '').startswith('roleplay')
+        
+        # Filter meeting information unless it's a non-roleplay schedule query
+        schedule_terms = ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']
+        is_schedule_query = any(word in user_message.lower() for word in schedule_terms)
+        if is_roleplay_response or not is_schedule_query:
             response_text = filter_meeting_info(response_text)
         
-        # Apply date conversion EXCEPT for OOC queries
-        if strategy['approach'] != 'ooc':
+        # Apply Star Trek date conversion ONLY for roleplay queries
+        # Non-roleplay queries preserve real Earth dates for accuracy
+        if is_roleplay_response:
             response_text = convert_earth_date_to_star_trek(response_text)
         
         # Check for poetic short circuit during casual dialogue

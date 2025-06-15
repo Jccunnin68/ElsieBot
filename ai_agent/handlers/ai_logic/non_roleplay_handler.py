@@ -19,7 +19,7 @@ from .response_decision import ResponseDecision
 from .query_detection import (
     is_character_query, is_log_query, extract_tell_me_about_subject,
     is_stardancer_query, is_federation_archives_request, 
-    extract_ship_log_query, is_ooc_query
+    extract_ship_log_query, extract_url_request
 )
 
 
@@ -103,8 +103,8 @@ def detect_non_roleplay_query_type(user_message: str) -> str:
         return 'federation_archives'
     elif extract_ship_log_query(user_message)[0]:
         return 'ship_logs'
-    elif is_ooc_query(user_message)[0]:
-        return 'ooc_query'
+    elif extract_url_request(user_message)[0]:
+        return 'url_request'
     
     # Default
     else:
@@ -240,7 +240,7 @@ def _build_database_strategy(user_message: str, query_type: str) -> Dict:
         'tell_me_about': 'tell_me_about',
         'federation_archives': 'federation_archives',
         'ship_logs': 'ship_logs',
-        'ooc_query': 'ooc'
+        'url_request': 'url_request'
     }
     
     approach = approach_mapping.get(query_type, 'general_with_context')

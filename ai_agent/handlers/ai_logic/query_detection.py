@@ -19,23 +19,6 @@ from handlers.ai_wisdom.log_patterns import is_log_query, has_log_specific_terms
 
 # Define all pattern recognition constants locally (moved from config.py)
 
-OOC_PREFIX = "OOC"
-OOC_KEYWORDS = [
-    'players handbook',
-    'phb',
-    'rules',
-    'species traits',
-    'character creation',
-    'mechanics',
-    'game mechanics',
-    'link',
-    'url',
-    'page',
-    'get me',
-    'show me',
-    'find'
-]
-
 CHARACTER_PATTERNS = [
     r"tell.*about (?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
     r"who (?:is|was) (?:captain |commander |lieutenant |doctor |dr\. |ensign |chief )?(?P<name>[A-Z][a-z]+(?: [A-Z][a-z']*)*)",
@@ -285,47 +268,14 @@ def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
     return None
 
 
-def is_ooc_query(user_message: str) -> Tuple[bool, Optional[str]]:
+def extract_url_request(user_message: str) -> Tuple[bool, Optional[str]]:
     """
-    Check if the message is an out-of-character query.
-    Returns (is_ooc, subject) where subject is the query without the OOC prefix.
-    """
-    message = user_message.strip()
-    if not message.upper().startswith(OOC_PREFIX):
-        return False, None
-        
-    # Remove OOC prefix and get the actual query
-    query = message[len(OOC_PREFIX):].strip()
-    if not query:
-        return False, None
-        
-    # Check for log URL patterns first (specific pattern)
-    log_url_pattern = r'link\s+me\s+the\s+log\s+page\s+for\s+the\s+last\s+(\w+)'
-    url_match = re.search(log_url_pattern, query, re.IGNORECASE)
-    if url_match:
-        return True, query  # Return the full query for processing
-        
-    # Check if query contains any OOC keywords
-    query_lower = query.lower()
-    if any(keyword in query_lower for keyword in OOC_KEYWORDS):
-        return True, query
-        
-    return False, None
-
-
-def extract_ooc_log_url_request(user_message: str) -> Tuple[bool, Optional[str]]:
-    """
-    Check if this is an OOC request for a log URL and extract search terms.
+    Check if this is a request for a log URL and extract search terms.
     Returns (is_url_request, search_query)
     """
-    message = user_message.strip()
-    if not message.upper().startswith(OOC_PREFIX):
-        return False, None
-        
-    # Remove OOC prefix and get the actual query
-    query = message[len(OOC_PREFIX):].strip()
+    message = user_message.strip().lower()
     
-    # Multiple patterns for log URL requests
+    # Multiple patterns for log URL requests (without OOC prefix requirement)
     log_url_patterns = [
         # "link me the log page for the last [shipname]"
         r'link\s+me\s+the\s+log\s+page\s+for\s+the\s+last\s+(\w+)',
@@ -354,7 +304,7 @@ def extract_ooc_log_url_request(user_message: str) -> Tuple[bool, Optional[str]]
     ]
     
     for pattern in log_url_patterns:
-        url_match = re.search(pattern, query, re.IGNORECASE)
+        url_match = re.search(pattern, message, re.IGNORECASE)
         if url_match:
             search_query = url_match.group(1).strip()
             # Remove common words that don't help with search
@@ -363,7 +313,7 @@ def extract_ooc_log_url_request(user_message: str) -> Tuple[bool, Optional[str]]
             search_query = re.sub(r'\s+', ' ', search_query).strip()
             
             if search_query:  # Only return if we have a valid search query
-                print(f"   🔗 OOC URL pattern matched: '{pattern}' -> '{search_query}'")
+                print(f"   🔗 URL pattern matched: '{pattern}' -> '{search_query}'")
                 return True, search_query
     
     return False, None
@@ -588,6 +538,8 @@ def get_query_type(user_message: str) -> str:
     """Get the type of query to help detect topic changes"""
     if is_continuation_request(user_message):
         return "continuation"
+    elif extract_url_request(user_message)[0]:
+        return "url_request"
     elif is_character_query(user_message)[0]:
         return "character"
     elif is_stardancer_query(user_message):
@@ -596,8 +548,6 @@ def get_query_type(user_message: str) -> str:
         return "ship_log"
     elif is_log_query(user_message):
         return "log"
-    elif is_ooc_query(user_message)[0]:
-        return "ooc"
     elif extract_tell_me_about_subject(user_message):
         return "tell_me_about"
     else:

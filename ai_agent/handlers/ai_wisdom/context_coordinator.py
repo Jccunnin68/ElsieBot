@@ -18,14 +18,14 @@ from .non_roleplay_context_builder import (
     get_ship_logs_context,
     get_general_with_context,
     get_focused_continuation_context,
-    get_ooc_context
+    handle_url_request
 )
 
 def get_context_for_strategy(strategy: Dict[str, Any], user_message: str) -> str:
     """
     Routes the request to the appropriate context builder based on the strategy.
     - Roleplay approaches are handled by the roleplay_context_builder.
-    - All other database/OOC approaches are handled by the non_roleplay_context_builder.
+    - All other database approaches are handled by the non_roleplay_context_builder.
     """
     approach = strategy.get('approach')
     
@@ -55,9 +55,9 @@ def get_context_for_strategy(strategy: Dict[str, Any], user_message: str) -> str
     elif approach == 'ship_logs':
         print(f"   📚 ROUTING TO: Non-Roleplay Builder (Ship Logs)")
         return get_ship_logs_context(user_message)
-    elif approach == 'ooc':
-        print(f"   📚 ROUTING TO: Non-Roleplay Builder (OOC)")
-        return get_ooc_context(user_message)
+    elif approach == 'url_request':
+        print(f"   📚 ROUTING TO: Non-Roleplay Builder (URL Request)")
+        return handle_url_request(user_message)
     elif approach == 'general_with_context':
         print(f"   📚 ROUTING TO: Non-Roleplay Builder (General)")
         return get_general_with_context(user_message)

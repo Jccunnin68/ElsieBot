@@ -47,7 +47,8 @@ def get_focused_continuation_context(strategy: Dict[str, Any]) -> str:
     
     print(f"   - Retrieved focused content length: {len(wiki_info)} chars")
     
-    converted_wiki_info = convert_earth_date_to_star_trek(wiki_info) if wiki_info else wiki_info
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_wiki_info = wiki_info
     
     return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance
 
@@ -59,9 +60,12 @@ CRITICAL INSTRUCTIONS FOR FOCUSED CONTINUATION:
 - If the focus subject is not in the database, say: "I don't have additional information about {focus_subject} in my database"
 - Structure your response as a deeper analysis of this specific aspect
 - Be thorough and comprehensive in presenting the information
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 FOCUSED DATABASE SEARCH RESULTS for "{focus_subject}":
 {converted_wiki_info if converted_wiki_info else f"No additional information found for '{focus_subject}' in the database."}
+
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Provide a focused, detailed response about {focus_subject} specifically. Be comprehensive and informative."""
 
@@ -85,7 +89,8 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None) ->
         # Use optimized character search that prioritizes exact title matches
         character_info = _get_character_info_optimized(character_name)
     
-    converted_character_info = convert_earth_date_to_star_trek(character_info) if character_info else character_info
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_character_info = character_info
     
     return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
@@ -100,11 +105,12 @@ CRITICAL INSTRUCTIONS FOR CHARACTER QUERIES:
 - If character information is not in the database, say: "I don't have any records for {character_name} in my database"
 - Provide a comprehensive summary and ask: "Would you like to explore any particular aspect of their story?"
 - DO NOT include meeting times, GM names, or session schedule information
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 CHARACTER DATABASE ACCESS:
 {converted_character_info if converted_character_info else f"No records found for '{character_name}' in the database."}
 
-NOTE: All Earth dates have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after).
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Provide a comprehensive and informative summary of what made them notable in the fleet."""
 
@@ -171,7 +177,8 @@ def get_federation_archives_context(user_message: str) -> str:
     archives_info = search_memory_alpha(search_query, limit=3, is_federation_archives=True)
     print(f"   - Retrieved archives content length: {len(archives_info)} chars")
     
-    converted_archives_info = convert_earth_date_to_star_trek(archives_info) if archives_info else archives_info
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_archives_info = archives_info
     
     return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
@@ -183,11 +190,12 @@ CRITICAL INSTRUCTIONS FOR FEDERATION ARCHIVES ACCESS:
 - Be thorough and informative when presenting the archive information
 - If no archives information is found, say: "The federation archives don't have any information on that topic"
 - Provide comprehensive details and ask: "Would you like me to search for anything else in the archives?"
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 FEDERATION ARCHIVES ACCESS:
 {converted_archives_info if converted_archives_info else f"The federation archives don't seem to have information on '{search_query}' available."}
 
-NOTE: All Earth dates have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after).
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Present the archives information comprehensively and reference it as external federation data."""
 
@@ -282,7 +290,8 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     
     total_found = wiki_info.count("**") if wiki_info else 0
     
-    converted_wiki_info = convert_earth_date_to_star_trek(wiki_info) if wiki_info else wiki_info
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_wiki_info = wiki_info
     
     # Determine log type description based on strategy
     if strategy.get('ship_logs_only'):
@@ -300,7 +309,7 @@ CRITICAL INSTRUCTIONS FOR LOG QUERIES - ENHANCED SEARCH STRATEGY:
 - You are being asked to summarize or explain {log_type_description}
 - ENHANCED SEARCH was performed: prioritizing log-specific content over general information
 - Search focused specifically on mission logs when ship/character names were combined with log terms
-- ALL DATES have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after)
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 DATABASE QUERY: "{user_message}"
 SEARCH STRATEGY: {strategy.get('reasoning', 'Standard log search')}
@@ -321,6 +330,8 @@ STRICT DATABASE ADHERENCE REQUIRED:
 DATABASE SEARCH RESULTS:
 {converted_wiki_info}
 
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
+
 Present a comprehensive summary of the log content provided above. Be thorough and detailed in your analysis."""
 
 
@@ -333,7 +344,8 @@ def get_tell_me_about_context(user_message: str) -> str:
     wiki_info = get_tell_me_about_content_prioritized(tell_me_about_subject)
     print(f"   - Retrieved prioritized content length: {len(wiki_info)} chars")
     
-    converted_wiki_info = convert_earth_date_to_star_trek(wiki_info) if wiki_info else wiki_info
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_wiki_info = wiki_info
     
     return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with comprehensive access to ship and fleet databases.
 
@@ -343,6 +355,7 @@ CRITICAL INSTRUCTIONS FOR "TELL ME ABOUT" QUERIES:
 - DO NOT invent, create, or extrapolate beyond database content
 - Be comprehensive and thorough in your responses
 - Present information in an organized, detailed manner
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 RESPONSE GUIDELINES:
 FOR SHIPS: Include specifications, history, crew assignments, and notable missions
@@ -356,7 +369,7 @@ If no database information is found, state clearly: "I don't have information ab
 DATABASE SEARCH RESULTS:
 {converted_wiki_info if converted_wiki_info else f"No information found for '{tell_me_about_subject}' in the database."}
 
-NOTE: All Earth dates have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after).
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Provide a comprehensive and detailed response focusing on the people and stories first, with complete context and information."""
 
@@ -394,7 +407,8 @@ def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any]) -> 
         if ship_results and ship_results not in stardancer_info:
             stardancer_info += f"\n\n---STARDANCER INFO FOR '{search_query}'---\n\n{ship_results}"
     
-    converted_stardancer_info = convert_earth_date_to_star_trek(stardancer_info) if stardancer_info else ""
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_stardancer_info = stardancer_info
     
     return f"""You are Elsie, the intelligent, attentive hologram aboard the USS Stardancer. when responding to a request for information about the stardancer, you are to respond with a warm, personable, and engaging manner.
 
@@ -406,6 +420,7 @@ CRITICAL GUARD RAILS FOR USS STARDANCER QUERIES:
 - DO NOT make up names, ranks, or positions for Stardancer personnel
 - DO NOT extrapolate or assume command structure beyond what's explicitly stated
 - If no Stardancer information is found, say: "I don't have specific information about the Stardancer in my database right now"
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 {"COMMAND STAFF QUERY: This is asking about Stardancer command staff. The database search below contains extensive Stardancer information including personnel records. Look for and share any captain, commander, first officer, XO, or command crew information you find. Be confident in providing the command structure and personnel details from the database." if is_command_query else ""}
 
@@ -419,7 +434,7 @@ STRICT DATABASE ADHERENCE REQUIRED:
 STARDANCER DATABASE:
 {converted_stardancer_info if converted_stardancer_info else "No specific USS Stardancer information found in the ship database."}
 
-NOTE: All Earth dates have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after).
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Respond with your warm, personable, and engaging manner while strictly adhering to the database information. Never invent command staff or personnel."""
 
@@ -449,7 +464,8 @@ def get_ship_logs_context(user_message: str) -> str:
             comprehensive_ship_info += f"\n\n---SHIP LOGS FOR '{search_query}'---\n\n{log_results}"
             total_ship_entries += log_results.count("**")
     
-    converted_ship_info = convert_earth_date_to_star_trek(comprehensive_ship_info) if comprehensive_ship_info else comprehensive_ship_info
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_ship_info = comprehensive_ship_info
     
     return f"""You are Elsie, the intelligent, attentive, and holographic bartender aboard the USS Stardancer. Your background in dance and music influences your warm, personable way of speaking.
 
@@ -460,11 +476,12 @@ CRITICAL INSTRUCTIONS FOR SHIP QUERIES:
 - Use musical metaphors: "orchestrated missions," "in perfect harmony," etc.
 - If no information found, say: "That ship hasn't graced my database yet"
 - End with: "Would you like me to explore any particular chapter of their story?"
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 SHIP DATABASE SEARCH RESULTS:
 {converted_ship_info if converted_ship_info else f"No information found in database for ship '{ship_name}'."}
 
-NOTE: All Earth dates have been converted to Star Trek era (Earth year + 404 for pre-June 2024, +430 for after).
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Share their story with your warm, musical personality, focusing on the people who brought the ship to life."""
 
@@ -475,61 +492,21 @@ def get_general_with_context(user_message: str) -> str:
     wiki_info = get_relevant_wiki_context(user_message)
     print(f"   - Retrieved general context length: {len(wiki_info)} chars")
     
-    return convert_earth_date_to_star_trek(wiki_info) if wiki_info else ""
+    print(f"   ⚠️  NON-ROLEPLAY Query: Preserving real Earth dates for accuracy")
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    return wiki_info if wiki_info else ""
 
 
-def handle_ooc_url_request(user_message: str) -> str:
-    """Handle OOC URL requests directly."""
+def handle_url_request(user_message: str) -> str:
+    """Handle URL requests directly."""
     # Local import to avoid circular dependency
-    from handlers.ai_logic.query_detection import extract_ooc_log_url_request
-    is_url_request, search_query = extract_ooc_log_url_request(user_message)
+    from handlers.ai_logic.query_detection import extract_url_request
+    is_url_request, search_query = extract_url_request(user_message)
     if not is_url_request:
         return "I can't seem to figure out which URL you need. Could you be more specific?"
         
-    print(f"🔗 EXECUTING OOC URL STRATEGY: '{search_query}'")
-    print(f"   ⚠️  OOC URL Request: Will preserve real Earth dates in response")
+    print(f"🔗 EXECUTING URL STRATEGY: '{search_query}'")
+    print(f"   ⚠️  NON-ROLEPLAY URL Request: Will preserve real Earth dates in response")
     url_response = get_log_url(search_query)
     print(f"   - URL response: {url_response}")
-    return url_response
-
-
-def get_ooc_context(user_message: str) -> str:
-    """Generate context for OOC queries."""
-    print(f"📋 SEARCHING OOC DATA")
-    wiki_info = get_relevant_wiki_context(user_message)
-    print(f"   - Retrieved OOC context length: {len(wiki_info)} chars")
-    
-    print(f"   ⚠️  OOC Query: Skipping date conversion to preserve real Earth dates")
-    
-    # Local import to avoid circular dependency
-    from handlers.ai_logic.query_detection import is_ooc_query
-    ooc_query = is_ooc_query(user_message)[1]
-    if any(word in ooc_query.lower() for word in ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']):
-        return f"""You are Elsie, providing Out-Of-Character (OOC) information about game schedules and meetings.
-
-CRITICAL INSTRUCTIONS FOR OOC SCHEDULE QUERIES:
-- Provide complete information about meeting times, schedules, and Game Masters
-- Include all relevant scheduling details
-- Be direct and clear about times, dates, and frequencies
-- Specify time zones when mentioned
-- List all relevant GMs and their roles
-- Use REAL EARTH DATES - do not convert to Star Trek era dates
-- Keep all scheduling information in actual Earth calendar format
-
-{f"SCHEDULE INFORMATION: {wiki_info}" if wiki_info else ""}
-
-Respond with the complete scheduling information requested using real Earth dates and times."""
-    else:
-        return f"""You are Elsie, providing Out-Of-Character (OOC) information from the Players Handbook.
-
-CRITICAL INSTRUCTIONS FOR OOC QUERIES:
-- Focus on rules, mechanics, species traits, and character creation details
-- Be direct and factual in your responses
-- Keep responses clear and concise
-- Use REAL EARTH DATES where applicable - do not convert to Star Trek era dates
-
-{f"PLAYERS HANDBOOK QUERY: {ooc_query}" if ooc_query else ""}
-
-{f"HANDBOOK INFORMATION: {wiki_info}" if wiki_info else ""}
-
-Respond with ONLY the relevant Players Handbook information using real Earth dates.""" 
+    return url_response 
