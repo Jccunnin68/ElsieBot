@@ -234,51 +234,12 @@ def check_if_other_character_addressed(user_message: str, rp_state: 'RoleplaySta
     Enhanced to detect conversation flow between characters.
     Returns the character name if found, empty string if not directed at anyone specific.
     """
+    
     # Get list of known participants (excluding Elsie)
     participants = rp_state.get_participant_names()
     
-    # ENHANCED: Check for conversation flow context
-    # If this character is responding immediately after another character spoke,
-    # they're likely talking to that character
-    from .character_tracking import extract_current_speaker
-    current_speaker = extract_current_speaker(user_message)
-    
-    if current_speaker:
-        # Get the last speaker from turn history
-        last_turn_info = rp_state.get_last_turn_info()
-        if last_turn_info and last_turn_info.get('speaker'):
-            last_speaker = last_turn_info['speaker']
-            
-            # If different characters and last speaker wasn't Elsie, likely talking to each other
-            if (last_speaker != current_speaker and 
-                last_speaker.lower() not in ['elsie', 'elise', 'elsy', 'els'] and
-                current_speaker.lower() not in ['elsie', 'elise', 'elsy', 'els']):
-                
-                # Check if this seems like a response/conversation continuation
-                conversation_indicators = [
-                    # Direct responses
-                    r'\bi\s+(?:still\s+)?(?:fail\s+to\s+see|don\'?t\s+understand|think|believe)',
-                    r'\bthat\'?s\s+(?:not|why|how|what)',
-                    r'\byou\s+(?:said|mentioned|asked|told)',
-                    r'\bwhat\s+you\s+(?:said|mean|did)',
-                    
-                    # Conversation flow indicators
-                    r'\b(?:yes|no|sure|maybe|perhaps|well),?\s',
-                    r'\b(?:but|however|although|still),?\s',
-                    r'\bi\s+(?:agree|disagree|know|understand)',
-                    r'\bthat\'?s\s+(?:true|false|right|wrong|funny|interesting)',
-                    
-                    # Emotional responses
-                    r'\*(?:laughs?|sighs?|smiles?|nods?|shakes?\s+head)\*',
-                    r'\*she\s+(?:laughs?|sighs?|smiles?|nods?)',
-                ]
-                
-                message_lower = user_message.lower()
-                if any(re.search(pattern, message_lower) for pattern in conversation_indicators):
-                    print(f"   💬 CONVERSATION FLOW: {current_speaker} responding to {last_speaker}")
-                    return last_speaker
-    
-    # Check for direct addressing patterns with known characters
+    # PRIORITY 1: Check for direct addressing patterns with known characters FIRST
+    # This must come before general question detection to catch "Zarina, what do you think"
     addressing_patterns = [
         r'^([A-Z][a-z]+),\s+',  # "Name, ..."
         r'^(?:hey|hi|hello)\s+([A-Z][a-z]+)[,\s]',  # "Hey Name,"
@@ -291,12 +252,20 @@ def check_if_other_character_addressed(user_message: str, rp_state: 'RoleplaySta
         match = re.search(pattern, user_message, re.IGNORECASE)
         if match:
             addressed_name = match.group(1)
+            
+            # ENHANCED VALIDATION: Make sure this isn't a question word being misidentified
+            question_words = ['can', 'could', 'would', 'will', 'do', 'did', 'does', 'what', 'where', 'when', 'why', 'who', 'how']
+            if addressed_name.lower() in question_words:
+                print(f"   ❌ REJECTED CHARACTER NAME: '{addressed_name}' is a question word, not a character")
+                continue
+                
             # Check if this is a known participant and not Elsie
             if (addressed_name in participants and 
                 addressed_name.lower() not in ['elsie', 'elise', 'elsy', 'els']):
+                print(f"   👥 DIRECT ADDRESSING DETECTED: addressing {addressed_name}")
                 return addressed_name
     
-    # Check for bracket format addressing: [Character Name] followed by addressing
+    # PRIORITY 2: Check for bracket format addressing: [Character Name] followed by addressing
     # NOTE: [Character Name] at the start usually indicates the SPEAKER, not who's being addressed
     # Only consider it addressing if there's clear addressing language AFTER the bracket
     bracket_pattern = r'\[([A-Z][a-zA-Z\s]+)\]'
@@ -310,8 +279,108 @@ def check_if_other_character_addressed(user_message: str, rp_state: 'RoleplaySta
             addressing_after_bracket = re.search(rf'\[{re.escape(name)}\][^[]*(?:turns? to|speaks? to|says? to|addresses?)\s+([A-Z][a-z]+)', user_message, re.IGNORECASE)
             if addressing_after_bracket:
                 addressed_character = addressing_after_bracket.group(1)
+                
+                # ENHANCED VALIDATION: Make sure addressed character isn't a question word
+                question_words = ['can', 'could', 'would', 'will', 'do', 'did', 'does', 'what', 'where', 'when', 'why', 'who', 'how']
+                if addressed_character.lower() in question_words:
+                    print(f"   ❌ REJECTED ADDRESSED CHARACTER: '{addressed_character}' is a question word, not a character")
+                    continue
+                    
                 if addressed_character in participants and addressed_character.lower() not in ['elsie', 'elise', 'elsy', 'els']:
+                    print(f"   👥 BRACKET ADDRESSING DETECTED: {name} addressing {addressed_character}")
                     return addressed_character
+    
+    # PRIORITY 3: Check if this is a direct question to Elsie (only after checking for character addressing)
+    # Common question patterns directed at Elsie
+    elsie_question_patterns = [
+        r'\bcan\s+you\s+(?:tell|show|explain|help|get|find)',
+        r'\bwould\s+you\s+(?:mind|please|be\s+able)',
+        r'\bcould\s+you\s+(?:tell|show|explain|help|get|find)',
+        r'\bdo\s+you\s+(?:know|have|remember)',
+        r'\bwhat\s+(?:do\s+you\s+)?(?:know|think|remember)',
+        r'\bhow\s+(?:do\s+you|can\s+you)',
+        r'\bwhere\s+(?:is|are|can\s+i\s+find)',
+        r'\bwhen\s+(?:did|was|will)',
+        r'\bwhy\s+(?:did|is|are)',
+        r'\bwho\s+(?:is|was|are)',
+    ]
+    
+    message_lower = user_message.lower()
+    for pattern in elsie_question_patterns:
+        if re.search(pattern, message_lower):
+            print(f"   🎯 DIRECT QUESTION TO ELSIE DETECTED: '{pattern}' - not character-to-character")
+            return ""
+    
+    # PRIORITY 4: Check for conversation flow context
+    # If this character is responding immediately after another character spoke,
+    # they're likely talking to that character
+    from .character_tracking import extract_current_speaker
+    current_speaker = extract_current_speaker(user_message)
+    
+    if current_speaker:
+        # Get the last speaker from turn history
+        last_turn_info = rp_state.get_last_turn_info()
+        if last_turn_info and last_turn_info.get('speaker'):
+            last_speaker = last_turn_info['speaker']
+            
+            # CRITICAL FIX: If Elsie was the last speaker, responses should go TO Elsie, not be character-to-character
+            if last_speaker.lower() in ['elsie', 'elise', 'elsy', 'els']:
+                # Check for response patterns that indicate answering Elsie's question
+                elsie_response_patterns = [
+                    r'\b(?:yes|yeah|yep|yup|uh-huh|mhm),?\s',  # Affirmative responses
+                    r'\b(?:no|nope|nah|uh-uh),?\s',  # Negative responses
+                    r'\bthat\'?s\s+(?:right|correct|true|wrong|false|not\s+right)',  # Confirmation/denial
+                    r'\bi\s+(?:think|believe|guess|suppose)',  # Opinion responses
+                    r'\bmaybe|perhaps|possibly|probably',  # Uncertain responses
+                    r'\bwell,?\s',  # Thoughtful responses
+                    r'\bactually,?\s',  # Clarifying responses
+                    r'\bof\s+course',  # Obvious responses
+                    r'\babsolutely|definitely|certainly',  # Strong affirmatives
+                    r'\bnot\s+really|not\s+exactly|not\s+quite',  # Qualified negatives
+                ]
+                
+                for pattern in elsie_response_patterns:
+                    if re.search(pattern, message_lower):
+                        print(f"   💬 RESPONSE TO ELSIE DETECTED: '{pattern}' - treating as response to Elsie, not character-to-character")
+                        return ""  # Not character-to-character, this is for Elsie
+                
+                # Also check if the message contains character names but in a response context
+                # e.g., "Yes, Tavi is my best friend" in response to "Is Tavi your best friend?"
+                # This should be treated as answering Elsie, not addressing Tavi
+                if any(re.search(pattern, message_lower) for pattern in elsie_response_patterns):
+                    print(f"   💬 RESPONSE TO ELSIE WITH CHARACTER MENTION: treating as response to Elsie, not character-to-character")
+                    return ""
+            
+            # If different characters and last speaker wasn't Elsie, likely talking to each other
+            elif (last_speaker != current_speaker and 
+                  last_speaker.lower() not in ['elsie', 'elise', 'elsy', 'els'] and
+                  current_speaker.lower() not in ['elsie', 'elise', 'elsy', 'els']):
+                
+                # Check if this seems like a response/conversation continuation
+                conversation_indicators = [
+                    # Direct responses
+                    r'\bi\s+(?:still\s+)?(?:fail\s+to\s+see|don\'?t\s+understand|think|believe)',
+                    r'\bthat\'?s\s+(?:not|why|how|what)',
+                    r'\byou\s+(?:said|mentioned|asked|told)',
+                    r'\bwhat\s+you\s+(?:said|mean|did)',
+                    
+                    # Conversation flow indicators (but NOT question words)
+                    r'\b(?:yes|no|sure|maybe|perhaps|well),?\s',
+                    r'\b(?:but|however|although|still),?\s',
+                    r'\bi\s+(?:agree|disagree|know|understand)',
+                    r'\bthat\'?s\s+(?:true|false|right|wrong|funny|interesting)',
+                    
+                    # Emotional responses
+                    r'\*(?:laughs?|sighs?|smiles?|nods?|shakes?\s+head)\*',
+                    r'\*she\s+(?:laughs?|sighs?|smiles?|nods?)',
+                ]
+                
+                # ADDITIONAL CHECK: Make sure this isn't a question directed at Elsie
+                # Questions starting with "Can you", "Could you", etc. are likely for Elsie
+                if not any(re.search(pattern, message_lower) for pattern in elsie_question_patterns):
+                    if any(re.search(pattern, message_lower) for pattern in conversation_indicators):
+                        print(f"   💬 CONVERSATION FLOW: {current_speaker} responding to {last_speaker}")
+                        return last_speaker
     
     return ""
 

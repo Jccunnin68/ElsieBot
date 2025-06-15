@@ -9,17 +9,18 @@ general information.
 
 from typing import Dict, Any
 
-from handlers.ai_wisdom.content_retriever import (
+from .content_retriever import (
     get_log_content,
     get_relevant_wiki_context,
     get_ship_information,
     search_by_type,
     get_tell_me_about_content_prioritized,
     search_memory_alpha,
-    get_log_url
+    get_log_url,
+    is_fallback_response
 )
 # Note: Using local imports to avoid circular dependency with query_detection
-from handlers.handlers_utils import convert_earth_date_to_star_trek
+from ..handlers_utils import convert_earth_date_to_star_trek
 
 
 def get_focused_continuation_context(strategy: Dict[str, Any]) -> str:
@@ -77,7 +78,7 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None) ->
         character_name = strategy['character_name']
     else:
         # Local import to avoid circular dependency
-        from handlers.ai_logic.query_detection import is_character_query
+        from ..ai_logic.query_detection import is_character_query
         is_character, character_name = is_character_query(user_message)
     
     print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}'")
@@ -121,7 +122,7 @@ def _get_character_info_optimized(character_name: str) -> str:
     to prevent massive context chunking for character queries.
     """
     try:
-        from handlers.ai_wisdom.content_retriever import get_db_controller
+        from .content_retriever import get_db_controller
         
         controller = get_db_controller()
         print(f"🎯 OPTIMIZED CHARACTER SEARCH: '{character_name}'")
@@ -205,12 +206,12 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     print(f"📋 SEARCHING LOG DATA")
     
     # Check for log selection queries first
-    from handlers.ai_logic.query_detection import detect_log_selection_query
+    from ..ai_logic.query_detection import detect_log_selection_query
     is_selection, selection_type, ship_name = detect_log_selection_query(user_message)
     
     if is_selection:
         print(f"   🎯 LOG SELECTION QUERY: type='{selection_type}', ship='{ship_name}'")
-        wiki_info = get_log_content(user_message, mission_logs_only=True)
+        wiki_info = get_log_content(user_message, mission_logs_only=True, is_roleplay=False)
         print(f"   - Retrieved LOG SELECTION content length: {len(wiki_info)} chars")
     
     # Check for enhanced log-specific search strategies
@@ -221,7 +222,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
         
         # Use database controller to search ship-specific logs only
         try:
-            from handlers.ai_wisdom.content_retriever import get_db_controller
+            from .content_retriever import get_db_controller
             controller = get_db_controller()
             
             # Search for logs that mention the target ship - FORCE MISSION LOGS ONLY
@@ -258,7 +259,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
         
         # Use database controller to search character-specific logs only
         try:
-            from handlers.ai_wisdom.content_retriever import get_db_controller
+            from .content_retriever import get_db_controller
             controller = get_db_controller()
             
             # Search for logs that mention the target character - FORCE MISSION LOGS ONLY
@@ -289,13 +290,22 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     
     else:
         # Standard log search behavior - ALWAYS FORCE MISSION LOGS ONLY
-        wiki_info = get_log_content(user_message, mission_logs_only=True)
+        wiki_info = get_log_content(user_message, mission_logs_only=True, is_roleplay=False)
         print(f"   - Retrieved MISSION LOGS ONLY content length: {len(wiki_info)} chars")
     
     total_found = wiki_info.count("**") if wiki_info else 0
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
+    
+    # Check if this is a fallback response and adjust instructions accordingly
+    is_fallback = is_fallback_response(wiki_info)
+    fallback_instructions = ""
+    if is_fallback:
+        fallback_instructions = """
+IMPORTANT: The database search encountered processing limitations. The response below indicates this limitation.
+Present this information naturally and suggest the user try again later or rephrase their query to be more specific.
+"""
     
     # Determine log type description based on strategy and selection
     if is_selection:
@@ -323,7 +333,7 @@ CRITICAL INSTRUCTIONS FOR LOG QUERIES - ENHANCED SEARCH STRATEGY:
 - ENHANCED SEARCH was performed: prioritizing log-specific content over general information
 - Search focused specifically on mission logs when ship/character names were combined with log terms
 - Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
-
+{fallback_instructions}
 DATABASE QUERY: "{user_message}"
 SEARCH STRATEGY: {strategy.get('reasoning', 'Standard log search')}
 TOTAL LOG ENTRIES FOUND: {total_found}
@@ -351,14 +361,23 @@ Present a comprehensive summary of the log content provided above. Be thorough a
 def get_tell_me_about_context(user_message: str) -> str:
     """Generate context for 'tell me about' queries."""
     # Local import to avoid circular dependency
-    from handlers.ai_logic.query_detection import extract_tell_me_about_subject
+    from ..ai_logic.query_detection import extract_tell_me_about_subject
     tell_me_about_subject = extract_tell_me_about_subject(user_message)
     print(f"📖 SEARCHING TELL ME ABOUT DATA: '{tell_me_about_subject}'")
-    wiki_info = get_tell_me_about_content_prioritized(tell_me_about_subject)
+    wiki_info = get_tell_me_about_content_prioritized(tell_me_about_subject, is_roleplay=False)
     print(f"   - Retrieved prioritized content length: {len(wiki_info)} chars")
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
+    
+    # Check if this is a fallback response and adjust instructions accordingly
+    is_fallback = is_fallback_response(wiki_info)
+    fallback_instructions = ""
+    if is_fallback:
+        fallback_instructions = """
+IMPORTANT: The database search encountered processing limitations. The response below indicates this limitation.
+Present this information naturally and suggest the user try again later or rephrase their query to be more specific.
+"""
     
     return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with comprehensive access to ship and fleet databases.
 
@@ -369,7 +388,7 @@ CRITICAL INSTRUCTIONS FOR "TELL ME ABOUT" QUERIES:
 - Be comprehensive and thorough in your responses
 - Present information in an organized, detailed manner
 - Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
-
+{fallback_instructions}
 RESPONSE GUIDELINES:
 FOR SHIPS: Include specifications, history, crew assignments, and notable missions
 FOR CHARACTERS: Focus on their role, personality, achievements, and relationships
@@ -390,7 +409,7 @@ Provide a comprehensive and detailed response focusing on the people and stories
 def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any]) -> str:
     """Generate context for Stardancer information queries."""
     # Local import to avoid circular dependency
-    from handlers.ai_logic.query_detection import extract_tell_me_about_subject
+    from ..ai_logic.query_detection import extract_tell_me_about_subject
     tell_me_about_subject = extract_tell_me_about_subject(user_message) or "USS Stardancer"
     is_command_query = strategy.get('command_query', False)
     
@@ -455,7 +474,7 @@ Respond with your warm, personable, and engaging manner while strictly adhering 
 def get_ship_logs_context(user_message: str) -> str:
     """Generate context for ship log queries."""
     # Local import to avoid circular dependency
-    from handlers.ai_logic.query_detection import extract_ship_log_query
+    from ..ai_logic.query_detection import extract_ship_log_query
     is_ship_log, ship_details = extract_ship_log_query(user_message)
     ship_name = ship_details['ship']
     print(f"🚢 SEARCHING COMPREHENSIVE SHIP DATA: {ship_name.upper()}")
@@ -502,7 +521,7 @@ Share their story with your warm, musical personality, focusing on the people wh
 def get_general_with_context(user_message: str) -> str:
     """Generate general context with light database information."""
     print(f"📋 SEARCHING LIGHT CONTEXT DATA")
-    wiki_info = get_relevant_wiki_context(user_message)
+    wiki_info = get_relevant_wiki_context(user_message, is_roleplay=False)
     print(f"   - Retrieved general context length: {len(wiki_info)} chars")
     
     print(f"   ⚠️  NON-ROLEPLAY Query: Preserving real Earth dates for accuracy")
@@ -513,7 +532,7 @@ def get_general_with_context(user_message: str) -> str:
 def handle_url_request(user_message: str) -> str:
     """Handle URL requests directly."""
     # Local import to avoid circular dependency
-    from handlers.ai_logic.query_detection import extract_url_request
+    from ..ai_logic.query_detection import extract_url_request
     is_url_request, search_query = extract_url_request(user_message)
     if not is_url_request:
         return "I can't seem to figure out which URL you need. Could you be more specific?"

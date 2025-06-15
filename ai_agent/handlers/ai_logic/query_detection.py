@@ -15,7 +15,7 @@ Usage:
 from typing import Optional, Tuple, Dict, List
 import re
 
-from handlers.ai_wisdom.log_patterns import is_log_query, has_log_specific_terms, SHIP_NAMES
+from ..ai_wisdom.log_patterns import is_log_query, has_log_specific_terms, SHIP_NAMES
 
 # Define all pattern recognition constants locally (moved from config.py)
 

@@ -6,6 +6,7 @@ import requests
 from urllib.parse import quote
 import re
 from .log_patterns import CHARACTER_CORRECTIONS, SHIP_NAMES
+from .llm_query_processor import get_llm_processor, should_process_data, is_fallback_response
 
 def is_ship_log_title(title: str) -> bool:
     """Enhanced ship log title detection supporting multiple formats:
@@ -226,7 +227,7 @@ def parse_character_dialogue(log_content: str) -> str:
     last_speaker = None
     last_account = None
     
-    # Pattern to match characterName@AccountName: format
+    # Pattern to match character@account: format
     speaker_pattern = r'^([^@\s]+)@([^:\s]+):\s*(.*)$'
     # Pattern to match [Actual Character] in the content
     actual_character_pattern = r'^\[([^\]]+)\]\s*(.*)$'
@@ -504,19 +505,20 @@ def debug_schema_info():
         print(f"✗ Error getting schema info: {e}")
         return {}
 
-def get_log_content(query: str, mission_logs_only: bool = False) -> str:
+def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
     """Get full log content using hierarchical search (titles first, then content) - NO TRUNCATION
     
     Args:
         query: Search query
         mission_logs_only: If True, only search mission_log type pages, ignore other types
+        is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
-        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
+        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
         
         # Check for log selection queries first
-        from handlers.ai_logic.query_detection import detect_log_selection_query
+        from ..ai_logic.query_detection import detect_log_selection_query
         is_selection, selection_type, ship_name = detect_log_selection_query(query)
         
         if is_selection:
@@ -524,16 +526,16 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
             
             if selection_type == 'random':
                 # Get one random log
-                return get_random_log_content(ship_name)
+                return get_random_log_content(ship_name, is_roleplay)
             elif selection_type in ['latest', 'recent']:
                 # Get most recent logs
-                return get_temporal_log_content(selection_type, ship_name, limit=5)
+                return get_temporal_log_content(selection_type, ship_name, limit=5, is_roleplay=is_roleplay)
             elif selection_type in ['first', 'earliest', 'oldest']:
                 # Get oldest logs  
-                return get_temporal_log_content(selection_type, ship_name, limit=5)
+                return get_temporal_log_content(selection_type, ship_name, limit=5, is_roleplay=is_roleplay)
             elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
                 # Get date-filtered logs
-                return get_temporal_log_content(selection_type, ship_name, limit=10)
+                return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
         
         # Standard log search with mission logs only enforcement
         log_types = ["mission_log"]
@@ -613,18 +615,27 @@ def get_log_content(query: str, mission_logs_only: bool = False) -> str:
         
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ HIERARCHICAL LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("logs", final_content, query, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
         print(f"✗ Error getting log content: {e}")
         return ""
 
-def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> str:
+def get_relevant_wiki_context(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
     """Get relevant wiki content using hierarchical search (titles first, then content) - NO TRUNCATION
     
     Args:
         query: Search query
         mission_logs_only: If True, only search mission_log type pages when detecting log queries
+        is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
@@ -641,7 +652,7 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
         is_log_query_result = any(indicator in query.lower() for indicator in log_indicators)
         
         if is_log_query_result:
-            log_content = get_log_content(query, mission_logs_only=mission_logs_only)
+            log_content = get_log_content(query, mission_logs_only=mission_logs_only, is_roleplay=is_roleplay)
             if log_content:
                 log_type_msg = "mission logs only" if mission_logs_only else "all log types"
                 print(f"✓ Log query detected, retrieved {len(log_content)} chars of log content ({log_type_msg})")
@@ -651,7 +662,7 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
                 print(f"⚠️  Log query detected but no log content found ({log_type_msg})")
         
         # Use hierarchical database search for better results
-        print(f"🔍 HIERARCHICAL WIKI SEARCH: '{query}'")
+        print(f"🔍 HIERARCHICAL WIKI SEARCH: '{query}' (roleplay={is_roleplay})")
         results = controller.search_pages(query, limit=20)  # Increased limit
         
         if not results:
@@ -671,6 +682,14 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> st
         
         final_context = '\n\n---\n\n'.join(context_parts)
         print(f"✅ HIERARCHICAL WIKI SEARCH COMPLETE: {len(final_context)} characters from {len(context_parts)} pages")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_context):
+            print(f"🔄 Content size ({len(final_context)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("general", final_context, query, is_roleplay)
+            return result.content
+        
         return final_context
         
     except Exception as e:
@@ -806,11 +825,11 @@ def get_tell_me_about_content(subject: str) -> str:
         print(f"✗ Error getting 'tell me about' content: {e}")
         return ""
 
-def get_tell_me_about_content_prioritized(subject: str) -> str:
+def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = False) -> str:
     """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs - NO TRUNCATION"""
     try:
         controller = get_db_controller()
-        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}'")
+        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}' (roleplay={is_roleplay})")
         
         # Step 1: Search for ship info specifically first
         ship_info_results = []
@@ -879,6 +898,14 @@ def get_tell_me_about_content_prioritized(subject: str) -> str:
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("character", final_content, subject, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
@@ -1098,7 +1125,7 @@ def get_log_url(search_query: str) -> str:
         print(f"✗ Error searching for page URL: {e}")
         return f"Error retrieving URL for '{search_query}': {e}"
 
-def get_random_log_content(ship_name: Optional[str] = None) -> str:
+def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = False) -> str:
     """Get one random mission log formatted for display"""
     try:
         controller = get_db_controller()
@@ -1130,7 +1157,7 @@ def get_random_log_content(ship_name: Optional[str] = None) -> str:
         return f"Error retrieving random log: {e}"
 
 
-def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5) -> str:
+def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5, is_roleplay: bool = False) -> str:
     """Get temporally ordered logs (newest or oldest first)"""
     try:
         controller = get_db_controller()
@@ -1174,6 +1201,15 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
         
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ TEMPORAL LOG SELECTION COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
+        
+        # NEW: Process large content through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            query_description = f"{selection_type} logs" + (f" for {ship_name}" if ship_name else "")
+            result = processor.process_query_results("logs", final_content, query_description, is_roleplay)
+            return result.content
+        
         return final_content
         
     except Exception as e:
