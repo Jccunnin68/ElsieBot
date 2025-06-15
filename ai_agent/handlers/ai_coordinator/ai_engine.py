@@ -14,11 +14,9 @@ from config import GEMMA_API_KEY
 from handlers.handlers_utils import estimate_token_count
 from handlers.ai_logic import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
 from handlers.handlers_utils import (
-    
-    chunk_prompt_for_tokens,
     filter_meeting_info,
     convert_earth_date_to_star_trek,
-    
+    estimate_token_count
 )
 from handlers.ai_attention.state_manager import get_roleplay_state
 from handlers.ai_logic.query_detection import is_stardancer_query
@@ -246,7 +244,7 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         strategy = decision.strategy
         
         # Create the model
-        model = genai.GenerativeModel('gemma-3-27b-it')
+        model = genai.GenerativeModel('Gemma3-27B-it')
         
         # Detect topic changes for conversation flow
         is_topic_change = detect_topic_change(user_message, conversation_history)
@@ -344,33 +342,9 @@ Stay helpful and informative. When providing database information, be thorough a
         prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
         
 
-        # Check token count and chunk if necessary
+        # With increased context window, use full context without chunking
         estimated_tokens = estimate_token_count(prompt)
-        print(f"🧮 Estimated token count: {estimated_tokens}")
-        
-        # Increased token limit for more comprehensive responses
-        # Only chunk if we're significantly over the limit (was 7192, now much more conservative)
-        max_allowed_tokens = 7000  # Leave room for response generation
-        
-        if estimated_tokens > max_allowed_tokens:
-            print(f"⚠️  Prompt too large ({estimated_tokens} tokens), implementing chunking strategy...")
-            
-            essential_prompt = f"{context}\n\nCustomer: {user_message}\nElsie:"
-            essential_tokens = estimate_token_count(essential_prompt)
-            
-            if essential_tokens <= max_allowed_tokens:
-                prompt = essential_prompt
-                print(f"   📦 Using essential prompt: {essential_tokens} tokens")
-            else:
-                # Use much larger chunks (6800 tokens instead of 7192) to maximize content
-                # This allows for comprehensive responses while leaving room for the prompt structure
-                large_chunk_size = 6800
-                chunks = chunk_prompt_for_tokens(context, large_chunk_size)
-                print(f"   📦 Context chunked into {len(chunks)} parts using LARGE chunks ({large_chunk_size} tokens each)")
-                
-                prompt = f"{chunks[0]}\n\nCustomer: {user_message}\nElsie:"
-                final_tokens = estimate_token_count(prompt)
-                print(f"   📦 Using first LARGE chunk: {final_tokens} tokens (chunk contains {estimate_token_count(chunks[0])} tokens of content)")
+        print(f"🧮 Estimated token count: {estimated_tokens} (using full context - no chunking)")
         
         # Generate response
         response = model.generate_content(prompt)

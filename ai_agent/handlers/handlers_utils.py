@@ -91,65 +91,6 @@ def convert_earth_date_to_star_trek(date_text: str) -> str:
     return converted_text
 
 
-def chunk_prompt_for_tokens(prompt: str, max_tokens: int = 6800) -> list:
-    """
-    Break large prompts into manageable chunks that fit within token limits.
-    Returns a list of prompt chunks.
-    Updated to use larger chunks by default for more comprehensive responses.
-    """
-    estimated_tokens = estimate_token_count(prompt)
-    
-    if estimated_tokens <= max_tokens:
-        return [prompt]
-    
-    # Split prompt into sections - try to keep larger logical blocks together
-    sections = prompt.split('\n\n')
-    chunks = []
-    current_chunk = ""
-    current_tokens = 0
-    
-    for section in sections:
-        section_tokens = estimate_token_count(section)
-        
-        if current_tokens + section_tokens <= max_tokens:
-            if current_chunk:
-                current_chunk += '\n\n' + section
-            else:
-                current_chunk = section
-            current_tokens += section_tokens
-        else:
-            # Finish current chunk
-            if current_chunk:
-                chunks.append(current_chunk)
-            
-            # Start new chunk
-            if section_tokens <= max_tokens:
-                current_chunk = section
-                current_tokens = section_tokens
-            else:
-                # Section too large, split it further but use larger word groups
-                words = section.split()
-                temp_section = ""
-                for word in words:
-                    test_section = temp_section + ' ' + word if temp_section else word
-                    if estimate_token_count(test_section) <= max_tokens:
-                        temp_section = test_section
-                    else:
-                        if temp_section:
-                            chunks.append(temp_section)
-                        temp_section = word
-                
-                if temp_section:
-                    current_chunk = temp_section
-                    current_tokens = estimate_token_count(temp_section)
-    
-    if current_chunk:
-        chunks.append(current_chunk)
-    
-    return chunks
-
-
-
 def filter_meeting_info(text: str) -> str:
     """Remove meeting schedule information from responses"""
     filtered_text = text

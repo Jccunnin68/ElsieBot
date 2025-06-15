@@ -199,61 +199,41 @@ class FleetDatabaseController:
             print(f"✗ Error in enhanced search: {e}")
             return []
     
-    def get_log_content(self, query: str, max_chars: int = 8000) -> str:
-        """Get mission log content for a query"""
+    def get_log_content(self, query: str) -> str:
+        """Get mission log content for a query (no truncation)"""
         # Search specifically for mission logs
-        results = self.search_pages(query, page_type="mission_log", limit=5)
+        results = self.search_pages(query, page_type="mission_log", limit=20)  # Increased limit
         
         if not results:
             return ""
         
         log_contents = []
-        total_chars = 0
         
         for result in results:
             title = result['title']
             content = result['raw_content']
             
-            # Format the log
+            # Format the log - full content, no truncation
             formatted_log = f"**{title}**\n{content}"
-            
-            if total_chars + len(formatted_log) <= max_chars:
-                log_contents.append(formatted_log)
-                total_chars += len(formatted_log)
-            else:
-                # Add partial content if it fits
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 200:
-                    log_contents.append(formatted_log[:remaining_chars] + "...[LOG TRUNCATED]")
-                break
+            log_contents.append(formatted_log)
         
         return '\n\n---\n\n'.join(log_contents)
     
-    def get_relevant_context(self, query: str, max_chars: int = 3000) -> str:
-        """Get relevant wiki context for general queries"""
-        results = self.search_pages(query, limit=10)
+    def get_relevant_context(self, query: str) -> str:
+        """Get relevant wiki context for general queries (no truncation)"""
+        results = self.search_pages(query, limit=20)  # Increased limit
         
         if not results:
             return ""
         
         context_parts = []
-        total_chars = 0
         
         for result in results:
             title = result['title']
-            content = result['raw_content'][:30000]  # Limit individual content
+            content = result['raw_content']  # Full content, no individual limits
             
             page_text = f"**{title}**\n{content}"
-            
-            if total_chars + len(page_text) <= max_chars:
-                context_parts.append(page_text)
-                total_chars += len(page_text)
-            else:
-                # Add partial content if it fits
-                remaining_chars = max_chars - total_chars
-                if remaining_chars > 100:
-                    context_parts.append(page_text[:remaining_chars] + "...")
-                break
+            context_parts.append(page_text)
         
         return '\n\n---\n\n'.join(context_parts)
     
