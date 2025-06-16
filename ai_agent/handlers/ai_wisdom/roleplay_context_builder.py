@@ -8,15 +8,43 @@ emotional intelligence integration and character relationship awareness.
 
 from typing import Dict, Any, List
 
+
+class RoleplayContextBuilder:
+    """Context builder for roleplay scenarios."""
+    
+    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
+        """Build context for roleplay strategies."""
+        approach = strategy.get('approach', 'roleplay')
+        
+        if approach == 'roleplay_mock_enhanced':
+            return get_enhanced_roleplay_context(strategy, user_message)
+        else:
+            return get_roleplay_context(strategy, user_message)
+
 from .content_retriever import (
     get_relevant_wiki_context, 
-    search_by_type,
     get_tell_me_about_content_prioritized,
     get_ship_information,
     is_fallback_response
 )
+from .llm_query_processor import get_llm_processor, should_process_data
 # Note: Using local imports to avoid circular dependency with query_detection
-from ..handlers_utils import convert_earth_date_to_star_trek
+
+
+def _process_large_content_if_needed_roleplay(content: str, query_type: str, user_query: str, is_roleplay: bool = True) -> str:
+    """Process content through secondary LLM if it exceeds 14,000 characters (roleplay version)"""
+    if not content:
+        return content
+        
+    if should_process_data(content):
+        print(f"🔄 ROLEPLAY: Content size ({len(content)} chars) exceeds 14,000 threshold, processing with secondary LLM...")
+        processor = get_llm_processor()
+        result = processor.process_query_results(query_type, content, user_query, is_roleplay)
+        print(f"✅ ROLEPLAY: Secondary LLM processing: {len(content)} → {len(result.content)} chars")
+        return result.content
+    else:
+        print(f"✓ ROLEPLAY: Content size ({len(content)} chars) within threshold, no secondary processing needed")
+        return content
 
 
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
@@ -729,6 +757,9 @@ def _get_roleplay_database_context(user_message: str) -> str:
             print(f"   🔄 Falling back to prioritized character search")
             character_info = get_tell_me_about_content_prioritized(character_name, is_roleplay=True)
         
+        # Process through secondary LLM if content is too large
+        character_info = _process_large_content_if_needed_roleplay(character_info, "character", user_message, is_roleplay=True)
+        
         # Check if this is a fallback response
         if is_fallback_response(character_info):
             print(f"   ⚠️  Fallback response detected for character query")
@@ -757,6 +788,9 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what s
         # Use prioritized search for general subjects
         subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject, is_roleplay=True)
         
+        # Process through secondary LLM if content is too large
+        subject_info = _process_large_content_if_needed_roleplay(subject_info, "general", user_message, is_roleplay=True)
+        
         # Check if this is a fallback response
         if is_fallback_response(subject_info):
             print(f"   ⚠️  Fallback response detected for tell me about query")
@@ -784,6 +818,9 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her kn
         print(f"   📋 GENERAL ROLEPLAY CONTEXT")
         # Use general wiki context for other queries
         general_info = get_relevant_wiki_context(user_message, is_roleplay=True)
+        
+        # Process through secondary LLM if content is too large
+        general_info = _process_large_content_if_needed_roleplay(general_info, "general", user_message, is_roleplay=True)
         
         # Check if this is a fallback response
         if is_fallback_response(general_info):

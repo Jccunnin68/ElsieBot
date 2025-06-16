@@ -13,7 +13,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 import traceback
 
-from handlers.ai_logic.response_decision import ResponseDecision
+from .response_decision import ResponseDecision
 from ..ai_wisdom.llm_query_processor import is_fallback_response
 
 

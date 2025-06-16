@@ -16,19 +16,10 @@ from typing import Optional, Dict, List
 # This eliminates maintenance of hardcoded ship lists and uses real data.
 # Log indicators for query detection - cleaned of hardcoded ship names
 LOG_INDICATORS = [
-    'log', 'logs', 'mission log', 'ship log', 
-    'captain log', 'personal log', 'stardate', 'entry',
-    'what happened', 'events', 'mission report', 'incident report',
-    'summarize', 'summary', 'recap', 'tell me what',
-    'last mission', 'recent mission', 'latest log',
-    'captain\'s log', 'first officer\'s log',
-    'expedition', 'away mission', 'away team',
-    'event log', 'event logs', 'incident', 'incident log',
-    'event report', 'occurrence', 'happening',
-    # Date-based patterns
-    'retrieve', 'show me', 'get the log', 'find the log',
-    # Named incidents
-    'incident log', 'crisis log', 'affair log', 'operation log'
+    'log', 'logs', 'entry', 'entries', 'mission', 'missions', 
+    'report', 'reports', 'record', 'records', 'duty log',
+    'captain\'s log', 'personal log', 'official log',
+    'mission log', 'duty logs', 'mission reports'
 ]
 # REMOVED: Ship-specific log patterns (stardancer log, adagio log, etc.)
 # Ship detection is now handled dynamically by category-based searches
@@ -40,7 +31,7 @@ SHIP_SPECIFIC_CHARACTER_CORRECTIONS = {
         'maeve tolena': 'Ensign Maeve Blaine',
         'maeve tolena blaine': 'Ensign Maeve Blaine',
         'maeve': 'Ensign Maeve Blaine',
-        'blaine': 'Captain Marcus Blaine',  # Default for Stardancer
+        # Default for Stardancer
         'marcus': 'Captain Marcus Blaine',
         'captain blaine': 'Captain Marcus Blaine',
     },
@@ -207,12 +198,23 @@ def _resolve_ambiguous_name(name_lower: str, ship_context: Optional[str], surrou
 # - Dynamic category filtering from database
 # - Real MediaWiki categories instead of hardcoded patterns
 
-def is_log_query(query: str) -> bool:
-    """Determine if the query is asking about logs"""
-    query_lower = query.lower()
-    return any(indicator in query_lower for indicator in LOG_INDICATORS)
+def is_log_query(user_message: str) -> bool:
+    """
+    Simple check if this is a general log query.
+    """
+    return has_log_specific_terms(user_message)
 
-def has_log_specific_terms(query: str) -> bool:
-    """Check if the query contains log-specific terms"""
-    query_lower = query.lower()
-    return any(indicator in query_lower for indicator in LOG_INDICATORS) 
+def has_log_specific_terms(user_message: str) -> bool:
+    """
+    Check if the message contains log-specific terms.
+    
+    This prevents ship queries from being misidentified when they contain log terms.
+    """
+    user_lower = user_message.lower().strip()
+    
+    # Check for explicit log indicators
+    for indicator in LOG_INDICATORS:
+        if indicator in user_lower:
+            return True
+    
+    return False 

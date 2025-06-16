@@ -5,14 +5,13 @@ Query Detection and Intent Classification
 This module contains all query detection and parsing logic extracted from ai_logic.py.
 Provides clean, focused interface for identifying user intent patterns.
 
-Phase 6B Migration: Query Detection Functions
-Functions migrated from ai_logic.py (2224 lines) to focused modules.
+ENHANCED: Phase 6B Migration with conflict prevention and category intersection.
 
 Usage:
     from handlers.ai_response_decision.query_detection import is_continuation_request
 """
 
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List, Any
 import re
 
 from ..ai_wisdom.log_patterns import is_log_query, has_log_specific_terms
@@ -62,6 +61,140 @@ LOG_SPECIFIC_INDICATORS = [
     'captain\'s log', 'personal log', 'official log',
     'mission log', 'duty logs', 'mission reports'
 ]
+
+SHIP_NAMES = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 'banshee', 'enterprise', 'gigantes', 'voyager', 'defiant']
+
+
+def detect_query_type_with_conflicts(user_message: str) -> Dict[str, Any]:
+    """
+    Enhanced query detection that prevents conflicts between types.
+    Returns query type, subject, and conflict resolution.
+    
+    PRIORITY ORDER:
+    1. Log queries (highest priority for conflict prevention)
+    2. Character queries (with category intersection)
+    3. Ship queries (with category intersection)
+    4. Tell me about fallback
+    """
+    print(f"   🔍 ENHANCED QUERY DETECTION: '{user_message}'")
+    
+    # PRIORITY 1: Log queries (highest priority for conflict prevention)
+    if has_log_specific_terms(user_message):
+        print(f"      📋 Log-specific terms detected")
+        
+        # Check for ship + log combination
+        is_ship_log, ship_name, log_type = is_ship_plus_log_query(user_message)
+        if is_ship_log:
+            print(f"      🚢📋 Ship+Log conflict resolved: {ship_name} {log_type}")
+            return {
+                'type': 'ship_log',
+                'subject': ship_name,
+                'log_type': log_type,
+                'conflict_resolved': f'ship+log detected: {ship_name} {log_type}',
+                'priority': 1
+            }
+        
+        # Check for character + log combination  
+        is_char_log, char_name, log_type = is_character_plus_log_query(user_message)
+        if is_char_log:
+            print(f"      🧑📋 Character+Log conflict resolved: {char_name} {log_type}")
+            return {
+                'type': 'character_log', 
+                'subject': char_name,
+                'log_type': log_type,
+                'conflict_resolved': f'character+log detected: {char_name} {log_type}',
+                'priority': 1
+            }
+        
+        # General log query
+        print(f"      📋 General log query detected")
+        return {
+            'type': 'log', 
+            'subject': None, 
+            'conflict_resolved': 'general log query',
+            'priority': 1
+        }
+    
+    # PRIORITY 2: Character queries (with category intersection)
+    is_char, char_name = is_character_query(user_message)
+    if is_char and char_name:
+        print(f"      🧑 Character query detected: {char_name}")
+        return {
+            'type': 'character',
+            'subject': char_name,
+            'requires_category_intersection': True,
+            'valid_categories': ['Characters', 'Personnel', 'Crew'],
+            'priority': 2
+        }
+    
+    # PRIORITY 3: Ship queries (with category intersection)
+    if is_ship_query(user_message):
+        ship_name = extract_ship_name(user_message)
+        print(f"      🚢 Ship query detected: {ship_name}")
+        return {
+            'type': 'ship',
+            'subject': ship_name,
+            'requires_category_intersection': True,
+            'valid_categories': ['Ship Information', 'Starships', 'Vessels'],
+            'priority': 3
+        }
+    
+    # PRIORITY 4: Tell me about fallback
+    tell_me_subject = extract_tell_me_about_subject(user_message)
+    if tell_me_subject:
+        print(f"      📖 Tell me about query detected: {tell_me_subject}")
+        return {
+            'type': 'tell_me_about',
+            'subject': tell_me_subject,
+            'needs_title_search': True,
+            'priority': 4
+        }
+    
+    print(f"      ❓ General query detected (no specific type)")
+    return {'type': 'general', 'subject': None, 'priority': 5}
+
+
+def is_ship_query(user_message: str) -> bool:
+    """
+    Check if the message is asking about a ship specifically.
+    Enhanced to prevent conflicts with log queries.
+    """
+    user_lower = user_message.lower().strip()
+    
+    # Skip if this has log-specific terms - let log detection handle it
+    if has_log_specific_terms(user_message):
+        print(f"      ⚠️  Skipping ship detection - log terms detected")
+        return False
+    
+    # Check for ship indicators
+    ship_indicators = [
+        'uss', 'ship', 'vessel', 'starship', 'cruiser', 'destroyer',
+        'the stardancer', 'the adagio', 'the pilgrim'
+    ]
+    
+    # Check for ship names
+    ship_names_detected = []
+    for ship in SHIP_NAMES:
+        if ship in user_lower:
+            ship_names_detected.append(ship)
+    
+    # Must have ship name AND ship context (or be a tell me about query)
+    has_ship_name = len(ship_names_detected) > 0
+    has_ship_context = any(indicator in user_lower for indicator in ship_indicators)
+    is_tell_me_about = extract_tell_me_about_subject(user_message) is not None
+    
+    return has_ship_name and (has_ship_context or is_tell_me_about)
+
+
+def extract_ship_name(user_message: str) -> Optional[str]:
+    """Extract ship name from the message."""
+    user_lower = user_message.lower().strip()
+    
+    for ship in SHIP_NAMES:
+        if ship in user_lower:
+            return ship
+    
+    return None
 
 
 def is_continuation_request(user_message: str) -> bool:

@@ -1,7 +1,7 @@
 """Database-driven content retrieval and wiki search functionality"""
 
 from database_controller import get_db_controller
-from typing import Optional, List
+from typing import Optional, List, Dict
 import requests
 from urllib.parse import quote
 import re
@@ -24,8 +24,7 @@ def create_query_description(function_name: str, **kwargs) -> str:
     """Generate descriptive query for LLM processing context"""
     descriptions = {
         'get_ship_information': f"ship information for {kwargs.get('ship_name', 'unknown ship')}",
-        'get_recent_logs': f"recent logs" + (f" for {kwargs.get('ship_name')}" if kwargs.get('ship_name') else ""),
-        'search_by_type': f"{kwargs.get('content_type', 'content')} matching '{kwargs.get('query', '')}'",
+        'get_recent_logs': f"recent logs" + (f" for {kwargs.get('ship_name')}" if kwargs.get('ship_name') else ""),   
         'get_tell_me_about_content': f"information about {kwargs.get('subject', 'unknown subject')}",
         'search_memory_alpha': f"external wiki information about '{kwargs.get('query', '')}'",
         'get_random_log_content': f"random log" + (f" from {kwargs.get('ship_name')}" if kwargs.get('ship_name') else "")
@@ -427,7 +426,7 @@ def check_elsiebrain_connection() -> bool:
         stats = controller.get_stats()
         
         if stats and stats.get('total_pages', 0) > 0:
-            print(f"✓ elsiebrain database ready: {stats.get('total_pages', 0)} pages, {stats.get('mission_logs', 0)} logs")
+            print(f"✓ elsiebrain database ready")
         else:
             print("⚠️  elsiebrain database is connected but empty - needs to be populated externally")
         
@@ -588,7 +587,7 @@ def get_ship_information(ship_name: str) -> str:
         print(f"🚢 CATEGORY-BASED SHIP SEARCH: '{ship_name}'")
         
         # Use new Phase 1 search_ships method - MUCH SIMPLER!
-        results = controller.search_ships(ship_name, limit=10)
+        results = controller.search_ships(ship_name, limit=2)  # Focus on most relevant results
         print(f"   📊 Category-based ship search returned {len(results)} results")
         
         if not results:
@@ -607,7 +606,7 @@ def get_ship_information(ship_name: str) -> str:
         final_content = '\n\n---\n\n'.join(ship_info)
         print(f"✅ CATEGORY-BASED SHIP SEARCH COMPLETE: {len(final_content)} characters from {len(ship_info)} pages")
         
-        # Process large content through LLM if needed
+        # Process large content through LLM if needed (>14,000 chars)
         if should_process_data(final_content):
             print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
             processor = get_llm_processor()
@@ -706,47 +705,7 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
         print(f"✗ Error getting recent logs: {e}")
         return ""
 
-def search_by_type(query: str, content_type: str) -> str:
-    """Search for specific type of content using categories when available"""
-    try:
-        controller = get_db_controller()
-        
-        # Convert content_type to categories for better search
-        # Search using actual database categories instead of artificial mappings
-        results = controller.search_pages(query, limit=10)
-        
-        if not results:
-            return ""
-        
-        search_results = []
 
-        for result in results:
-            title = result['title']
-            content = result['raw_content']
-            categories = result.get('categories', [])
-            
-            # Add category info to the result
-            category_info = f" [Categories: {', '.join(categories)}]" if categories else ""
-            page_text = f"**{title}**{category_info}\n{content}"
-            search_results.append(page_text)
-
-        final_content = '\n\n---\n\n'.join(search_results)
-        
-        # Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_type = determine_query_type('search_by_type', content_type)
-            query_description = create_query_description('search_by_type', query=query, content_type=content_type)
-            is_roleplay = _get_roleplay_context_from_caller()
-            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
-            return result.content
-        
-        return final_content
-        
-    except Exception as e:
-        print(f"✗ Error searching by type: {e}")
-        return ""
 
 def get_tell_me_about_content(subject: str) -> str:
     """Enhanced 'tell me about' functionality using hierarchical search"""
@@ -1169,4 +1128,93 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
 
 def get_recent_log_url(search_query: str) -> str:
     """Get recent log URL - redirects to get_log_url for consistency"""
-    return get_log_url(search_query) 
+    return get_log_url(search_query)
+
+def search_database_content(search_type: str, search_term: str = None, 
+                           categories: List[str] = None, limit: int = 10, 
+                           log_type: str = None, **kwargs) -> List[Dict]:
+    """
+    Universal database search interface that delegates to appropriate search methods.
+    
+    This function provides a unified interface for searching different types of content
+    in the database, used by context_coordinator.py for quick and comprehensive searches.
+    
+    Args:
+        search_type: Type of search ('character', 'ship', 'logs', 'general')
+        search_term: Term to search for
+        categories: List of categories to filter by
+        limit: Maximum number of results to return
+        log_type: Specific log type for log searches
+        **kwargs: Additional parameters passed to underlying search methods
+        
+    Returns:
+        List of search result dictionaries with keys: id, title, raw_content, 
+        ship_name, log_date, url, categories
+    """
+    try:
+        controller = get_db_controller()
+        
+        print(f"   🔍 UNIVERSAL SEARCH: type={search_type}, term='{search_term}', categories={categories}, limit={limit}")
+        
+        if search_type == 'character':
+            # Character search - use search_characters or search_by_categories
+            if categories:
+                return controller.search_by_categories(search_term or '', categories, limit)
+            else:
+                return controller.search_characters(search_term or '', limit)
+                
+        elif search_type == 'ship':
+            # Ship search - use search_ships or search_by_categories  
+            if categories:
+                return controller.search_by_categories(search_term or '', categories, limit)
+            else:
+                return controller.search_ships(search_term or '', limit)
+                
+        elif search_type == 'logs':
+            # Log search - use search_logs
+            ship_name = kwargs.get('ship_name')
+            return controller.search_logs(search_term or '', ship_name, limit)
+            
+        else:
+            # General search - use search_pages
+            ship_name = kwargs.get('ship_name')
+            return controller.search_pages(
+                search_term or '', 
+                page_type=search_type if search_type != 'general' else None,
+                ship_name=ship_name,
+                limit=limit,
+                categories=categories
+            )
+            
+    except Exception as e:
+        print(f"   ❌ ERROR in search_database_content: {e}")
+        return []
+
+
+def search_titles_containing(search_term: str, limit: int = 10) -> List[Dict]:
+    """
+    Search for titles containing the given term.
+    
+    This function is used by context_coordinator.py for title-based searches.
+    
+    Args:
+        search_term: Term to search for in titles
+        limit: Maximum number of results to return
+        
+    Returns:
+        List of search result dictionaries
+    """
+    try:
+        controller = get_db_controller()
+        
+        print(f"   📖 TITLE SEARCH: '{search_term}', limit={limit}")
+        
+        # Use the general search_pages method which searches titles by default
+        results = controller.search_pages(search_term, limit=limit)
+        
+        print(f"   📖 TITLE SEARCH RESULTS: {len(results)} found")
+        return results
+        
+    except Exception as e:
+        print(f"   ❌ ERROR in search_titles_containing: {e}")
+        return [] 

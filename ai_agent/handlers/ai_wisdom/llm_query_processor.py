@@ -297,15 +297,17 @@ class LLMQueryProcessor:
         try:
             # Determine if we need summarization or just character processing
             needs_summarization = len(raw_data) >= self.PROCESSING_THRESHOLD
+            print(f"   📊 PROCESSING DECISION: needs_summarization={needs_summarization} (threshold={self.PROCESSING_THRESHOLD})")
             
             if query_type == "logs":
                 if needs_summarization:
-                    print(f"   📝 LOG PROCESSING: Character processing + summarization")
+                    print(f"   📝 LOG PROCESSING: Character processing + summarization ({len(raw_data)} chars)")
                     processed_content = self._process_log_data_with_character_rules(raw_data, user_query, character_context)
                 else:
-                    print(f"   🎭 LOG PROCESSING: Character processing only (no summarization)")
+                    print(f"   🎭 LOG PROCESSING: Character processing only (no summarization) ({len(raw_data)} chars)")
                     processed_content = self._process_log_character_only(raw_data, user_query, character_context)
             else:
+                print(f"   📋 GENERAL PROCESSING: Character processing + summarization ({len(raw_data)} chars)")
                 processed_content = self._process_general_data_with_character_rules(raw_data, user_query, character_context)
                 
             if processed_content:
@@ -322,6 +324,7 @@ class LLMQueryProcessor:
                 self.metrics.log_processing_attempt(result)
                 return result
             else:
+                print(f"❌ LLM returned empty content")
                 raise Exception("Empty response from LLM")
                 
         except Exception as e:
@@ -368,26 +371,27 @@ class LLMQueryProcessor:
         return self._call_llm_with_prompt(prompt)
         
     def _create_log_summary_prompt(self, logs: str, query: str) -> str:
-        """Create optimized prompt for log summarization"""
-        return f"""You are a mission log analyst. Process the following mission logs in response to this query: "{query}"
+        """Create optimized prompt for log processing with minimal summarization"""
+        return f"""You are a mission log processor. Process the following mission logs in response to this query: "{query}"
 
-CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. Use ALL available space to preserve as much log content as possible.
 
 INSTRUCTIONS:
-- Focus on key events, character actions, and dialogue relevant to the query
-- Preserve important character names, dates, and locations
-- Maintain chronological order when possible
-- Include significant decisions and outcomes
-- Keep character personalities and relationships clear
-- Include detailed dialogue and character interactions when relevant
-- Preserve mission context and background information
-- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
-- Prioritize relevance to the query over completeness if space is limited
+- PRESERVE as much original log content as possible - minimize summarization
+- Include ALL character dialogue, actions, and interactions
+- Maintain ALL character names, dates, locations, and specific details
+- Keep chronological order and preserve log structure
+- Include ALL significant events, decisions, and outcomes
+- Preserve character personalities through their actual words and actions
+- Keep ALL mission context, technical details, and background information
+- MINIMAL SUMMARIZATION: Only condense if absolutely necessary to fit 14000 characters
+- PRIORITY: Completeness over brevity - use every available character
+- Preserve the narrative flow and dramatic moments from the logs
 
 MISSION LOGS TO PROCESS:
 {logs}
 
-Provide a comprehensive summary that thoroughly addresses the user's query while preserving essential mission details, character interactions, and context. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
+Process these logs with minimal summarization, preserving as much original content as possible while staying under 14000 characters. Focus on keeping the complete story intact."""
 
     def _create_character_aware_log_summary_prompt(self, logs: str, query: str, 
                                                  character_context: CharacterContext) -> str:
@@ -432,12 +436,12 @@ Provide a comprehensive summary that thoroughly addresses the user's query while
         
         character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
         
-        return f"""You are a mission log analyst with character rule awareness. Process the following mission logs in response to this query: "{query}"
+        return f"""You are a mission log processor with character rule awareness. Process the following mission logs in response to this query: "{query}"
 
 CHARACTER PROCESSING RULES:
 {character_context_text}
 
-CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. Use ALL available space to preserve as much log content as possible.
 
 INSTRUCTIONS:
 - APPLY character disambiguation rules using ship context
@@ -445,25 +449,27 @@ INSTRUCTIONS:
 - Filter out OOC content: ((text)), //text, [ooc text], ooc:
 - Handle [DOIC] channel content as narration/environmental description
 - Apply character name corrections and resolve ambiguities
-- Include key events, character actions, and dialogue relevant to the query
-- Maintain chronological order when possible
-- Include significant decisions and outcomes
-- Keep character personalities and relationships clear
-- Include detailed dialogue and character interactions when relevant
-- Preserve mission context and background information
-- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
-- Prioritize relevance to the query over completeness if space is limited
+- PRESERVE as much original log content as possible - minimize summarization
+- Include ALL character dialogue, actions, and interactions
+- Maintain ALL character names, dates, locations, and specific details
+- Keep chronological order and preserve log structure
+- Include ALL significant events, decisions, and outcomes
+- Preserve character personalities through their actual words and actions
+- Keep ALL mission context, technical details, and background information
+- MINIMAL SUMMARIZATION: Only condense if absolutely necessary to fit 14000 characters
+- PRIORITY: Completeness over brevity - use every available character
+- Preserve the narrative flow and dramatic moments from the logs
 
 MISSION LOGS TO PROCESS:
 {logs}
 
-Provide a comprehensive summary that thoroughly addresses the user's query while preserving essential mission details, character interactions, and context. APPLY CHARACTER DISAMBIGUATION AND FILTERING RULES. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
+Process these logs with character rules applied and minimal summarization, preserving as much original content as possible while staying under 14000 characters. Focus on keeping the complete story intact with proper character disambiguation."""
 
     def _create_general_summary_prompt(self, data: str, query: str) -> str:
         """Create optimized prompt for general data"""
         return f"""You are a database analyst. Process the following information in response to this query: "{query}"
 
-CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
 
 INSTRUCTIONS:
 - Extract key facts and relationships relevant to the query
@@ -472,8 +478,9 @@ INSTRUCTIONS:
 - Include comprehensive context and background information
 - Maintain accuracy of all factual content
 - Focus on information that directly answers the user's question
-- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
-- Prioritize relevance to the query over completeness if space is limited
+- TARGET LENGTH: Aim for 12000-13800 characters - this should be a comprehensive, detailed response
+- Use the full available space to provide thorough coverage of the content
+- Only summarize if absolutely necessary to fit within the character limit
 
 DATA TO PROCESS:
 {data}
@@ -526,7 +533,7 @@ Provide a well-organized response that thoroughly addresses the user's query whi
 CHARACTER PROCESSING RULES:
 {character_context_text}
 
-CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
 
 INSTRUCTIONS:
 - APPLY character disambiguation rules using ship context
@@ -539,8 +546,9 @@ INSTRUCTIONS:
 - Include comprehensive context and background information
 - Maintain accuracy of all factual content
 - Focus on information that directly answers the user's question
-- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
-- Prioritize relevance to the query over completeness if space is limited
+- TARGET LENGTH: Aim for 12000-13800 characters - this should be a comprehensive, detailed response
+- Use the full available space to provide thorough coverage of the content
+- Only summarize if absolutely necessary to fit within the character limit
 
 DATA TO PROCESS:
 {data}
@@ -617,20 +625,34 @@ Return the full content with character disambiguation and filtering applied. DO 
         if not self.client:
             raise Exception("Gemini client not initialized")
             
+        print(f"🔄 LLM CALL: Prompt size = {len(prompt)} chars")
+        
         try:
             response = self.client.generate_content(prompt)
             if response and response.text:
                 content = response.text.strip()
+                print(f"✅ LLM RESPONSE: Received {len(content)} chars")
                 
-                # Validate length and truncate if necessary
+                # More generous truncation - aim for closer to 14000
                 if len(content) > 14000:
-                    print(f"⚠️  LLM response ({len(content)} chars) exceeds 14000 limit, truncating...")
-                    content = content[:13900] + "...\n\n[Response truncated to fit length limit]"
+                    print(f"⚠️  LLM response ({len(content)} chars) exceeds 14000 limit, truncating to ~13800...")
+                    # Find a good break point near 13800 characters
+                    truncate_point = 13800
+                    
+                    # Try to find a sentence break near the truncation point
+                    for i in range(truncate_point, max(truncate_point - 200, 13600), -1):
+                        if i < len(content) and content[i] in '.!?':
+                            truncate_point = i + 1
+                            break
+                    
+                    content = content[:truncate_point] + "\n\n[Response truncated to fit length limit]"
+                    print(f"📏 TRUNCATED: Final length = {len(content)} chars")
                     
                 return content
             else:
                 raise Exception("Empty response from Gemini")
         except Exception as e:
+            print(f"❌ LLM CALL FAILED: {e}")
             if "rate limit" in str(e).lower() or "quota" in str(e).lower():
                 self.rate_limiter.record_rate_limit()
                 raise Exception(f"Rate limited: {e}")

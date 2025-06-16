@@ -9,18 +9,94 @@ general information.
 
 from typing import Dict, Any
 
+
+class NonRoleplayContextBuilder:
+    """Context builder for non-roleplay scenarios."""
+    
+    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
+        """Build context for non-roleplay strategies."""
+        approach = strategy.get('approach', 'general')
+        print(f"            🔧 NonRoleplayContextBuilder: Processing approach '{approach}'")
+        
+        # Handle specific approaches
+        if approach == 'ship_info':
+            print(f"            🚢 Building ship_info context")
+            ship_name = strategy.get('ship_name', 'Stardancer')
+            return get_ship_context(ship_name, strategy, is_roleplay=False)
+        
+        elif approach == 'character_info':
+            print(f"            🧑 Building character_info context")
+            return get_character_context(user_message, strategy, is_roleplay=False)
+        
+        elif approach == 'logs':
+            print(f"            📋 Building logs context")
+            return get_logs_context(user_message, strategy, is_roleplay=False)
+        
+        elif approach == 'tell_me_about':
+            print(f"            🔍 Building tell_me_about context")
+            return get_tell_me_about_context(user_message, is_roleplay=False)
+        
+        elif approach == 'non_roleplay_comprehensive_database':
+            print(f"            📚 Building comprehensive database context")
+            query_type = strategy.get('query_type', 'general')
+            
+            if query_type == 'tell_me_about':
+                return get_tell_me_about_context(user_message, is_roleplay=False)
+            elif query_type == 'character':
+                return get_character_context(user_message, strategy, is_roleplay=False)
+            elif query_type == 'ship':
+                ship_name = strategy.get('ship_name', 'Stardancer')
+                return get_ship_context(ship_name, strategy, is_roleplay=False)
+            elif query_type in ['logs', 'log']:
+                return get_logs_context(user_message, strategy, is_roleplay=False)
+            else:
+                return get_general_with_context(user_message, is_roleplay=False)
+        
+        elif approach == 'federation_archives':
+            return get_federation_archives_context(user_message, is_roleplay=False)
+        
+        elif approach == 'url_request':
+            return handle_url_request(user_message, is_roleplay=False)
+        
+        elif approach == 'general_with_context':
+            return get_general_with_context(user_message, is_roleplay=False)
+        
+        elif approach == 'continuation':
+            return get_focused_continuation_context(strategy, is_roleplay=False)
+        
+        else:
+            # Default to general context
+            print(f"            ⚠️  Unknown approach '{approach}', using general context")
+            return get_general_with_context(user_message, is_roleplay=False)
+
 from .content_retriever import (
     get_log_content,
     get_relevant_wiki_context,
     get_ship_information,
-    search_by_type,
     get_tell_me_about_content_prioritized,
     search_memory_alpha,
     get_log_url,
     is_fallback_response
 )
+from .llm_query_processor import get_llm_processor, should_process_data
 # Note: Using local imports to avoid circular dependency with query_detection
 from ..handlers_utils import convert_earth_date_to_star_trek
+
+
+def _process_large_content_if_needed(content: str, query_type: str, user_query: str, is_roleplay: bool = False) -> str:
+    """Process content through secondary LLM if it exceeds 14,000 characters"""
+    if not content:
+        return content
+        
+    if should_process_data(content):
+        print(f"🔄 Content size ({len(content)} chars) exceeds 14,000 threshold, processing with secondary LLM...")
+        processor = get_llm_processor()
+        result = processor.process_query_results(query_type, content, user_query, is_roleplay)
+        print(f"✅ Secondary LLM processing: {len(content)} → {len(result.content)} chars")
+        return result.content
+    else:
+        print(f"✓ Content size ({len(content)} chars) within threshold, no secondary processing needed")
+        return content
 
 
 def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
@@ -36,7 +112,13 @@ def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool
         if not wiki_info:
             wiki_info = get_relevant_wiki_context(f"{focus_subject}", is_roleplay=is_roleplay)
     elif context_type == 'character':
-        wiki_info = search_by_type(focus_subject, 'personnel')
+        # Use new universal search interface instead of deprecated search_by_type
+        from .content_retriever import search_database_content
+        results = search_database_content('character', focus_subject, limit=5)
+        if results:
+            wiki_info = '\n\n---\n\n'.join([f"**{r['title']}**\n{r['raw_content']}" for r in results])
+        else:
+            wiki_info = ""
         if not wiki_info:
             wiki_info = get_tell_me_about_content_prioritized(focus_subject, is_roleplay=is_roleplay)
     elif context_type == 'ship':
@@ -48,26 +130,27 @@ def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool
     
     print(f"   - Retrieved focused content length: {len(wiki_info)} chars")
     
+    # Process through secondary LLM if content is too large
+    wiki_info = _process_large_content_if_needed(wiki_info, context_type, focus_subject, is_roleplay)
+    
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR FOCUSED CONTINUATION:
-- You are being asked to continue with a focused discussion on: {focus_subject}
+    return f"""CRITICAL INSTRUCTIONS FOR FOCUSED INFORMATION QUERIES:
+- Create a focused, comprehensive narrative about: {focus_subject}
 - Context type: {context_type}
-- ONLY use information provided in the FOCUSED DATABASE SEARCH RESULTS section below
-- Be detailed and comprehensive in your response
+- ONLY use information provided in the DATABASE SEARCH RESULTS section below
+- PROVIDE UP TO 8000 CHARACTERS in your response - be detailed and comprehensive
+- SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
 - If no specific information is found, provide a thoughtful general response
+- Connect different aspects of the information to tell a complete story
 - Encourage continued conversation about the topic
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- Present information as a flowing narrative summary, not raw data or bullet points
 
-FOCUSED DATABASE SEARCH RESULTS for "{focus_subject}":
+DATABASE SEARCH RESULTS for "{focus_subject}":
 {converted_wiki_info if converted_wiki_info else f"No additional information found for '{focus_subject}' in the database."}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
-
-Provide a focused, detailed response about {focus_subject} specifically. Be comprehensive and informative."""
+Transform the database information into a focused, comprehensive narrative about {focus_subject}. Tell their complete story in an engaging way."""
 
 
 def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is_roleplay: bool = False) -> str:
@@ -124,30 +207,34 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is
         print(f"   🔄 Falling back to optimized character search")
         character_info = _get_character_info_optimized(character_name, is_roleplay=is_roleplay)
     
+    # Process through secondary LLM if content is too large
+    character_info = _process_large_content_if_needed(character_info, "character", user_message, is_roleplay)
+    
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_character_info = character_info
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR CHARACTER QUERIES:
-- You are being asked about the character: {character_name}
-- ONLY use information provided in the CHARACTER DATABASE ACCESS section below
+    return f"""CRITICAL INSTRUCTIONS FOR CHARACTER INFORMATION QUERIES:
+- Create a comprehensive narrative biography about: {character_name}
+- ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
-- Be informative and comprehensive in presenting their information
+- PROVIDE UP TO 7990 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- SYNTHESIZE the information into flowing, narrative paragraphs that tell their story
 - Include rank, position, ship assignment, achievements, and personal background when available
 - Focus on their role, personality, relationships, and what made them special to their crew
-- If information comes from the Federation Archives , reference it naturally as archive data
+- Connect different aspects of their life and career into a cohesive narrative
+- If information comes from the Federation Archives, reference it naturally as archive data
 - If character information is not in the database, say: "I don't have any records for {character_name} in my database"
-- Provide a comprehensive summary and ask: "Would you like to explore any particular aspect of their story?"
+- End with: "Was that all you wanted to know about {character_name}?"
 - DO NOT include meeting times, GM names, or session schedule information
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- Present information as a flowing biographical narrative, not raw data or bullet points
+- use all 8000 characters of the response space unless the original content is less than 8000 characters
+- Always end in a complete thought and not a partial thought.
 
-CHARACTER DATABASE ACCESS:
+DATABASE SEARCH RESULTS:
 {converted_character_info if converted_character_info else f"No records found for '{character_name}' in the database."}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Provide a comprehensive and informative summary of what made them notable in the fleet."""
+Transform the database information into a comprehensive biographical narrative that captures what made them notable in the fleet."""
 
 
 def _get_character_info_optimized(character_name: str, is_roleplay: bool = False) -> str:
@@ -212,27 +299,29 @@ def get_federation_archives_context(user_message: str, is_roleplay: bool = False
     archives_info = search_memory_alpha(search_query, limit=3, is_federation_archives=True)
     print(f"   - Retrieved archives content length: {len(archives_info)} chars")
     
+    # Process through secondary LLM if content is too large
+    archives_info = _process_large_content_if_needed(archives_info, "general", user_message, is_roleplay)
+    
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_archives_info = archives_info
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR FEDERATION ARCHIVES ACCESS:
-- The user specifically requested federation archives access for: "{search_query}"
-- This is EXTERNAL archive data, not from your local database
+    return f"""CRITICAL INSTRUCTIONS FOR FEDERATION ARCHIVES ACCESS:
+- Create a comprehensive narrative summary from federation archives for: "{search_query}"
+- This is EXTERNAL archive data, not from local database
 - ONLY use information from the FEDERATION ARCHIVES ACCESS section below
+- SYNTHESIZE the archive information into flowing, narrative paragraphs
 - Reference this as "federation archives" or "archive data" naturally in your response
 - Be thorough and informative when presenting the archive information
+- Connect different pieces of archive data to tell a complete story
 - If no archives information is found, say: "The federation archives don't have any information on that topic"
-- Provide comprehensive details and ask: "Would you like me to search for anything else in the archives?"
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- End with: "Would you like me to search for anything else in the archives?"
+- Present information as a flowing narrative summary, not raw data or bullet points
 
 FEDERATION ARCHIVES ACCESS:
 {converted_archives_info if converted_archives_info else f"The federation archives don't seem to have information on '{search_query}' available."}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Present the archives information comprehensively and reference it as external federation data."""
+Transform the archives information into a comprehensive narrative summary and reference it as external federation data."""
 
 
 def get_logs_context(user_message: str, strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
@@ -359,13 +448,14 @@ Present this information naturally and suggest the user try again later or rephr
     else:
         log_type_description = "mission logs only"
     
-    return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with access to comprehensive ship databases.
-
-CRITICAL INSTRUCTIONS FOR LOG QUERIES - ENHANCED SEARCH STRATEGY:
-- You are being asked to summarize or explain {log_type_description}
+    return f"""CRITICAL INSTRUCTIONS FOR LOG INFORMATION QUERIES:
+- Present and organize the log information for: {log_type_description}
 - ENHANCED SEARCH was performed: prioritizing log-specific content over general information
 - Search focused specifically on mission logs when ship/character names were combined with log terms
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- FORMAT the log information clearly and organize it chronologically when possible
+- Present the log content in a readable, well-structured narrative format without heavy re-summarization
+- use all 8000 characters of the response space unless the original content is less than 8000 characters
 {fallback_instructions}
 DATABASE QUERY: "{user_message}"
 SEARCH STRATEGY: {strategy.get('reasoning', 'Standard log search')}
@@ -376,19 +466,18 @@ STRICT DATABASE ADHERENCE REQUIRED:
 - ONLY use the log content provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or add any log content not explicitly provided
 - If no logs are found, state clearly: "I searched the database but found no logs matching your query"
-- Be comprehensive and thorough in presenting the log information
-- Focus on WHO did WHAT and WHEN, providing complete details
-- Include character names, their actions, dialogue, and decisions
-- Mention important details like dates, locations, and significant events
-- Provide full context and comprehensive summaries
-- Ask: "Would you like to know more about any specific aspect?"
+- PRESENT the log information clearly, organizing it by date/chronology when possible
+- Include all important details: WHO did WHAT and WHEN, character names, actions, dialogue, and decisions
+- Preserve the substance and detail of the log entries while making them readable
+- Connect related log entries and show progression when multiple entries are present
+- End with: "Would you like to know more about any specific aspect?"
 
 DATABASE SEARCH RESULTS:
 {converted_wiki_info}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
+NOTE: All dates after the log title are converted to a Star Trek Gregorian date format of +404 years for dates prior to June 2024 and +430 year for all dates after June 2024
 
-Present a comprehensive summary of the log content provided above. Be thorough and detailed in your analysis."""
+Present the log content in a clear, well-organized narrative format that preserves all the important details and events from the mission logs."""
 
 
 def get_tell_me_about_context(user_message: str, is_roleplay: bool = False) -> str:
@@ -402,6 +491,9 @@ def get_tell_me_about_context(user_message: str, is_roleplay: bool = False) -> s
     wiki_info = get_tell_me_about_content_prioritized(subject, is_roleplay=is_roleplay)
     print(f"   - Retrieved tell me about content length: {len(wiki_info)} chars")
     
+    # Process through secondary LLM if content is too large
+    wiki_info = _process_large_content_if_needed(wiki_info, "general", user_message, is_roleplay)
+    
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
@@ -414,25 +506,30 @@ IMPORTANT: The database search encountered processing limitations. The response 
 Present this information naturally and suggest the user try again later or rephrase their query to be more specific.
 """
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR 'TELL ME ABOUT' QUERIES:
-- You are being asked about: {subject}
+    return f"""CRITICAL INSTRUCTIONS FOR INFORMATION QUERIES:
+- Create a comprehensive narrative summary about: {subject}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - This search PRIORITIZED ship information and personnel records over mission logs
 - If no information is found, say: "I don't have any information about '{subject}' in my database"
-- Be comprehensive and informative in presenting the information
-- Focus on key details, specifications, background, and significance
+- PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
+- Focus on key details, specifications, background, and significance in a cohesive story
+- Connect different pieces of information to provide comprehensive understanding
 - If information comes from external sources, reference it naturally
-- Ask: "Would you like to explore any particular aspect of {subject}?"
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- End with: "Would you like to explore any particular aspect of {subject}?"
+- Present information as a flowing narrative summary, not raw data or bullet points
+- use all 8000 characters of the response space unless the original content is less than 8000 characters
+- format the response into sections and sub-sections as needed with titles and sub-titles
+- OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
+- when removing sentences remove the whole sentence not just a part of it
+
 {fallback_instructions}
 DATABASE SEARCH RESULTS:
 {converted_wiki_info if converted_wiki_info else f"No information found for '{subject}' in the database."}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Provide a comprehensive and informative response about {subject} based on the database information above."""
+
+Transform the database information into a comprehensive informative prose that tells the complete story of {subject}."""
 
 
 def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_roleplay: bool = False) -> str:
@@ -444,8 +541,8 @@ def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_rolepla
         from .content_retriever import get_db_controller
         controller = get_db_controller()
         
-        # Use new Phase 1 search_ships method
-        results = controller.search_ships(ship_name, limit=10)
+        # Use new Phase 1 search_ships method with focused limit
+        results = controller.search_ships(ship_name, limit=2)  # Limit to 2 most relevant results
         print(f"   📊 Category-based ship search returned {len(results)} results")
         
         if results:
@@ -483,115 +580,40 @@ def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_rolepla
         print(f"   🔄 Falling back to original ship information search")
         ship_info = get_ship_information(ship_name)
     
+    # Process through secondary LLM if content is too large
+    ship_info = _process_large_content_if_needed(ship_info, "general", ship_name, is_roleplay)
+    
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_ship_info = ship_info
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR SHIP QUERIES:
-- You are being asked about the ship: {ship_name}
-- ONLY use information provided in the SHIP DATABASE ACCESS section below
+    return f"""CRITICAL INSTRUCTIONS FOR SHIP INFORMATION QUERIES:
+- Create a comprehensive informative prose summary about: {ship_name}
+- ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
-- Be informative and comprehensive in presenting ship information
+- PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- SYNTHESIZE the information into flowing, informative prose paragraphs rather than bullet points
 - Include specifications, class, registry, crew complement, mission history when available
-- Focus on technical details, capabilities, and significant events
+- Focus on technical details, capabilities, and significant events in a cohesive story
+- Connect different pieces of information to paint a complete picture of the vessel
 - If information comes from external sources, reference it naturally
 - If ship information is not in the database, say: "I don't have any records for {ship_name} in my database"
-- Provide a comprehensive summary and ask: "Would you like to explore any particular aspect of this vessel?"
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- use all 8000 characters of the response space unless the original content is less than 8000 characters
+- format the response into sections and sub-sections as needed with titles and sub-titles
+- OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
+- when removing sentences remove the whole sentence not just a part of it
+- End with: further information about {ship_name} can be found on the wiki."
 
-SHIP DATABASE ACCESS:
+DATABASE SEARCH RESULTS:
 {converted_ship_info if converted_ship_info else f"No records found for '{ship_name}' in the database."}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Provide a comprehensive and informative summary of this vessel's specifications and service record."""
-
-
-def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
-    """Generate context for Stardancer-specific queries."""
-    print(f"🚢 SEARCHING STARDANCER INFO (roleplay={is_roleplay})")
-    
-    if strategy.get('command_query'):
-        print(f"   👨‍✈️ COMMAND STAFF QUERY DETECTED")
-        # Search for command-related information specifically
-        stardancer_info = search_by_type("Stardancer command staff captain commander", 'personnel')
-        if not stardancer_info:
-            stardancer_info = get_ship_information("Stardancer")
-    else:
-        # General Stardancer information
-        stardancer_info = get_ship_information("Stardancer")
-    
-    print(f"   - Retrieved Stardancer info length: {len(stardancer_info)} chars")
-    
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
-    converted_stardancer_info = stardancer_info
-    
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR STARDANCER QUERIES:
-- You are being asked about the USS Stardancer
-- ONLY use information provided in the STARDANCER DATABASE ACCESS section below
-- Focus on the ship's specifications, crew, missions, and achievements
-- If this is about command staff, emphasize leadership and command structure
-- Be proud and informative about your home ship
-- If no specific information is found, provide general context about the Stardancer
-- Ask: "Would you like to know more about any specific aspect of the Stardancer?"
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
-
-STARDANCER DATABASE ACCESS:
-{converted_stardancer_info if converted_stardancer_info else "No specific Stardancer information found in the database, but I can share that it's a distinguished Starfleet vessel."}
-
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
-
-Share information about the USS Stardancer with pride and comprehensive detail."""
+Transform the database information into a comprehensive, informative prose that tells the story of this vessel's specifications, capabilities, and service record and personnel"""
 
 
-def get_ship_logs_context(user_message: str, is_roleplay: bool = False) -> str:
-    """Generate context for ship log queries."""
-    # Local import to avoid circular dependency
-    from ..ai_logic.query_detection import extract_ship_log_query
-    is_ship_log, ship_details = extract_ship_log_query(user_message)
-    ship_name = ship_details['ship']
-    print(f"🚢 SEARCHING COMPREHENSIVE SHIP DATA: {ship_name.upper()} (roleplay={is_roleplay})")
-    
-    ship_searches = [ship_name, f"{ship_name} log", f"{ship_name} mission", f"USS {ship_name}"]
-    comprehensive_ship_info = ""
-    total_ship_entries = 0
-    
-    for search_query in ship_searches:
-        print(f"   🔎 Ship search: '{search_query}'")
-        ship_results = get_ship_information(search_query)
-        log_results = get_log_content(search_query, is_roleplay=is_roleplay)
-        
-        if ship_results and ship_results not in comprehensive_ship_info:
-            comprehensive_ship_info += f"\n\n---SHIP INFO FOR '{search_query}'---\n\n{ship_results}"
-            total_ship_entries += ship_results.count("**")
-        
-        if log_results and log_results not in comprehensive_ship_info:
-            comprehensive_ship_info += f"\n\n---SHIP LOGS FOR '{search_query}'---\n\n{log_results}"
-            total_ship_entries += log_results.count("**")
-    
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
-    converted_ship_info = comprehensive_ship_info
-    
-    return f"""You are Elsie, the intelligent, attentive, and holographic bartender aboard the USS Stardancer. Your background in dance and music influences your warm, personable way of speaking.
 
-CRITICAL INSTRUCTIONS FOR SHIP QUERIES:
-- You are summarizing logs and information for the {ship_name.upper()}
-- ONLY use information provided below - do not invent or extrapolate
-- Focus on the people first - who commanded, who served, their stories
-- Use musical metaphors: "orchestrated missions," "in perfect harmony," etc.
-- If no information found, say: "That ship hasn't graced my database yet"
-- End with: "Would you like me to explore any particular chapter of their story?"
-- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
-SHIP DATABASE SEARCH RESULTS:
-{converted_ship_info if converted_ship_info else f"No information found in database for ship '{ship_name}'."}
 
-NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Share their story with your warm, musical personality, focusing on the people who brought the ship to life."""
 
 
 def get_general_with_context(user_message: str, is_roleplay: bool = False) -> str:
@@ -599,6 +621,9 @@ def get_general_with_context(user_message: str, is_roleplay: bool = False) -> st
     print(f"📋 SEARCHING LIGHT CONTEXT DATA (roleplay={is_roleplay})")
     wiki_info = get_relevant_wiki_context(user_message, is_roleplay=is_roleplay)
     print(f"   - Retrieved general context length: {len(wiki_info)} chars")
+    
+    # Process through secondary LLM if content is too large
+    wiki_info = _process_large_content_if_needed(wiki_info, "general", user_message, is_roleplay)
     
     print(f"   ⚠️  NON-ROLEPLAY Query: Preserving real Earth dates for accuracy")
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
@@ -617,15 +642,14 @@ def handle_url_request(user_message: str, is_roleplay: bool = False) -> str:
     url_info = get_log_url(search_query)
     print(f"   - Retrieved URL info length: {len(url_info)} chars")
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
-
-CRITICAL INSTRUCTIONS FOR URL REQUESTS:
-- The user requested a URL/link for: {search_query}
+    return f"""CRITICAL INSTRUCTIONS FOR URL REQUESTS:
+- Provide URL/link information for: {search_query}
 - ONLY use the URL information provided below
 - If a direct link was found, present it clearly
 - If no URL was found, explain that no direct link is available
 - Be helpful and suggest alternative search terms if needed
 - Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+- Present information directly without introductions
 
 URL SEARCH RESULTS:
 {url_info}

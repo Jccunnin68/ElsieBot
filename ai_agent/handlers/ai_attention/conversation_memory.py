@@ -7,14 +7,12 @@ roleplay mode, analyzing recent conversation history to suggest response styles
 and maintain conversational continuity.
 """
 
-import json
 import time
 from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass, asdict
-import asyncio
+from dataclasses import dataclass
 import re
 
-from handlers.ai_attention.contextual_cues import ResponseDecision
+from ..ai_logic.response_decision import ResponseDecision
 
 
 @dataclass

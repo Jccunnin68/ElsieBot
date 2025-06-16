@@ -332,14 +332,15 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         elif strategy['needs_database']:
             print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")
             context = get_context_for_strategy(strategy, user_message)
-            # general_with_context from get_context_for_strategy returns just the wiki info
-            if strategy['approach'] == 'general_with_context':
-                wiki_info = context 
-                context = "" # Reset context to be built in the default block
+            print(f"📋 CONTEXT FROM STRATEGY: {len(context)} characters")
+            # Don't reset context - use what the context builders provide
+            if not context:
+                print(f"⚠️  No context returned from strategy, will use default")
         
         # Generate context for simple chat (no database search needed)
         else:
             print(f"💬 SIMPLE CHAT MODE - No database search needed")
+            context = ""  # Ensure context is empty for simple chat
         
         # Detect if we received processed content and if it's log-based
         content_was_processed = detect_processed_content(wiki_info or context)
@@ -348,16 +349,15 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         if content_was_processed:
             print(f"🔄 DETECTED PROCESSED CONTENT: was_processed={content_was_processed}, is_logs={content_is_logs}")
         
-        # Set default context for simple chats and cases without specific context
+        # Set default context ONLY for simple chats and cases without specific context
         if not context:
+            print(f"🔧 USING DEFAULT CONTEXT GENERATION (no context from strategy)")
             # Detect personality context for non-roleplay conversations
             personality_context = detect_general_personality_context(user_message)
             
             # Enhanced context for processed log content
             if content_was_processed and content_is_logs:
-                context = f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with expertise in stellar cartography and ship operations.
-
-PERSONALITY CONTEXT: {personality_context}
+                context = f"""PERSONALITY CONTEXT: {personality_context}
 
 CRITICAL INSTRUCTION - NARRATIVE LOG SUMMATION:
 The information below has been pre-processed and summarized from mission logs. Your task is to create an engaging, narrative summary that brings these events to life. DO NOT simply present the data - instead:
@@ -370,6 +370,7 @@ The information below has been pre-processed and summarized from mission logs. Y
 - Create a flowing narrative that connects events chronologically
 - Use vivid, descriptive language to make the events feel immediate and real
 - Focus on WHO did WHAT and WHY, with emphasis on motivations and outcomes
+- Present information directly without formal introductions
 
 NARRATIVE STYLE:
 - Present events as a story, not a data summary
@@ -385,9 +386,7 @@ Transform the above information into an engaging narrative summary that captures
             
             # Enhanced context for other processed content
             elif content_was_processed:
-                context = f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with access to comprehensive databases.
-
-PERSONALITY CONTEXT: {personality_context}
+                context = f"""PERSONALITY CONTEXT: {personality_context}
 
 CRITICAL INSTRUCTION - ENHANCED INFORMATION PRESENTATION:
 The information below has been pre-processed and summarized. Your task is to present this information in a comprehensive, engaging way that goes beyond simple data presentation:
@@ -399,6 +398,7 @@ The information below has been pre-processed and summarized. Your task is to pre
 - Present information in a way that's easy to understand and actionable
 - Add your expertise and insights where appropriate
 - Make connections that help the user understand the bigger picture
+- Present information directly without formal introductions
 
 {f"PROCESSED INFORMATION: {wiki_info}" if wiki_info else ""}
 
@@ -406,23 +406,22 @@ Present the above information in a comprehensive, well-organized response that f
             
             # Standard context for unprocessed content
             else:
-                context = f"""You are Elsie, an intelligent, knowledgeable AI assistant aboard the USS Stardancer. You have expertise in stellar cartography, ship operations, and access to comprehensive databases.
+                context = f"""PERSONALITY CONTEXT: {personality_context}
 
-PERSONALITY CONTEXT: {personality_context}
-
-PERSONALITY TRAITS:
-- Matter-of-fact and informative when providing information
-- Casual and conversational in your communication style
-- Intelligent and perceptive, able to understand what users are really asking for
-- Genuinely helpful and thorough in your responses
-- Professional but approachable - not overly formal or stilted
-- Draw on your expertise areas naturally when relevant
+COMMUNICATION INSTRUCTIONS:
+- Be matter-of-fact and informative when providing information
+- Use a casual and conversational communication style
+- Be intelligent and perceptive, understanding what users are really asking for
+- Provide genuinely helpful and thorough responses
+- Be professional but approachable - not overly formal or stilted
+- Draw on expertise areas naturally when relevant
+- Present information directly without formal introductions
 
 EXPERTISE AREAS:
 - Stellar cartography and navigation
 - Ship operations and fleet information
 - Database research and information retrieval
-- When drinks are specifically mentioned, you can discuss your bartending experience
+- When drinks are specifically mentioned, you can discuss bartending experience
 - Access to Federation archives for canonical information
 
 COMMUNICATION STYLE:
@@ -430,15 +429,15 @@ COMMUNICATION STYLE:
 - Wrap actions in *asterisks* for formatting
 - Speak naturally and conversationally
 - Be thorough and informative, especially when providing database information
-- Don't artificially limit your responses - provide comprehensive information when requested
+- Don't artificially limit responses - provide comprehensive information when requested
 - Use "I" naturally in conversation - you're not avoiding first person speech
-- Keep the holographic bartender roleplay elements minimal unless specifically relevant
+- Keep holographic bartender roleplay elements minimal unless specifically relevant
 
-CURRENT SETTING: You're aboard the USS Stardancer with access to ship databases and Federation archives. When users ask for information, you can provide detailed, comprehensive responses without artificial length restrictions.
+CURRENT SETTING: Aboard the USS Stardancer with access to ship databases and Federation archives. When providing information, give detailed, comprehensive responses without artificial length restrictions.
 
 {f"AVAILABLE INFORMATION: {wiki_info}" if wiki_info else ""}
 
-Stay helpful and informative. When providing database information, be thorough and comprehensive. Keep responses natural and conversational while being as detailed as needed to fully answer the user's question."""
+Provide helpful and informative responses. When presenting database information, be thorough and comprehensive. Keep responses natural and conversational while being as detailed as needed to fully answer the user's question."""
         
         # Format conversation history with topic change awareness
         # Special handling for DGM-controlled Elsie content

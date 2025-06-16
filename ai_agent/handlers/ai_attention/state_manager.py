@@ -11,6 +11,7 @@ import time
 from typing import Dict, List, Optional
 from .character_tracking import extract_current_speaker, is_valid_character_name
 from .conversation_memory import ConversationMemory, getNextResponse, extract_conversation_metadata
+from .contextual_cues import SessionMode
 
 
 class RoleplayStateManager:
@@ -749,6 +750,19 @@ class RoleplayStateManager:
     def has_conversation_memory(self) -> bool:
         """Check if we have conversation memory available."""
         return self.conversation_memory.has_sufficient_context()
+    
+    @property
+    def current_mode(self) -> SessionMode:
+        """Get the current session mode based on roleplay state."""
+        
+        if not self.is_roleplaying:
+            return SessionMode.LISTENING
+        elif self.is_dgm_session():
+            return SessionMode.DGM_ROLEPLAY
+        elif self.is_thread_based():
+            return SessionMode.THREAD_ROLEPLAY
+        else:
+            return SessionMode.REGULAR_ROLEPLAY
 
 
 # Global roleplay state manager instance
