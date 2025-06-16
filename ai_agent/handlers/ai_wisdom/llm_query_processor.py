@@ -218,13 +218,37 @@ class LLMQueryProcessor:
             return CharacterContext()
             
     def process_query_results(self, query_type: str, raw_data: str, user_query: str, 
-                            is_roleplay: bool = False) -> ProcessingResult:
-        """Main processing entry point with character rule integration"""
-        print(f"🔄 LLM PROCESSING: type='{query_type}', size={len(raw_data)} chars, roleplay={is_roleplay}")
+                            is_roleplay: bool = False, force_processing: bool = False) -> ProcessingResult:
+        """Main processing entry point with character rule integration and forced processing support"""
+        print(f"🔄 LLM PROCESSING: type='{query_type}', size={len(raw_data)} chars, roleplay={is_roleplay}, force={force_processing}")
         
         original_size = len(raw_data)
         
-        # Check if processing is needed
+        # NEW: Force processing for log content regardless of size
+        if query_type == "logs" or force_processing:
+            print(f"   🎯 FORCED PROCESSING: Log content will be processed regardless of size")
+            # Check rate limits
+            can_process, retry_minutes = self.rate_limiter.can_make_request()
+            if not can_process:
+                print(f"⏳ Rate limited, retry in {retry_minutes} minutes")
+                fallback_content = self._generate_fallback_response(query_type, user_query, is_roleplay, retry_minutes)
+                result = ProcessingResult(
+                    content=fallback_content,
+                    was_processed=False,
+                    processing_status="rate_limited",
+                    is_fallback_response=True,
+                    retry_after_minutes=retry_minutes,
+                    original_data_size=original_size,
+                    processed_data_size=len(fallback_content),
+                    fallback_reason="rate_limited"
+                )
+                self.metrics.log_processing_attempt(result)
+                return result
+            
+            # Process with character rules (forced)
+            return self._process_with_character_rules(raw_data, user_query, query_type, is_roleplay, original_size)
+        
+        # Existing size-based logic for non-log content
         if len(raw_data) < self.PROCESSING_THRESHOLD:
             return ProcessingResult(
                 content=raw_data,
@@ -235,7 +259,7 @@ class LLMQueryProcessor:
                 processed_data_size=original_size
             )
             
-        # Check rate limits
+        # Check rate limits for regular processing
         can_process, retry_minutes = self.rate_limiter.can_make_request()
         if not can_process:
             print(f"⏳ Rate limited, retry in {retry_minutes} minutes")
@@ -253,6 +277,12 @@ class LLMQueryProcessor:
             self.metrics.log_processing_attempt(result)
             return result
             
+        # Regular processing for large non-log content
+        return self._process_with_character_rules(raw_data, user_query, query_type, is_roleplay, original_size)
+    
+    def _process_with_character_rules(self, raw_data: str, user_query: str, query_type: str, 
+                                    is_roleplay: bool, original_size: int) -> ProcessingResult:
+        """Unified processing method with character rule integration"""
         # Extract character context for enhanced processing
         character_context = self._extract_character_context(raw_data, user_query)
         print(f"🎭 CHARACTER CONTEXT: ship={character_context.ship_context}, "
@@ -263,8 +293,16 @@ class LLMQueryProcessor:
             
         # Attempt processing
         try:
+            # Determine if we need summarization or just character processing
+            needs_summarization = len(raw_data) >= self.PROCESSING_THRESHOLD
+            
             if query_type == "logs":
-                processed_content = self._process_log_data_with_character_rules(raw_data, user_query, character_context)
+                if needs_summarization:
+                    print(f"   📝 LOG PROCESSING: Character processing + summarization")
+                    processed_content = self._process_log_data_with_character_rules(raw_data, user_query, character_context)
+                else:
+                    print(f"   🎭 LOG PROCESSING: Character processing only (no summarization)")
+                    processed_content = self._process_log_character_only(raw_data, user_query, character_context)
             else:
                 processed_content = self._process_general_data_with_character_rules(raw_data, user_query, character_context)
                 
@@ -298,7 +336,7 @@ class LLMQueryProcessor:
             )
             self.metrics.log_processing_attempt(result)
             return result
-            
+        
     def _process_log_data(self, raw_logs: str, user_query: str) -> str:
         """Specialized log processing with character dialogue parsing"""
         prompt = self._create_log_summary_prompt(raw_logs, user_query)
@@ -319,6 +357,12 @@ class LLMQueryProcessor:
                                                  character_context: CharacterContext) -> str:
         """Enhanced general data processing with character rule integration"""
         prompt = self._create_character_aware_general_summary_prompt(raw_data, user_query, character_context)
+        return self._call_llm_with_prompt(prompt)
+    
+    def _process_log_character_only(self, raw_logs: str, user_query: str, 
+                                  character_context: CharacterContext) -> str:
+        """Character processing only for log content without summarization"""
+        prompt = self._create_character_processing_only_prompt(raw_logs, user_query, character_context)
         return self._call_llm_with_prompt(prompt)
         
     def _create_log_summary_prompt(self, logs: str, query: str) -> str:
@@ -500,6 +544,71 @@ DATA TO PROCESS:
 {data}
 
 Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. APPLY CHARACTER DISAMBIGUATION AND FILTERING RULES. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
+
+    def _create_character_processing_only_prompt(self, logs: str, query: str, 
+                                               character_context: CharacterContext) -> str:
+        """Create prompt for character processing only (no summarization)"""
+        
+        # Build character rule context
+        character_rules = []
+        
+        if character_context.ship_context:
+            character_rules.append(f"- Ship Context: {character_context.ship_context}")
+        
+        if character_context.dgm_accounts:
+            character_rules.append(f"- DGM Accounts Present: {', '.join(character_context.dgm_accounts)}")
+            character_rules.append("- Apply DGM character control rules: [Character], Character:, (Character) patterns")
+        
+        if character_context.character_designations:
+            character_rules.append(f"- Character Designations Found: {', '.join(set(character_context.character_designations))}")
+        
+        if character_context.ooc_patterns_found:
+            character_rules.append("- OOC Content Detected: Filter out ((text)) patterns")
+        
+        character_rules.append(f"- Roleplay Session Active: {character_context.roleplay_active}")
+        
+        # Character disambiguation rules to apply
+        character_rules.append("- Character Disambiguation Rules (APPLY THESE):")
+        character_rules.append("  * 'Tolena' → 'Ensign Maeve Blaine' (Stardancer) or 'Doctor t'Lena' (other ships)")
+        character_rules.append("  * 'Blaine' → 'Captain Marcus Blaine' (Stardancer) or 'Ensign Maeve Blaine' (context dependent)")
+        character_rules.append("  * 'Trip' → Enterprise character (avoid confusion with 'trip' as journey)")
+        character_rules.append("  * Apply ship context for character disambiguation")
+        
+        # DOIC Channel Rules
+        character_rules.append("- [DOIC] Channel Rules:")
+        character_rules.append("  * Content in [DOIC] channels is primarily narration or other character dialogue")
+        character_rules.append("  * Rarely will [DOIC] content be from the character@account_name speaking")
+        character_rules.append("  * Treat [DOIC] content as environmental/narrative description")
+        
+        # CRITICAL: Perform character processing
+        character_rules.append("- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION")
+        character_rules.append("- Apply character name corrections using ship context")
+        character_rules.append("- Resolve ambiguous character names with proper ranks/titles")
+        character_rules.append("- Filter OOC content: ((text)), //text, [ooc text], ooc:")
+        
+        character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
+        
+        return f"""You are a mission log character processor. Apply character disambiguation and formatting rules to the following content.
+
+CHARACTER PROCESSING RULES:
+{character_context_text}
+
+CRITICAL INSTRUCTIONS:
+- DO NOT SUMMARIZE OR SHORTEN THE CONTENT
+- Return the FULL ORIGINAL CONTENT with character processing applied
+- APPLY character disambiguation rules using ship context
+- Process DGM character control patterns: [Character], Character:, (Character)
+- Filter out OOC content: ((text)), //text, [ooc text], ooc:
+- Handle [DOIC] channel content as narration/environmental description
+- Apply character name corrections and resolve ambiguities
+- Preserve ALL original dialogue, actions, and narrative content
+- Maintain original structure and formatting
+- Only change character names and filter OOC content
+
+CONTENT TO PROCESS:
+{logs}
+
+Return the full content with character disambiguation and filtering applied. DO NOT SUMMARIZE."""
 
     def _call_llm_with_prompt(self, prompt: str) -> str:
         """Call LLM with the given prompt and validate response length"""

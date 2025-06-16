@@ -273,7 +273,10 @@ def should_skip_local_character_processing(content: str) -> bool:
 
 def parse_log_characters(log_content: str, ship_name: Optional[str] = None, 
                         log_title: str = "") -> str:
-    """Parse log content to identify speaking characters and add context with rank/title corrections
+    """Parse log content - simplified to remove local character processing.
+    
+    All character processing is now handled by the secondary LLM to prevent duplication.
+    This function only handles basic DOIC detection for routing purposes.
     
     Enhanced to handle new gamemaster format with ship-context aware character resolution:
     - characterName@AccountName: [Actual Character] - Extract actual character from brackets
@@ -281,109 +284,21 @@ def parse_log_characters(log_content: str, ship_name: Optional[str] = None,
     - Things with * or in ** ** are actions, not dialogue
     - Lines ending with > > or continuation from same character@account are follow ups with dialogue having \"
     - DOIC channel content gets special handling as narration
-    - Optimized: Skip local processing if content will go to secondary LLM
+    - ALL CHARACTER PROCESSING NOW HANDLED BY SECONDARY LLM
     """
     
     # Check if this content will be processed by secondary LLM
-    if should_skip_local_character_processing(log_content):
-        print(f"   🔄 Content will go to secondary LLM - skipping local character processing")
-        # Still handle DOIC content specially since it needs different parsing rules
-        if is_doic_channel_content(log_content):
-            return parse_doic_content(log_content, ship_name)
-        return log_content
+    # (All log content now goes to secondary LLM regardless of size)
+    print(f"   🔄 Log content will be processed by secondary LLM - skipping local character processing")
     
-    # Extract ship context if not provided
-    if not ship_name:
-        ship_name = extract_ship_name_from_log_content(log_content, log_title)
-    
-    # Handle DOIC channel content with special rules
+    # Only handle DOIC detection for routing, no character processing
     if is_doic_channel_content(log_content):
-        return parse_doic_content(log_content, ship_name)
+        # Mark as DOIC but don't process locally - LLM will handle it
+        print(f"   📺 DOIC channel content detected - will be processed by secondary LLM")
+        return f"[DOIC_CONTENT]\n{log_content}"
     
-    # Only print debug if ship context was actually detected
-    if ship_name:
-        print(f"   🎭 Character parsing (ship: {ship_name})")
-    
-    # Process the content directly with integrated character processing
-    # (consolidated from the removed parse_character_dialogue function)
-    lines = log_content.split('\n')
-    parsed_lines = []
-    current_speaker = None
-    
-    for line in lines:
-        original_line = line
-        
-        # Check for playername.tag pattern followed by [<Name>] or direct speech
-        playername_pattern = r'^([^@:]+)@([^:]+):'
-        playername_match = re.match(playername_pattern, line)
-        
-        if playername_match:
-            player_name = playername_match.group(1)
-            tag = playername_match.group(2)
-            
-            # Check if this is @Captain_Riens (game master)
-            if '@Captain_Rien' in line:
-                # Mark as Game Master
-                line = line.replace('@Captain_Rien:', '[GAME MASTER]:')
-                current_speaker = "Game Master"
-            else:
-                # Look for [<Character Name>] pattern in the rest of the line
-                remaining_line = line[playername_match.end():]
-                character_pattern = r'\[([^\]]+)\]'
-                character_match = re.search(character_pattern, remaining_line)
-                
-                if character_match:
-                    character_name = correct_character_name(
-                        character_match.group(1), ship_name, remaining_line
-                    )
-                    current_speaker = character_name
-                    # Replace the line to show character clearly
-                    clean_dialogue = remaining_line.replace(character_match.group(0), '').strip()
-                    clean_dialogue = apply_text_corrections(clean_dialogue, ship_name)
-                    line = f"[{character_name}]: {clean_dialogue}"
-                else:
-                    # No character designation, use corrected player name or last speaker
-                    if current_speaker:
-                        clean_dialogue = apply_text_corrections(remaining_line.strip(), ship_name)
-                        line = f"[{current_speaker}]: {clean_dialogue}"
-                    else:
-                        corrected_player = correct_character_name(
-                            player_name, ship_name, remaining_line
-                        )
-                        current_speaker = corrected_player
-                        clean_dialogue = apply_text_corrections(remaining_line.strip(), ship_name)
-                        line = f"[{corrected_player}]: {clean_dialogue}"
-        
-        # Check for standalone [<Character Name>] pattern
-        elif re.match(r'^\[([^\]]+)\]:', line):
-            character_match = re.match(r'^\[([^\]]+)\]:', line)
-            rest_of_line = line[character_match.end():].strip()
-            corrected_name = correct_character_name(
-                character_match.group(1), ship_name, rest_of_line
-            )
-            current_speaker = corrected_name
-            # Update the line with corrected name
-            rest_of_line = apply_text_corrections(rest_of_line, ship_name)
-            line = f"[{corrected_name}]: {rest_of_line}"
-        
-        # If no speaker designation but we have a current speaker, and line looks like dialogue
-        elif current_speaker and line.strip() and not line.startswith(('*', '/', '#', '=', '-')):
-            # Check if it's a continuation of speech (starts with quote or lowercase)
-            stripped = line.strip()
-            if (stripped.startswith('"') or 
-                stripped.startswith("'") or 
-                (stripped and stripped[0].islower()) or
-                stripped.startswith('*')):
-                corrected_line = apply_text_corrections(line, ship_name)
-                line = f"[{current_speaker}]: {corrected_line}"
-        
-        # Apply corrections to any remaining text
-        else:
-            line = apply_text_corrections(line, ship_name)
-        
-        parsed_lines.append(line)
-    
-    return '\n'.join(parsed_lines)
+    # Return content unchanged - secondary LLM will handle all character processing
+    return log_content
 
 def format_content_type(content: str, is_emote: bool = False) -> str:
     """
@@ -694,14 +609,11 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ HIERARCHICAL LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
         
-        # NEW: Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            result = processor.process_query_results("logs", final_content, query, is_roleplay)
-            return result.content
-        
-        return final_content
+        # NEW: Always process log content through secondary LLM (regardless of size)
+        print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
+        processor = get_llm_processor()
+        result = processor.process_query_results("logs", final_content, query, is_roleplay, force_processing=True)
+        return result.content
         
     except Exception as e:
         print(f"✗ Error getting log content: {e}")
@@ -1318,17 +1230,12 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
         
         print(f"   ✅ Random log selected: '{title}' ({len(formatted_log)} chars)")
         
-        # Process large content through LLM if needed
-        if should_process_data(formatted_log):
-            print(f"🔄 Content size ({len(formatted_log)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_type = determine_query_type('get_random_log_content')
-            query_description = create_query_description('get_random_log_content', ship_name=ship_name)
-            is_roleplay = _get_roleplay_context_from_caller()
-            result = processor.process_query_results(query_type, formatted_log, query_description, is_roleplay)
-            return result.content
-        
-        return formatted_log
+        # NEW: Always process log content through secondary LLM (regardless of size)
+        print(f"🔄 Random log content ({len(formatted_log)} chars) - routing to secondary LLM for character processing")
+        processor = get_llm_processor()
+        query_description = f"random log" + (f" for {ship_name}" if ship_name else "")
+        result = processor.process_query_results("logs", formatted_log, query_description, is_roleplay, force_processing=True)
+        return result.content
         
     except Exception as e:
         print(f"✗ Error getting random log content: {e}")
@@ -1380,15 +1287,12 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ TEMPORAL LOG SELECTION COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
         
-        # NEW: Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_description = f"{selection_type} logs" + (f" for {ship_name}" if ship_name else "")
-            result = processor.process_query_results("logs", final_content, query_description, is_roleplay)
-            return result.content
-        
-        return final_content
+        # NEW: Always process log content through secondary LLM (regardless of size)
+        print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
+        processor = get_llm_processor()
+        query_description = f"{selection_type} logs" + (f" for {ship_name}" if ship_name else "")
+        result = processor.process_query_results("logs", final_content, query_description, is_roleplay, force_processing=True)
+        return result.content
         
     except Exception as e:
         print(f"✗ Error getting temporal log content: {e}")
