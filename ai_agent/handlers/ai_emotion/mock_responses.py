@@ -7,8 +7,6 @@ or for simple conversational interactions.
 """
 
 from typing import Optional, Dict, Any
-import sys
-import os
 
 
 # from handlers.ai_logic.query_detection import is_federation_archives_request  # Moved to local import to prevent circular dependency

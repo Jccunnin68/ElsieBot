@@ -128,12 +128,12 @@ from ..handlers_utils import convert_earth_date_to_star_trek
 
 
 def _process_large_content_if_needed(content: str, query_type: str, user_query: str, is_roleplay: bool = False) -> str:
-    """Process content through secondary LLM if it exceeds 14,000 characters"""
+    """Process content through secondary LLM if it exceeds 30,000 characters"""
     if not content:
         return content
         
     if should_process_data(content):
-        print(f"🔄 Content size ({len(content)} chars) exceeds 14,000 threshold, processing with secondary LLM...")
+        print(f"🔄 Content size ({len(content)} chars) exceeds 30,000 threshold, processing with secondary LLM...")
         processor = get_llm_processor()
         result = processor.process_query_results(query_type, content, user_query, is_roleplay)
         print(f"✅ Secondary LLM processing: {len(content)} → {len(result.content)} chars")
@@ -556,14 +556,14 @@ Present this information naturally and suggest the user try again later or rephr
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - This search PRIORITIZED ship information and personnel records over mission logs
 - If no information is found, say: "I don't have any information about '{subject}' in my database"
-- PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- PROVIDE UP TO 30000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
 - Focus on key details, specifications, background, and significance in a cohesive story
 - Connect different pieces of information to provide comprehensive understanding
 - If information comes from external sources, reference it naturally
 - End with: "Would you like to explore any particular aspect of {subject}?"
 - Present information as a flowing narrative summary, not raw data or bullet points
-- use all 8000 characters of the response space unless the original content is less than 8000 characters
+- use all 30000 characters of the response space unless the original content is less than 30000 characters
 - format the response into sections and sub-sections as needed with titles and sub-titles
 - OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
 - when removing sentences remove the whole sentence not just a part of it
@@ -635,14 +635,14 @@ def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_rolepla
 - Create a comprehensive informative prose summary about: {ship_name}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
-- PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- PROVIDE UP TO 13000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - SYNTHESIZE the information into flowing, informative prose paragraphs rather than bullet points
 - Include specifications, class, registry, crew complement, mission history when available
 - Focus on technical details, capabilities, and significant events in a cohesive story
 - Connect different pieces of information to paint a complete picture of the vessel
 - If information comes from external sources, reference it naturally
 - If ship information is not in the database, say: "I don't have any records for {ship_name} in my database"
-- use all 8000 characters of the response space unless the original content is less than 8000 characters
+- use all 30000 characters of the response space unless the original content is less than 13000 characters
 - format the response into sections and sub-sections as needed with titles and sub-titles
 - OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
 - when removing sentences remove the whole sentence not just a part of it

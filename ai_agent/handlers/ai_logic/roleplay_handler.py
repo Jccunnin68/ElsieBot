@@ -16,6 +16,8 @@ ENHANCED: Quick database response mode for efficient roleplay flow.
 
 from typing import Dict, List, Optional
 
+from handlers.ai_logic.response_router import is_cross_channel_message
+
 from .response_decision import ResponseDecision
 from .query_detection import detect_query_type_with_conflicts
 
@@ -400,29 +402,7 @@ def _convert_llm_routing_to_response_decision(routing_result: Dict, user_message
         return _create_basic_response_decision(user_message)
 
 
-def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, channel_context: Optional[Dict]):
-    """
-    Process DGM () action and convert to response decision.
-    
-    This bridges the DGM system with the response decision system.
-    """
-    try:
-        from .response_decision_engine import create_response_decision_engine
-        
-        contextual_cues = dgm_result.get('contextual_cues')
-        if not contextual_cues:
-            print(f"      ⚠️  No contextual cues from DGM")
-            return _create_basic_response_decision(user_message)
-        
-        # Use enhanced decision engine
-        decision_engine = create_response_decision_engine()
-        enhanced_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
-        
-        return enhanced_decision
-        
-    except Exception as e:
-        print(f"      ❌ Error processing DGM action: {e}")
-        return _create_basic_response_decision(user_message)
+
 
 
 def _create_basic_response_decision(user_message: str):
@@ -449,20 +429,4 @@ def _create_basic_response_decision(user_message: str):
         return BasicResponseDecision()
 
 
-def is_cross_channel_message(channel_context: Optional[Dict]) -> bool:
-    """
-    Check if this is a cross-channel message where Elsie might be busy.
-    
-    This helps manage roleplay state across multiple channels.
-    """
-    if not channel_context:
-        return False
-    
-    try:
-        # Implementation would check roleplay state across channels
-        # For now, return False as this requires roleplay state management
-        return False
-        
-    except Exception as e:
-        print(f"      ⚠️  Error checking cross-channel state: {e}")
-        return False 
+ 

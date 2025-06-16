@@ -24,27 +24,16 @@ class RoleplayContextBuilder:
 from .content_retriever import (
     get_relevant_wiki_context, 
     get_tell_me_about_content_prioritized,
-    get_ship_information,
     is_fallback_response
 )
-from .llm_query_processor import get_llm_processor, should_process_data
-# Note: Using local imports to avoid circular dependency with query_detection
+
 
 
 def _process_large_content_if_needed_roleplay(content: str, query_type: str, user_query: str, is_roleplay: bool = True) -> str:
     """Process content through secondary LLM if it exceeds 14,000 characters (roleplay version)"""
-    if not content:
-        return content
-        
-    if should_process_data(content):
-        print(f"🔄 ROLEPLAY: Content size ({len(content)} chars) exceeds 14,000 threshold, processing with secondary LLM...")
-        processor = get_llm_processor()
-        result = processor.process_query_results(query_type, content, user_query, is_roleplay)
-        print(f"✅ ROLEPLAY: Secondary LLM processing: {len(content)} → {len(result.content)} chars")
-        return result.content
-    else:
-        print(f"✓ ROLEPLAY: Content size ({len(content)} chars) within threshold, no secondary processing needed")
-        return content
+    # Use the standard function with roleplay=True
+    from .standard_context_builder import _process_large_content_if_needed
+    return _process_large_content_if_needed(content, query_type, user_query, is_roleplay)
 
 
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:

@@ -4,12 +4,8 @@ from database_controller import get_db_controller
 from typing import Optional, List, Dict
 import requests
 from urllib.parse import quote
-import re
-from .log_patterns import (
-    CHARACTER_CORRECTIONS, 
-    resolve_character_name_with_context
-)
-from .llm_query_processor import get_llm_processor, should_process_data, is_fallback_response
+
+from .llm_query_processor import get_llm_processor, should_process_data
 
 def determine_query_type(function_name: str, content_type: str = None) -> str:
     """Map function types to LLM processor query types"""
@@ -101,204 +97,7 @@ def is_episode_summary(result: dict) -> bool:
     
     return False
 
-# REMOVED: is_ship_log_title() function - replaced with category-based search
-# The complex ship log detection logic has been removed in favor of using 
-# real MediaWiki categories. Log detection is now handled by:
-# - controller.search_logs() which uses _get_actual_log_categories_from_db()
-# - Category filtering: WHERE categories && log_categories
-# This eliminates ~80 lines of complex regex patterns and hardcoded ship names.
 
-
-
-
-def correct_character_name(name: str, ship_context: Optional[str] = None, 
-                          surrounding_text: str = "") -> str:
-    """Apply character corrections and rank/title fixes with ship context awareness"""
-    if not name:
-        return name
-    
-    # Use new context-aware resolution system
-    return resolve_character_name_with_context(name, ship_context, surrounding_text)
-
-def apply_text_corrections(text: str, ship_context: Optional[str] = None) -> str:
-    """Apply character name corrections to free text with ship context"""
-    corrected_text = text
-    
-    # Use the new resolution system for each character reference
-    from .log_patterns import FALLBACK_CHARACTER_CORRECTIONS, SHIP_SPECIFIC_CHARACTER_CORRECTIONS
-    
-    # Get all possible character names to replace
-    all_corrections = FALLBACK_CHARACTER_CORRECTIONS.copy()
-    if ship_context and ship_context.lower() in SHIP_SPECIFIC_CHARACTER_CORRECTIONS:
-        all_corrections.update(SHIP_SPECIFIC_CHARACTER_CORRECTIONS[ship_context.lower()])
-    
-    # Replace character references in text using context-aware resolution
-    for incorrect, correct in all_corrections.items():
-        # Case-insensitive replacement while preserving case
-        pattern = re.compile(re.escape(incorrect), re.IGNORECASE)
-        
-        def replacement_func(match):
-            matched_text = match.group(0)
-            # Use context-aware resolution instead of simple mapping
-            resolved = resolve_character_name_with_context(matched_text, ship_context, text)
-            return resolved
-        
-        corrected_text = pattern.sub(replacement_func, corrected_text)
-    
-    return corrected_text
-
-def is_doic_channel_content(content: str) -> bool:
-    """
-    Detect if content is from a [DOIC] channel.
-    DOIC content is primarily narration or other character dialogue,
-    rarely from the character@account_name speaking.
-    """
-    # Check for [DOIC] channel indicators
-    doic_patterns = [
-        r'\[DOIC\]',  # Direct [DOIC] tag
-        r'@DOIC',     # @DOIC mentions
-        r'DOIC:',     # DOIC: prefix
-    ]
-    
-    for pattern in doic_patterns:
-        if re.search(pattern, content, re.IGNORECASE):
-            return True
-    
-    return False
-
-def parse_doic_content(content: str, ship_name: Optional[str] = None) -> str:
-    """
-    Parse DOIC channel content with special rules:
-    - Primarily narration or other character dialogue
-    - Rarely from character@account_name speaking
-    - Treat as environmental/narrative description
-    """
-    if not content:
-        return content
-    
-    print(f"   📺 DOIC channel content detected - applying special parsing rules")
-    
-    lines = content.split('\n')
-    processed_lines = []
-    
-    for line in lines:
-        # Remove [DOIC] tags but preserve content
-        line = re.sub(r'\[DOIC\]\s*', '', line, flags=re.IGNORECASE)
-        
-        # Check for character@account patterns in DOIC content
-        speaker_pattern = r'^([^@\s]+)@([^:\s]+):\s*(.*)$'
-        speaker_match = re.match(speaker_pattern, line.strip())
-        
-        if speaker_match:
-            character_name = speaker_match.group(1)
-            account_name = speaker_match.group(2)
-            content_part = speaker_match.group(3)
-            
-            # In DOIC, this is usually narration about the character, not the character speaking
-            # Format as narrative description
-            if content_part.strip():
-                processed_lines.append(f"*{character_name}: {content_part}*")
-            else:
-                processed_lines.append(f"*{character_name} is present*")
-        else:
-            # Regular DOIC content - treat as narration
-            if line.strip():
-                # If not already in narrative format, make it narrative
-                if not (line.strip().startswith('*') and line.strip().endswith('*')):
-                    processed_lines.append(f"*{line.strip()}*")
-                else:
-                    processed_lines.append(line)
-            else:
-                processed_lines.append(line)
-    
-    return '\n'.join(processed_lines)
-
-def should_skip_local_character_processing(content: str) -> bool:
-    """
-    Determine if we should skip local character processing because
-    the content will be processed by the secondary LLM processor.
-    """
-    # If content will go to secondary LLM, skip local processing
-    # The secondary LLM will handle character disambiguation
-    return should_process_data(content)
-
-def parse_log_characters(log_content: str, ship_name: Optional[str] = None, 
-                        log_title: str = "") -> str:
-    """Parse log content - simplified to remove local character processing.
-    
-    All character processing is now handled by the secondary LLM to prevent duplication.
-    This function only handles basic DOIC detection for routing purposes.
-    
-    Enhanced to handle new gamemaster format with ship-context aware character resolution:
-    - characterName@AccountName: [Actual Character] - Extract actual character from brackets
-    - If no [Actual Character], use characterName before @
-    - Things with * or in ** ** are actions, not dialogue
-    - Lines ending with > > or continuation from same character@account are follow ups with dialogue having \"
-    - DOIC channel content gets special handling as narration
-    - ALL CHARACTER PROCESSING NOW HANDLED BY SECONDARY LLM
-    """
-    
-    # Check if this content will be processed by secondary LLM
-    # (All log content now goes to secondary LLM regardless of size)
-    print(f"   🔄 Log content will be processed by secondary LLM - skipping local character processing")
-    
-    # Only handle DOIC detection for routing, no character processing
-    if is_doic_channel_content(log_content):
-        # Mark as DOIC but don't process locally - LLM will handle it
-        print(f"   📺 DOIC channel content detected - will be processed by secondary LLM")
-        return f"[DOIC_CONTENT]\n{log_content}"
-    
-    # Return content unchanged - secondary LLM will handle all character processing
-    return log_content
-
-def format_content_type(content: str, is_emote: bool = False) -> str:
-    """
-    Format content to distinguish between actions and dialogue.
-    
-    Rules:
-    - Content starting with * or in ** ** brackets are actions
-    - Everything else is dialogue
-    - Emotes are formatted as actions
-    """
-    if not content.strip():
-        return content
-    
-    content = content.strip()
-    
-    # Check if it's already in action format (starts with * or wrapped in **)
-    if content.startswith('*') or (content.startswith('**') and content.endswith('**')):
-        return f"*{content.strip('*').strip()}*"  # Normalize to single asterisks
-    
-    # Check if it's an emote
-    if is_emote:
-        return f"*{content}*"
-    
-    # Check for common action verbs and patterns
-    action_patterns = [
-        r'^(walks?|runs?|sits?|stands?|looks?|turns?|moves?|enters?|exits?|approaches?)',
-        r'^(nods?|smiles?|frowns?|laughs?|sighs?|shrugs?)',
-        r'^(grabs?|picks? up|puts? down|places?|holds?|drops?)',
-        r'^(points?|gestures?|waves?|raises?|lowers?)',
-        r'^\*.*\*$',  # Already wrapped in asterisks
-        r'^.*\btaps?\b.*',
-        r'^.*\bpresses?\b.*',
-        r'^.*\bactivates?\b.*'
-    ]
-    
-    # Check if content matches action patterns
-    for pattern in action_patterns:
-        if re.match(pattern, content.lower()):
-            # Don't double-wrap if already wrapped
-            if content.startswith('*') and content.endswith('*'):
-                return content
-            return f"*{content}*"
-    
-    # Check for action indicators within the content
-    if any(indicator in content.lower() for indicator in ['*action*', '*emote*', '*does*', '*performs*']):
-        return f"*{content}*"
-    
-    # Otherwise, treat as dialogue
-    return content
 
 def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool = False) -> str:
     """
@@ -499,11 +298,8 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             content = result['raw_content']
             print(f"   📄 Processing: '{title}' ({len(content)} chars)")
             
-            # Parse character speaking patterns in the log
-            parsed_content = parse_log_characters(content, result.get('ship_name'), title)
-            
-            # Format the log with title and parsed content
-            formatted_log = f"**{title}**\n{parsed_content}"
+            # Format the log with title and raw content (LLM will handle all parsing)
+            formatted_log = f"**{title}**\n{content}"
             log_contents.append(formatted_log)
             print(f"   ✓ Added: {title}")
         
@@ -1047,11 +843,8 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
         log_date = random_log.get('log_date', 'Unknown Date')
         ship = random_log.get('ship_name', 'Unknown Ship')
         
-        # Parse character speaking patterns in the log
-        parsed_content = parse_log_characters(content, random_log.get('ship_name'), title)
-        
-        # Format the random log with special indicator
-        formatted_log = f"**{title}** [Random Selection - {log_date}] ({ship.upper()})\n{parsed_content}"
+        # Format the random log with special indicator (LLM will handle all parsing)
+        formatted_log = f"**{title}** [Random Selection - {log_date}] ({ship.upper()})\n{content}"
         
         print(f"   ✅ Random log selected: '{title}' ({len(formatted_log)} chars)")
         
@@ -1095,10 +888,7 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
             log_date = result.get('log_date', 'Unknown Date')
             ship = result.get('ship_name', 'Unknown Ship')
             
-            # Parse character speaking patterns in the log
-            parsed_content = parse_log_characters(content, result.get('ship_name'), title)
-            
-            # Format with temporal indicator
+            # Format with temporal indicator (LLM will handle all parsing)
             temporal_label = {
                 'latest': 'Latest',
                 'recent': 'Recent', 
@@ -1111,7 +901,7 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
                 'last_week': 'Last Week'
             }.get(selection_type, selection_type.title())
             
-            formatted_log = f"**{title}** [{temporal_label} - {log_date}] ({ship.upper()})\n{parsed_content}"
+            formatted_log = f"**{title}** [{temporal_label} - {log_date}] ({ship.upper()})\n{content}"
             log_contents.append(formatted_log)
             
             print(f"   ✓ Added {selection_type} log: '{title}'")
@@ -1131,9 +921,7 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
         return f"Error retrieving {selection_type} logs: {e}"
 
 
-def get_recent_log_url(search_query: str) -> str:
-    """Get recent log URL - redirects to get_log_url for consistency"""
-    return get_log_url(search_query)
+
 
 def search_database_content(search_type: str, search_term: str = None, 
                            categories: List[str] = None, limit: int = 10, 
