@@ -6,7 +6,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from handlers.ai_coordinator import coordinate_response
-from handlers.ai_wisdom.content_retriever import check_elsiebrain_connection, run_database_cleanup
+from handlers.ai_wisdom.content_retriever import check_elsiebrain_connection
+from database_controller import get_db_controller
 import traceback
 
 # Check if cleanup flag is set
@@ -29,14 +30,7 @@ async def lifespan(app: FastAPI):
         print("⚠️  Database connection issues detected")
     
     # Run cleanup if requested
-    if CLEANUP_ON_STARTUP:
-        print("🧹 Running database cleanup on startup...")
-        cleanup_result = run_database_cleanup()
-        if cleanup_result:
-            print("✅ Database cleanup completed successfully!")
-        else:
-            print("❌ Database cleanup failed!")
-    
+
     yield
     
     # Add any cleanup code here if needed
@@ -132,11 +126,20 @@ async def health_check():
 async def manual_cleanup():
     """Manual cleanup endpoint"""
     try:
-        result = run_database_cleanup()
-        if result:
-            return {"status": "success", "message": "Database cleanup completed", "results": result}
-        else:
-            return {"status": "error", "message": "Database cleanup failed"}
+        controller = get_db_controller()
+        ship_cleanup = controller.cleanup_mission_log_ship_names()
+        seed_cleanup = controller.cleanup_seed_data()
+        
+        results = {
+            "ship_cleanup": ship_cleanup,
+            "seed_cleanup": seed_cleanup
+        }
+        
+        return {
+            "status": "success", 
+            "message": "Database cleanup completed", 
+            "results": results
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
