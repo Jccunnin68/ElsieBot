@@ -5,7 +5,12 @@ from typing import Optional, List
 import requests
 from urllib.parse import quote
 import re
-from .log_patterns import CHARACTER_CORRECTIONS, SHIP_NAMES
+from .log_patterns import (
+    CHARACTER_CORRECTIONS, 
+    SHIP_NAMES,
+    resolve_character_name_with_context,
+    extract_ship_name_from_log_content
+)
 from .llm_query_processor import get_llm_processor, should_process_data, is_fallback_response
 
 def determine_query_type(function_name: str, content_type: str = None) -> str:
@@ -33,6 +38,7 @@ def _get_roleplay_context_from_caller() -> bool:
     """
     Detect if we're in roleplay context by examining the call stack.
     This avoids threading roleplay parameters through all content functions.
+    Enhanced to check for explicit roleplay parameters.
     """
     import inspect
     
@@ -43,8 +49,8 @@ def _get_roleplay_context_from_caller() -> bool:
             frame_info = inspect.getframeinfo(frame)
             filename = frame_info.filename
             
-            # Look for ai_wisdom_handler.py in call stack
-            if 'ai_wisdom_handler.py' in filename:
+            # Look for ai_wisdom_handler.py or context_coordinator.py in call stack
+            if any(handler in filename for handler in ['ai_wisdom_handler.py', 'context_coordinator.py', 'non_roleplay_context_builder.py']):
                 # Check if the calling function has roleplay context
                 local_vars = frame.f_locals
                 if 'is_roleplay' in local_vars:
@@ -61,6 +67,14 @@ def _get_roleplay_context_from_caller() -> bool:
         # Clean up frame reference to prevent memory leaks
         if 'frame' in locals():
             del frame
+    
+    # Also check roleplay state manager as fallback
+    try:
+        from ..ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        return rp_state.is_roleplaying
+    except:
+        pass
     
     return False  # Default to non-roleplay
 
@@ -146,53 +160,153 @@ def is_ship_log_title(title: str) -> bool:
     return False
 
 
-def correct_character_name(name: str) -> str:
-    """Apply character corrections and rank/title fixes"""
+def correct_character_name(name: str, ship_context: Optional[str] = None, 
+                          surrounding_text: str = "") -> str:
+    """Apply character corrections and rank/title fixes with ship context awareness"""
     if not name:
         return name
-        
-    name_lower = name.lower().strip()
     
-    # Direct lookup first
-    if name_lower in CHARACTER_CORRECTIONS:
-        return CHARACTER_CORRECTIONS[name_lower]
-    
-    # Check for partial matches (last name only)
-    for key, corrected in CHARACTER_CORRECTIONS.items():
-        if ' ' in key:  # Full name entries
-            last_name = key.split()[-1]
-            if name_lower == last_name:
-                return corrected
-    
-    # If no correction found, return original with proper capitalization
-    return ' '.join(word.capitalize() for word in name.split())
+    # Use new context-aware resolution system
+    return resolve_character_name_with_context(name, ship_context, surrounding_text)
 
-def apply_text_corrections(text: str) -> str:
-    """Apply character name corrections to free text"""
+def apply_text_corrections(text: str, ship_context: Optional[str] = None) -> str:
+    """Apply character name corrections to free text with ship context"""
     corrected_text = text
     
-    # Replace character references in text
-    for incorrect, correct in CHARACTER_CORRECTIONS.items():
+    # Use the new resolution system for each character reference
+    from .log_patterns import FALLBACK_CHARACTER_CORRECTIONS, SHIP_SPECIFIC_CHARACTER_CORRECTIONS
+    
+    # Get all possible character names to replace
+    all_corrections = FALLBACK_CHARACTER_CORRECTIONS.copy()
+    if ship_context and ship_context.lower() in SHIP_SPECIFIC_CHARACTER_CORRECTIONS:
+        all_corrections.update(SHIP_SPECIFIC_CHARACTER_CORRECTIONS[ship_context.lower()])
+    
+    # Replace character references in text using context-aware resolution
+    for incorrect, correct in all_corrections.items():
         # Case-insensitive replacement while preserving case
         pattern = re.compile(re.escape(incorrect), re.IGNORECASE)
-        corrected_text = pattern.sub(correct, corrected_text)
+        
+        def replacement_func(match):
+            matched_text = match.group(0)
+            # Use context-aware resolution instead of simple mapping
+            resolved = resolve_character_name_with_context(matched_text, ship_context, text)
+            return resolved
+        
+        corrected_text = pattern.sub(replacement_func, corrected_text)
     
     return corrected_text
 
-def parse_log_characters(log_content: str) -> str:
+def is_doic_channel_content(content: str) -> bool:
+    """
+    Detect if content is from a [DOIC] channel.
+    DOIC content is primarily narration or other character dialogue,
+    rarely from the character@account_name speaking.
+    """
+    # Check for [DOIC] channel indicators
+    doic_patterns = [
+        r'\[DOIC\]',  # Direct [DOIC] tag
+        r'@DOIC',     # @DOIC mentions
+        r'DOIC:',     # DOIC: prefix
+    ]
+    
+    for pattern in doic_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            return True
+    
+    return False
+
+def parse_doic_content(content: str, ship_name: Optional[str] = None) -> str:
+    """
+    Parse DOIC channel content with special rules:
+    - Primarily narration or other character dialogue
+    - Rarely from character@account_name speaking
+    - Treat as environmental/narrative description
+    """
+    if not content:
+        return content
+    
+    print(f"   📺 DOIC channel content detected - applying special parsing rules")
+    
+    lines = content.split('\n')
+    processed_lines = []
+    
+    for line in lines:
+        # Remove [DOIC] tags but preserve content
+        line = re.sub(r'\[DOIC\]\s*', '', line, flags=re.IGNORECASE)
+        
+        # Check for character@account patterns in DOIC content
+        speaker_pattern = r'^([^@\s]+)@([^:\s]+):\s*(.*)$'
+        speaker_match = re.match(speaker_pattern, line.strip())
+        
+        if speaker_match:
+            character_name = speaker_match.group(1)
+            account_name = speaker_match.group(2)
+            content_part = speaker_match.group(3)
+            
+            # In DOIC, this is usually narration about the character, not the character speaking
+            # Format as narrative description
+            if content_part.strip():
+                processed_lines.append(f"*{character_name}: {content_part}*")
+            else:
+                processed_lines.append(f"*{character_name} is present*")
+        else:
+            # Regular DOIC content - treat as narration
+            if line.strip():
+                # If not already in narrative format, make it narrative
+                if not (line.strip().startswith('*') and line.strip().endswith('*')):
+                    processed_lines.append(f"*{line.strip()}*")
+                else:
+                    processed_lines.append(line)
+            else:
+                processed_lines.append(line)
+    
+    return '\n'.join(processed_lines)
+
+def should_skip_local_character_processing(content: str) -> bool:
+    """
+    Determine if we should skip local character processing because
+    the content will be processed by the secondary LLM processor.
+    """
+    # If content will go to secondary LLM, skip local processing
+    # The secondary LLM will handle character disambiguation
+    return should_process_data(content)
+
+def parse_log_characters(log_content: str, ship_name: Optional[str] = None, 
+                        log_title: str = "") -> str:
     """Parse log content to identify speaking characters and add context with rank/title corrections
     
-    Enhanced to handle new gamemaster format:
+    Enhanced to handle new gamemaster format with ship-context aware character resolution:
     - characterName@AccountName: [Actual Character] - Extract actual character from brackets
     - If no [Actual Character], use characterName before @
     - Things with * or in ** ** are actions, not dialogue
     - Lines ending with > > or continuation from same character@account are follow ups with dialogue having \"
+    - DOIC channel content gets special handling as narration
+    - Optimized: Skip local processing if content will go to secondary LLM
     """
     
-    # First apply the new enhanced character dialogue parsing
-    enhanced_content = parse_character_dialogue(log_content)
+    # Check if this content will be processed by secondary LLM
+    if should_skip_local_character_processing(log_content):
+        print(f"   🔄 Content will go to secondary LLM - skipping local character processing")
+        # Still handle DOIC content specially since it needs different parsing rules
+        if is_doic_channel_content(log_content):
+            return parse_doic_content(log_content, ship_name)
+        return log_content
     
-    lines = enhanced_content.split('\n')
+    # Extract ship context if not provided
+    if not ship_name:
+        ship_name = extract_ship_name_from_log_content(log_content, log_title)
+    
+    # Handle DOIC channel content with special rules
+    if is_doic_channel_content(log_content):
+        return parse_doic_content(log_content, ship_name)
+    
+    # Only print debug if ship context was actually detected
+    if ship_name:
+        print(f"   🎭 Character parsing (ship: {ship_name})")
+    
+    # Process the content directly with integrated character processing
+    # (consolidated from the removed parse_character_dialogue function)
+    lines = log_content.split('\n')
     parsed_lines = []
     current_speaker = None
     
@@ -219,31 +333,37 @@ def parse_log_characters(log_content: str) -> str:
                 character_match = re.search(character_pattern, remaining_line)
                 
                 if character_match:
-                    character_name = correct_character_name(character_match.group(1))
+                    character_name = correct_character_name(
+                        character_match.group(1), ship_name, remaining_line
+                    )
                     current_speaker = character_name
                     # Replace the line to show character clearly
                     clean_dialogue = remaining_line.replace(character_match.group(0), '').strip()
-                    clean_dialogue = apply_text_corrections(clean_dialogue)
+                    clean_dialogue = apply_text_corrections(clean_dialogue, ship_name)
                     line = f"[{character_name}]: {clean_dialogue}"
                 else:
                     # No character designation, use corrected player name or last speaker
                     if current_speaker:
-                        clean_dialogue = apply_text_corrections(remaining_line.strip())
+                        clean_dialogue = apply_text_corrections(remaining_line.strip(), ship_name)
                         line = f"[{current_speaker}]: {clean_dialogue}"
                     else:
-                        corrected_player = correct_character_name(player_name)
+                        corrected_player = correct_character_name(
+                            player_name, ship_name, remaining_line
+                        )
                         current_speaker = corrected_player
-                        clean_dialogue = apply_text_corrections(remaining_line.strip())
+                        clean_dialogue = apply_text_corrections(remaining_line.strip(), ship_name)
                         line = f"[{corrected_player}]: {clean_dialogue}"
         
         # Check for standalone [<Character Name>] pattern
         elif re.match(r'^\[([^\]]+)\]:', line):
             character_match = re.match(r'^\[([^\]]+)\]:', line)
-            corrected_name = correct_character_name(character_match.group(1))
+            rest_of_line = line[character_match.end():].strip()
+            corrected_name = correct_character_name(
+                character_match.group(1), ship_name, rest_of_line
+            )
             current_speaker = corrected_name
             # Update the line with corrected name
-            rest_of_line = line[character_match.end():].strip()
-            rest_of_line = apply_text_corrections(rest_of_line)
+            rest_of_line = apply_text_corrections(rest_of_line, ship_name)
             line = f"[{corrected_name}]: {rest_of_line}"
         
         # If no speaker designation but we have a current speaker, and line looks like dialogue
@@ -254,123 +374,16 @@ def parse_log_characters(log_content: str) -> str:
                 stripped.startswith("'") or 
                 (stripped and stripped[0].islower()) or
                 stripped.startswith('*')):
-                corrected_line = apply_text_corrections(line)
+                corrected_line = apply_text_corrections(line, ship_name)
                 line = f"[{current_speaker}]: {corrected_line}"
         
         # Apply corrections to any remaining text
         else:
-            line = apply_text_corrections(line)
+            line = apply_text_corrections(line, ship_name)
         
         parsed_lines.append(line)
     
     return '\n'.join(parsed_lines)
-
-def parse_character_dialogue(log_content: str) -> str:
-    """
-    Parse mission log content to extract proper character names and format dialogue/actions.
-    
-    Rules:
-    - characterName@AccountName: [Actual Character] - Extract actual character from brackets
-    - If no [Actual Character], use characterName before @
-    - Things with * or in ** ** are actions, not dialogue
-    - Lines ending with > > or continuation from same character@account are emotes
-    """
-    if not log_content:
-        return log_content
-    
-    lines = log_content.split('\n')
-    processed_lines = []
-    last_speaker = None
-    last_account = None
-    
-    # Pattern to match character@account: format
-    speaker_pattern = r'^([^@\s]+)@([^:\s]+):\s*(.*)$'
-    # Pattern to match [Actual Character] in the content
-    actual_character_pattern = r'^\[([^\]]+)\]\s*(.*)$'
-    
-    for line in lines:
-        # Skip empty lines and preserve them
-        if not line.strip():
-            processed_lines.append(line)
-            continue
-        
-        # Check if this line matches the character@account: format
-        speaker_match = re.match(speaker_pattern, line.strip())
-        
-        if speaker_match:
-            character_name = speaker_match.group(1)
-            account_name = speaker_match.group(2)
-            content = speaker_match.group(3)
-            
-            # Check if content starts with [Actual Character]
-            actual_char_match = re.match(actual_character_pattern, content)
-            
-            if actual_char_match:
-                # Use the actual character name from brackets
-                actual_speaker = correct_character_name(actual_char_match.group(1))
-                remaining_content = actual_char_match.group(2)
-            else:
-                # Use the character name before @
-                actual_speaker = correct_character_name(character_name)
-                remaining_content = content
-            
-            # Apply text corrections to content
-            remaining_content = apply_text_corrections(remaining_content)
-            
-            # Update tracking for continuation lines
-            last_speaker = actual_speaker
-            last_account = account_name
-            
-            # Process the content to identify actions vs dialogue
-            formatted_content = format_content_type(remaining_content)
-            
-            # Create the formatted line
-            if formatted_content:
-                processed_lines.append(f"{actual_speaker}: {formatted_content}")
-            else:
-                processed_lines.append(f"{actual_speaker}:")
-        
-        elif line.strip().endswith('> >'):
-            # This is an emote line, likely a continuation
-            emote_content = line.strip()[:-3].strip()  # Remove > >
-            if last_speaker:
-                formatted_emote = format_content_type(emote_content, is_emote=True)
-                processed_lines.append(f"{last_speaker}: {formatted_emote}")
-            else:
-                processed_lines.append(line)
-        
-        elif last_speaker and last_account and not re.match(speaker_pattern, line.strip()):
-            # This might be a continuation line from the same speaker
-            # Check if it looks like a continuation (starts with space, indented, or doesn't end with period)
-            stripped_line = line.strip()
-            is_continuation = (
-                line.startswith(' ') or 
-                line.startswith('\t') or 
-                not stripped_line.endswith('.') or
-                not stripped_line.endswith('!') or
-                not stripped_line.endswith('?') or
-                len(stripped_line.split()) <= 3  # Short phrases are likely continuations
-            )
-            
-            if is_continuation and stripped_line:
-                # Apply text corrections before formatting
-                corrected_content = apply_text_corrections(stripped_line)
-                formatted_content = format_content_type(corrected_content)
-                if formatted_content:
-                    processed_lines.append(f"{last_speaker}: {formatted_content}")
-                else:
-                    processed_lines.append(line)
-            else:
-                # Not a continuation, reset speaker tracking
-                last_speaker = None
-                last_account = None
-                processed_lines.append(line)
-        
-        else:
-            # Regular line, not matching any patterns
-            processed_lines.append(line)
-    
-    return '\n'.join(processed_lines)
 
 def format_content_type(content: str, is_emote: bool = False) -> str:
     """
@@ -595,24 +608,27 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
                 # Get one random log
                 return get_random_log_content(ship_name, is_roleplay)
             elif selection_type in ['latest', 'recent']:
-                # Get most recent logs
-                return get_temporal_log_content(selection_type, ship_name, limit=5, is_roleplay=is_roleplay)
+                # Get most recent logs - "latest" should return only 1, "recent" can return multiple
+                limit = 1 if selection_type == 'latest' else 5
+                return get_temporal_log_content(selection_type, ship_name, limit=limit, is_roleplay=is_roleplay)
             elif selection_type in ['first', 'earliest', 'oldest']:
-                # Get oldest logs  
-                return get_temporal_log_content(selection_type, ship_name, limit=5, is_roleplay=is_roleplay)
+                # Get oldest logs - "first" should return only 1, others can return multiple  
+                limit = 1 if selection_type == 'first' else 5
+                return get_temporal_log_content(selection_type, ship_name, limit=limit, is_roleplay=is_roleplay)
             elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
                 # Get date-filtered logs
                 return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
         
-        # Use ship log categories instead of page_type
-        from .category_mappings import SHIP_LOG_CATEGORIES
-        print(f"   📊 STANDARD LOG REQUEST: Using ship log categories: {len(SHIP_LOG_CATEGORIES)} categories")
+        # Use dynamic log category filtering instead of hardcoded categories
+        from .category_mappings import get_all_log_categories
+        log_categories = get_all_log_categories()
+        print(f"   📊 STANDARD LOG REQUEST: Using dynamic log categories: {len(log_categories)} categories")
         
-        # Search using categories instead of page_type
+        # Search using dynamic log categories instead of hardcoded categories
         if mission_logs_only:
-            # Use only ship log categories
-            results = controller.search_by_categories(query, SHIP_LOG_CATEGORIES, limit=20)
-            print(f"   📊 Ship log category search returned {len(results)} results")
+            # Use only dynamic log categories
+            results = controller.search_by_categories(query, log_categories, limit=20)
+            print(f"   📊 Dynamic log category search returned {len(results)} results")
         else:
             # Use force_mission_logs_only for backward compatibility
             results = controller.search_pages(query, limit=20, force_mission_logs_only=True)
@@ -633,10 +649,10 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
                 content_preview = r['raw_content'][:50] + "..." if len(r['raw_content']) > 50 else r['raw_content']
                 categories = r.get('categories', [])
                 
-                # Check if it has ship log categories or use enhanced ship log detection
-                if any(cat in SHIP_LOG_CATEGORIES for cat in categories):
+                # Check if it has log categories or use enhanced ship log detection
+                if any(cat in log_categories for cat in categories):
                     log_results.append(r)
-                    print(f"   ✓ Category-based ship log: '{title}' Categories={categories}")
+                    print(f"   ✓ Category-based log: '{title}' Categories={categories}")
                 elif is_ship_log_title(title):
                     log_results.append(r)
                     print(f"   ✓ Title-based ship log: '{title}' Content='{content_preview}'")
@@ -664,20 +680,16 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             content = result['raw_content']  # NO LENGTH LIMIT
             categories = result.get('categories', [])
             page_type = result.get('page_type', 'unknown')
-            print(f"   📄 Processing {page_type}: '{title}' (categories: {categories}) ({len(content)} chars)")
+            print(f"   📄 Processing: '{title}' ({len(content)} chars)")
             
             # Parse character speaking patterns in the log using enhanced dialogue parsing
-            parsed_content = parse_log_characters(content)
+            parsed_content = parse_log_characters(content, result.get('ship_name'), title)
             
             # Format the log with title and parsed content
             formatted_log = f"**{title}**\n{parsed_content}"
             
-            # Debug: Show first 50 chars of the formatted log
-            formatted_preview = formatted_log[:100].replace('\n', ' ') + "..." if len(formatted_log) > 100 else formatted_log.replace('\n', ' ')
-            print(f"   📝 Formatted log preview: '{formatted_preview}'")
-            
             log_contents.append(formatted_log)
-            print(f"   ✓ Added {page_type}: {title}")
+            print(f"   ✓ Added: {title}")
         
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ HIERARCHICAL LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
@@ -1299,7 +1311,7 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
         ship = random_log.get('ship_name', 'Unknown Ship')
         
         # Parse character speaking patterns in the log
-        parsed_content = parse_log_characters(content)
+        parsed_content = parse_log_characters(content, random_log.get('ship_name'), title)
         
         # Format the random log with special indicator
         formatted_log = f"**{title}** [Random Selection - {log_date}] ({ship.upper()})\n{parsed_content}"
@@ -1345,7 +1357,7 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
             ship = result.get('ship_name', 'Unknown Ship')
             
             # Parse character speaking patterns in the log
-            parsed_content = parse_log_characters(content)
+            parsed_content = parse_log_characters(content, result.get('ship_name'), title)
             
             # Format with temporal indicator
             temporal_label = {

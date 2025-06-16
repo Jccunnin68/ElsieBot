@@ -4,7 +4,7 @@ LLM Query Post Processor
 
 Post-processes large query results using gemini-2.0-flash-lite to create concise,
 relevant summaries for the main AI engine. Includes context-aware fallback handling
-for roleplay vs non-roleplay scenarios.
+for roleplay vs non-roleplay scenarios with character rule integration.
 """
 
 import time
@@ -27,6 +27,15 @@ class ProcessingResult:
     original_data_size: int = 0
     processed_data_size: int = 0
     fallback_reason: Optional[str] = None
+
+@dataclass
+class CharacterContext:
+    """Character context information for LLM processing"""
+    ship_context: Optional[str] = None
+    dgm_accounts: List[str] = None
+    character_designations: List[str] = None
+    ooc_patterns_found: List[str] = None
+    roleplay_active: bool = False
 
 
 class RateLimiter:
@@ -137,6 +146,7 @@ class LLMQueryProcessor:
     """
     Post-processes large query results using gemini-2.0-flash-lite
     to create concise, relevant summaries for the main AI engine.
+    Enhanced with character rule integration for proper name disambiguation.
     """
     
     PROCESSING_THRESHOLD = 14000  # Characters
@@ -158,9 +168,58 @@ class LLMQueryProcessor:
             print(f"⚠️  Failed to initialize Gemini client: {e}")
             return None
             
+    def _extract_character_context(self, raw_data: str, user_query: str) -> CharacterContext:
+        """Extract character context from raw data for processing"""
+        try:
+            from .log_patterns import extract_ship_name_from_log_content
+            from ..ai_attention.dgm_handler import check_dgm_post
+            from ..ai_attention.exit_conditions import detect_roleplay_exit_conditions
+            from ..ai_attention.state_manager import get_roleplay_state
+            
+            context = CharacterContext()
+            
+            # Extract ship context from content
+            context.ship_context = extract_ship_name_from_log_content(raw_data, user_query)
+            
+            # Check for DGM accounts and designations
+            dgm_accounts = ['liorexus', 'isis', 'cygnus', 'illuice', 'captain_rien', 'captain_riens']
+            context.dgm_accounts = [acc for acc in dgm_accounts if acc.lower() in raw_data.lower()]
+            
+            # Look for character designation patterns
+            designation_patterns = [
+                r'\[([^\]]+)\]',  # [Character Name]
+                r'([A-Z][a-z]+):',  # Character:
+                r'\(([A-Z][a-z]+)\)'  # (Character)
+            ]
+            
+            context.character_designations = []
+            for pattern in designation_patterns:
+                matches = re.findall(pattern, raw_data)
+                context.character_designations.extend(matches)
+            
+            # Check for OOC patterns
+            ooc_patterns = [r'\(\([^)]*\)\)', r'//[^/]*', r'\[ooc[^\]]*\]', r'\booc:']
+            context.ooc_patterns_found = []
+            for pattern in ooc_patterns:
+                if re.search(pattern, raw_data, re.IGNORECASE):
+                    context.ooc_patterns_found.append(pattern)
+            
+            # Check roleplay state
+            try:
+                rp_state = get_roleplay_state()
+                context.roleplay_active = rp_state.is_roleplaying
+            except:
+                context.roleplay_active = False
+            
+            return context
+            
+        except Exception as e:
+            print(f"⚠️  Error extracting character context: {e}")
+            return CharacterContext()
+            
     def process_query_results(self, query_type: str, raw_data: str, user_query: str, 
                             is_roleplay: bool = False) -> ProcessingResult:
-        """Main processing entry point"""
+        """Main processing entry point with character rule integration"""
         print(f"🔄 LLM PROCESSING: type='{query_type}', size={len(raw_data)} chars, roleplay={is_roleplay}")
         
         original_size = len(raw_data)
@@ -194,12 +253,20 @@ class LLMQueryProcessor:
             self.metrics.log_processing_attempt(result)
             return result
             
+        # Extract character context for enhanced processing
+        character_context = self._extract_character_context(raw_data, user_query)
+        print(f"🎭 CHARACTER CONTEXT: ship={character_context.ship_context}, "
+              f"dgm_accounts={len(character_context.dgm_accounts)}, "
+              f"designations={len(character_context.character_designations)}, "
+              f"ooc_patterns={len(character_context.ooc_patterns_found)}, "
+              f"roleplay_active={character_context.roleplay_active}")
+            
         # Attempt processing
         try:
             if query_type == "logs":
-                processed_content = self._process_log_data(raw_data, user_query)
+                processed_content = self._process_log_data_with_character_rules(raw_data, user_query, character_context)
             else:
-                processed_content = self._process_general_data(raw_data, user_query)
+                processed_content = self._process_general_data_with_character_rules(raw_data, user_query, character_context)
                 
             if processed_content:
                 self.rate_limiter.record_request()
@@ -236,15 +303,29 @@ class LLMQueryProcessor:
         """Specialized log processing with character dialogue parsing"""
         prompt = self._create_log_summary_prompt(raw_logs, user_query)
         return self._call_llm_with_prompt(prompt)
+    
+    def _process_log_data_with_character_rules(self, raw_logs: str, user_query: str, 
+                                             character_context: CharacterContext) -> str:
+        """Enhanced log processing with character rule integration"""
+        prompt = self._create_character_aware_log_summary_prompt(raw_logs, user_query, character_context)
+        return self._call_llm_with_prompt(prompt)
         
     def _process_general_data(self, raw_data: str, user_query: str) -> str:
         """General data summarization"""
         prompt = self._create_general_summary_prompt(raw_data, user_query)
         return self._call_llm_with_prompt(prompt)
+    
+    def _process_general_data_with_character_rules(self, raw_data: str, user_query: str,
+                                                 character_context: CharacterContext) -> str:
+        """Enhanced general data processing with character rule integration"""
+        prompt = self._create_character_aware_general_summary_prompt(raw_data, user_query, character_context)
+        return self._call_llm_with_prompt(prompt)
         
     def _create_log_summary_prompt(self, logs: str, query: str) -> str:
         """Create optimized prompt for log summarization"""
         return f"""You are a mission log analyst. Process the following mission logs in response to this query: "{query}"
+
+CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
 
 INSTRUCTIONS:
 - Focus on key events, character actions, and dialogue relevant to the query
@@ -254,17 +335,89 @@ INSTRUCTIONS:
 - Keep character personalities and relationships clear
 - Include detailed dialogue and character interactions when relevant
 - Preserve mission context and background information
-- Be comprehensive and detailed - aim to retain 70-90% of essential content
-- Maximum output: 14000 characters - use this space generously for thorough coverage
+- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
+- Prioritize relevance to the query over completeness if space is limited
 
 MISSION LOGS TO PROCESS:
 {logs}
 
-Provide a comprehensive and detailed summary that thoroughly addresses the user's query while preserving all essential mission details, character interactions, and context."""
+Provide a comprehensive summary that thoroughly addresses the user's query while preserving essential mission details, character interactions, and context. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
+
+    def _create_character_aware_log_summary_prompt(self, logs: str, query: str, 
+                                                 character_context: CharacterContext) -> str:
+        """Create character-aware prompt for log summarization with disambiguation rules"""
+        
+        # Build character rule context
+        character_rules = []
+        
+        if character_context.ship_context:
+            character_rules.append(f"- Ship Context: {character_context.ship_context}")
+        
+        if character_context.dgm_accounts:
+            character_rules.append(f"- DGM Accounts Present: {', '.join(character_context.dgm_accounts)}")
+            character_rules.append("- Apply DGM character control rules: [Character], Character:, (Character) patterns")
+        
+        if character_context.character_designations:
+            character_rules.append(f"- Character Designations Found: {', '.join(set(character_context.character_designations))}")
+        
+        if character_context.ooc_patterns_found:
+            character_rules.append("- OOC Content Detected: Filter out ((text)) patterns")
+        
+        character_rules.append(f"- Roleplay Session Active: {character_context.roleplay_active}")
+        
+        # Character disambiguation rules to apply
+        character_rules.append("- Character Disambiguation Rules (APPLY THESE):")
+        character_rules.append("  * 'Tolena' → 'Ensign Maeve Blaine' (Stardancer) or 'Doctor t'Lena' (other ships)")
+        character_rules.append("  * 'Blaine' → 'Captain Marcus Blaine' (Stardancer) or 'Ensign Maeve Blaine' (context dependent)")
+        character_rules.append("  * 'Trip' → Enterprise character (avoid confusion with 'trip' as journey)")
+        character_rules.append("  * Apply ship context for character disambiguation")
+        
+        # DOIC Channel Rules
+        character_rules.append("- [DOIC] Channel Rules:")
+        character_rules.append("  * Content in [DOIC] channels is primarily narration or other character dialogue")
+        character_rules.append("  * Rarely will [DOIC] content be from the character@account_name speaking")
+        character_rules.append("  * Treat [DOIC] content as environmental/narrative description")
+        
+        # CRITICAL: Perform character processing
+        character_rules.append("- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION")
+        character_rules.append("- Apply character name corrections using ship context")
+        character_rules.append("- Resolve ambiguous character names with proper ranks/titles")
+        character_rules.append("- Filter OOC content: ((text)), //text, [ooc text], ooc:")
+        
+        character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
+        
+        return f"""You are a mission log analyst with character rule awareness. Process the following mission logs in response to this query: "{query}"
+
+CHARACTER PROCESSING RULES:
+{character_context_text}
+
+CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
+
+INSTRUCTIONS:
+- APPLY character disambiguation rules using ship context
+- Process DGM character control patterns: [Character], Character:, (Character)
+- Filter out OOC content: ((text)), //text, [ooc text], ooc:
+- Handle [DOIC] channel content as narration/environmental description
+- Apply character name corrections and resolve ambiguities
+- Include key events, character actions, and dialogue relevant to the query
+- Maintain chronological order when possible
+- Include significant decisions and outcomes
+- Keep character personalities and relationships clear
+- Include detailed dialogue and character interactions when relevant
+- Preserve mission context and background information
+- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
+- Prioritize relevance to the query over completeness if space is limited
+
+MISSION LOGS TO PROCESS:
+{logs}
+
+Provide a comprehensive summary that thoroughly addresses the user's query while preserving essential mission details, character interactions, and context. APPLY CHARACTER DISAMBIGUATION AND FILTERING RULES. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
 
     def _create_general_summary_prompt(self, data: str, query: str) -> str:
         """Create optimized prompt for general data"""
         return f"""You are a database analyst. Process the following information in response to this query: "{query}"
+
+CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
 
 INSTRUCTIONS:
 - Extract key facts and relationships relevant to the query
@@ -273,23 +426,97 @@ INSTRUCTIONS:
 - Include comprehensive context and background information
 - Maintain accuracy of all factual content
 - Focus on information that directly answers the user's question
-- Be thorough and detailed - aim to retain 70-90% of essential content
-- Maximum output: 14000 characters - use this space generously for comprehensive coverage
+- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
+- Prioritize relevance to the query over completeness if space is limited
 
 DATA TO PROCESS:
 {data}
 
-Provide a well-organized and comprehensive response that thoroughly addresses the user's query while preserving all important factual information and context."""
+Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
+
+    def _create_character_aware_general_summary_prompt(self, data: str, query: str,
+                                                     character_context: CharacterContext) -> str:
+        """Create character-aware prompt for general data with disambiguation rules"""
+        
+        # Build character rule context
+        character_rules = []
+        
+        if character_context.ship_context:
+            character_rules.append(f"- Ship Context: {character_context.ship_context}")
+        
+        if character_context.dgm_accounts:
+            character_rules.append(f"- DGM Accounts Present: {', '.join(character_context.dgm_accounts)}")
+        
+        if character_context.character_designations:
+            character_rules.append(f"- Character Designations Found: {', '.join(set(character_context.character_designations))}")
+        
+        if character_context.ooc_patterns_found:
+            character_rules.append("- OOC Content Detected: Filter appropriately")
+        
+        character_rules.append(f"- Roleplay Session Active: {character_context.roleplay_active}")
+        
+        # Character Disambiguation Rules to apply
+        character_rules.append("- Character Disambiguation Rules (APPLY THESE):")
+        character_rules.append("  * Ship-context aware character resolution")
+        character_rules.append("  * 'Trip' → Enterprise character (avoid confusion with 'trip' as journey)")
+        character_rules.append("  * Apply proper character name formatting with context")
+        
+        # DOIC Channel Rules
+        character_rules.append("- [DOIC] Channel Rules:")
+        character_rules.append("  * Content in [DOIC] channels is primarily narration or other character dialogue")
+        character_rules.append("  * Rarely will [DOIC] content be from the character@account_name speaking")
+        character_rules.append("  * Treat [DOIC] content as environmental/narrative description")
+        
+        # CRITICAL: Perform character processing
+        character_rules.append("- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION")
+        character_rules.append("- Apply character corrections and resolve ambiguities")
+        character_rules.append("- Use ship context for proper character identification")
+        character_rules.append("- Filter OOC content appropriately")
+        
+        character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
+        
+        return f"""You are a database analyst with character rule awareness. Process the following information in response to this query: "{query}"
+
+CHARACTER PROCESSING RULES:
+{character_context_text}
+
+CRITICAL LENGTH REQUIREMENT: Your response MUST be 14000 characters or fewer. Count carefully and prioritize the most essential content.
+
+INSTRUCTIONS:
+- APPLY character disambiguation rules using ship context
+- Process character designations and resolve ambiguities
+- Filter out OOC content when appropriate
+- Handle [DOIC] channel content as narration/environmental description
+- Extract key facts and relationships relevant to the query
+- Preserve important names with proper formatting and ranks/titles
+- Organize information logically and clearly
+- Include comprehensive context and background information
+- Maintain accuracy of all factual content
+- Focus on information that directly answers the user's question
+- STRICT LIMIT: Keep response under 14000 characters - truncate or summarize if needed
+- Prioritize relevance to the query over completeness if space is limited
+
+DATA TO PROCESS:
+{data}
+
+Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. APPLY CHARACTER DISAMBIGUATION AND FILTERING RULES. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
 
     def _call_llm_with_prompt(self, prompt: str) -> str:
-        """Call LLM with the given prompt"""
+        """Call LLM with the given prompt and validate response length"""
         if not self.client:
             raise Exception("Gemini client not initialized")
             
         try:
             response = self.client.generate_content(prompt)
             if response and response.text:
-                return response.text.strip()
+                content = response.text.strip()
+                
+                # Validate length and truncate if necessary
+                if len(content) > 14000:
+                    print(f"⚠️  LLM response ({len(content)} chars) exceeds 14000 limit, truncating...")
+                    content = content[:13900] + "...\n\n[Response truncated to fit length limit]"
+                    
+                return content
             else:
                 raise Exception("Empty response from Gemini")
         except Exception as e:

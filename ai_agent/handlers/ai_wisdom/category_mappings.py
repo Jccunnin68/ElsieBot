@@ -249,3 +249,79 @@ CATEGORY_TO_PAGE_TYPE = {}
 for page_type, categories in PAGE_TYPE_TO_CATEGORIES.items():
     for category in categories:
         CATEGORY_TO_PAGE_TYPE[category] = page_type 
+
+def is_log_category(category: str) -> bool:
+    """
+    Check if a category represents a log (contains 'log' in the name).
+    This filters out episode summaries and other non-log content.
+    
+    Args:
+        category: Category name to check
+        
+    Returns:
+        True if category contains 'log', False otherwise
+    """
+    return 'log' in category.lower()
+
+def get_all_log_categories() -> List[str]:
+    """
+    Get all categories that contain 'log' from the defined categories.
+    This dynamically filters to only include actual log categories,
+    excluding episode summaries and other content types.
+    
+    Returns:
+        List of categories containing 'log'
+    """
+    # Filter from ship log categories (primary source)
+    log_categories = [cat for cat in SHIP_LOG_CATEGORIES if is_log_category(cat)]
+    
+    # Add any other log-related categories that might exist
+    other_log_categories = [
+        'Mission Log',
+        'Personal Log', 
+        'Captain\'s Log',
+        'Engineering Log',
+        'Medical Log',
+        'Security Log',
+        'Science Log'
+    ]
+    
+    # Only include if they contain 'log'
+    for cat in other_log_categories:
+        if is_log_category(cat) and cat not in log_categories:
+            log_categories.append(cat)
+    
+    print(f"   📊 Dynamic log categories: {len(log_categories)} categories containing 'log'")
+    return log_categories
+
+def get_ship_specific_log_categories(ship_name: Optional[str] = None) -> List[str]:
+    """
+    Get log categories for a specific ship, filtering to only categories containing 'log'.
+    
+    Args:
+        ship_name: Ship name to get categories for
+        
+    Returns:
+        List of log categories for the ship
+    """
+    if ship_name:
+        ship_log_category = get_log_category_from_ship(ship_name)
+        if is_log_category(ship_log_category):
+            return [ship_log_category]
+    
+    # Return all log categories if no specific ship
+    return get_all_log_categories()
+
+def filter_categories_for_logs(categories: List[str]) -> List[str]:
+    """
+    Filter a list of categories to only include those containing 'log'.
+    
+    Args:
+        categories: List of categories to filter
+        
+    Returns:
+        Filtered list containing only log categories
+    """
+    log_categories = [cat for cat in categories if is_log_category(cat)]
+    print(f"   🔍 Filtered {len(categories)} categories -> {len(log_categories)} log categories")
+    return log_categories 

@@ -23,44 +23,43 @@ from .content_retriever import (
 from ..handlers_utils import convert_earth_date_to_star_trek
 
 
-def get_focused_continuation_context(strategy: Dict[str, Any]) -> str:
+def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
     """Generate context for focused continuation requests."""
     focus_subject = strategy.get('focus_subject', '')
     context_type = strategy.get('context_type', 'general')
     
-    print(f"🎯 FOCUSED CONTINUATION: Searching for '{focus_subject}' in {context_type} context")
+    print(f"🎯 FOCUSED CONTINUATION: Searching for '{focus_subject}' in {context_type} context (roleplay={is_roleplay})")
     
     wiki_info = ""
     if context_type == 'logs':
-        wiki_info = get_log_content(f"{focus_subject}", mission_logs_only=False)
+        wiki_info = get_log_content(f"{focus_subject}", mission_logs_only=False, is_roleplay=is_roleplay)
         if not wiki_info:
-            wiki_info = get_relevant_wiki_context(f"{focus_subject}")
+            wiki_info = get_relevant_wiki_context(f"{focus_subject}", is_roleplay=is_roleplay)
     elif context_type == 'character':
         wiki_info = search_by_type(focus_subject, 'personnel')
         if not wiki_info:
-            wiki_info = get_tell_me_about_content_prioritized(focus_subject)
+            wiki_info = get_tell_me_about_content_prioritized(focus_subject, is_roleplay=is_roleplay)
     elif context_type == 'ship':
         wiki_info = get_ship_information(focus_subject)
         if not wiki_info:
-            wiki_info = get_relevant_wiki_context(f"{focus_subject} ship")
+            wiki_info = get_relevant_wiki_context(f"{focus_subject} ship", is_roleplay=is_roleplay)
     else:
-        wiki_info = get_relevant_wiki_context(focus_subject)
+        wiki_info = get_relevant_wiki_context(focus_subject, is_roleplay=is_roleplay)
     
     print(f"   - Retrieved focused content length: {len(wiki_info)} chars")
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
-    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
 CRITICAL INSTRUCTIONS FOR FOCUSED CONTINUATION:
-- The user is asking for MORE SPECIFIC information about: "{focus_subject}"
-- This is a DEEP DIVE continuation from a previous {context_type} discussion
-- Focus your response SPECIFICALLY on "{focus_subject}" and their role/involvement
-- ONLY use information from the DATABASE SEARCH RESULTS below
-- If the focus subject is not in the database, say: "I don't have additional information about {focus_subject} in my database"
-- Structure your response as a deeper analysis of this specific aspect
-- Be thorough and comprehensive in presenting the information
+- You are being asked to continue with a focused discussion on: {focus_subject}
+- Context type: {context_type}
+- ONLY use information provided in the FOCUSED DATABASE SEARCH RESULTS section below
+- Be detailed and comprehensive in your response
+- If no specific information is found, provide a thoughtful general response
+- Encourage continued conversation about the topic
 - Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
 FOCUSED DATABASE SEARCH RESULTS for "{focus_subject}":
@@ -71,7 +70,7 @@ NOTE: All dates are preserved in real Earth calendar format for accuracy.
 Provide a focused, detailed response about {focus_subject} specifically. Be comprehensive and informative."""
 
 
-def get_character_context(user_message: str, strategy: Dict[str, Any] = None) -> str:
+def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is_roleplay: bool = False) -> str:
     """Generate context for character information queries."""
     # Get character name from strategy if available, otherwise extract from message
     if strategy and 'character_name' in strategy:
@@ -81,14 +80,14 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None) ->
         from ..ai_logic.query_detection import is_character_query
         is_character, character_name = is_character_query(user_message)
     
-    print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}'")
+    print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}' (roleplay={is_roleplay})")
     
     # First try personnel type search
     character_info = search_by_type(character_name, 'personnel')
     
     if not character_info:
         # Use optimized character search that prioritizes exact title matches
-        character_info = _get_character_info_optimized(character_name)
+        character_info = _get_character_info_optimized(character_name, is_roleplay=is_roleplay)
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_character_info = character_info
@@ -116,7 +115,7 @@ NOTE: All dates are preserved in real Earth calendar format for accuracy.
 Provide a comprehensive and informative summary of what made them notable in the fleet."""
 
 
-def _get_character_info_optimized(character_name: str) -> str:
+def _get_character_info_optimized(character_name: str, is_roleplay: bool = False) -> str:
     """
     Optimized character info retrieval that prioritizes exact title matches
     to prevent massive context chunking for character queries.
@@ -125,7 +124,7 @@ def _get_character_info_optimized(character_name: str) -> str:
         from .content_retriever import get_db_controller
         
         controller = get_db_controller()
-        print(f"🎯 OPTIMIZED CHARACTER SEARCH: '{character_name}'")
+        print(f"🎯 OPTIMIZED CHARACTER SEARCH: '{character_name}' (roleplay={is_roleplay})")
         
         # First, search for exact title match
         results = controller.search_pages(character_name, limit=15)
@@ -160,21 +159,21 @@ def _get_character_info_optimized(character_name: str) -> str:
         
         # If no exact title match, fall back to the standard prioritized search
         print(f"   ⚠️  No exact title match found, falling back to prioritized search")
-        return get_tell_me_about_content_prioritized(character_name)
+        return get_tell_me_about_content_prioritized(character_name, is_roleplay=is_roleplay)
         
     except Exception as e:
         print(f"✗ Error in optimized character search: {e}")
-        return get_tell_me_about_content_prioritized(character_name)
+        return get_tell_me_about_content_prioritized(character_name, is_roleplay=is_roleplay)
 
 
-def get_federation_archives_context(user_message: str) -> str:
+def get_federation_archives_context(user_message: str, is_roleplay: bool = False) -> str:
     """Generate context for federation archives queries."""
     search_query = user_message.replace('check the federation archives', '').replace('search the federation archives', '')
     search_query = search_query.replace('federation archives', '').replace('archives', '').strip()
     if not search_query:
         search_query = "general information"
     
-    print(f"🏛️ SEARCHING FEDERATION ARCHIVES: '{search_query}'")
+    print(f"🏛️ SEARCHING FEDERATION ARCHIVES: '{search_query}' (roleplay={is_roleplay})")
     archives_info = search_memory_alpha(search_query, limit=3, is_federation_archives=True)
     print(f"   - Retrieved archives content length: {len(archives_info)} chars")
     
@@ -201,9 +200,9 @@ NOTE: All dates are preserved in real Earth calendar format for accuracy.
 Present the archives information comprehensively and reference it as external federation data."""
 
 
-def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
+def get_logs_context(user_message: str, strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
     """Generate context for log queries."""
-    print(f"📋 SEARCHING LOG DATA")
+    print(f"📋 SEARCHING LOG DATA (roleplay={is_roleplay})")
     
     # Check for log selection queries first
     from ..ai_logic.query_detection import detect_log_selection_query
@@ -211,7 +210,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     
     if is_selection:
         print(f"   🎯 LOG SELECTION QUERY: type='{selection_type}', ship='{ship_name}'")
-        wiki_info = get_log_content(user_message, mission_logs_only=True, is_roleplay=False)
+        wiki_info = get_log_content(user_message, mission_logs_only=True, is_roleplay=is_roleplay)
         print(f"   - Retrieved LOG SELECTION content length: {len(wiki_info)} chars")
     
     # Check for enhanced log-specific search strategies
@@ -290,7 +289,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any]) -> str:
     
     else:
         # Standard log search behavior - ALWAYS FORCE MISSION LOGS ONLY
-        wiki_info = get_log_content(user_message, mission_logs_only=True, is_roleplay=False)
+        wiki_info = get_log_content(user_message, mission_logs_only=True, is_roleplay=is_roleplay)
         print(f"   - Retrieved MISSION LOGS ONLY content length: {len(wiki_info)} chars")
     
     total_found = wiki_info.count("**") if wiki_info else 0
@@ -358,14 +357,16 @@ NOTE: All dates are preserved in real Earth calendar format for accuracy.
 Present a comprehensive summary of the log content provided above. Be thorough and detailed in your analysis."""
 
 
-def get_tell_me_about_context(user_message: str) -> str:
+def get_tell_me_about_context(user_message: str, is_roleplay: bool = False) -> str:
     """Generate context for 'tell me about' queries."""
-    # Local import to avoid circular dependency
     from ..ai_logic.query_detection import extract_tell_me_about_subject
-    tell_me_about_subject = extract_tell_me_about_subject(user_message)
-    print(f"📖 SEARCHING TELL ME ABOUT DATA: '{tell_me_about_subject}'")
-    wiki_info = get_tell_me_about_content_prioritized(tell_me_about_subject, is_roleplay=False)
-    print(f"   - Retrieved prioritized content length: {len(wiki_info)} chars")
+    
+    subject = extract_tell_me_about_subject(user_message)
+    print(f"🔍 TELL ME ABOUT: '{subject}' (roleplay={is_roleplay})")
+    
+    # Use prioritized search that focuses on ship info and personnel over logs
+    wiki_info = get_tell_me_about_content_prioritized(subject, is_roleplay=is_roleplay)
+    print(f"   - Retrieved tell me about content length: {len(wiki_info)} chars")
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
@@ -379,105 +380,73 @@ IMPORTANT: The database search encountered processing limitations. The response 
 Present this information naturally and suggest the user try again later or rephrase their query to be more specific.
 """
     
-    return f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with comprehensive access to ship and fleet databases.
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
-CRITICAL INSTRUCTIONS FOR "TELL ME ABOUT" QUERIES:
-- Subject requested: "{tell_me_about_subject}"
-- ONLY use information from the DATABASE SEARCH RESULTS section below
-- DO NOT invent, create, or extrapolate beyond database content
-- Be comprehensive and thorough in your responses
-- Present information in an organized, detailed manner
+CRITICAL INSTRUCTIONS FOR 'TELL ME ABOUT' QUERIES:
+- You are being asked about: {subject}
+- ONLY use information provided in the DATABASE SEARCH RESULTS section below
+- This search PRIORITIZED ship information and personnel records over mission logs
+- If no information is found, say: "I don't have any information about '{subject}' in my database"
+- Be comprehensive and informative in presenting the information
+- Focus on key details, specifications, background, and significance
+- If information comes from external sources, reference it naturally
+- Ask: "Would you like to explore any particular aspect of {subject}?"
 - Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 {fallback_instructions}
-RESPONSE GUIDELINES:
-FOR SHIPS: Include specifications, history, crew assignments, and notable missions
-FOR CHARACTERS: Focus on their role, personality, achievements, and relationships
-FOR EVENTS: Provide timeline, participants, outcomes, and significance
-FOR PLACES: Include location, purpose, notable features, and historical importance
-FOR CONCEPTS: Explain thoroughly with context and examples
-
-If no database information is found, state clearly: "I don't have information about {tell_me_about_subject} in my database"
-
 DATABASE SEARCH RESULTS:
-{converted_wiki_info if converted_wiki_info else f"No information found for '{tell_me_about_subject}' in the database."}
+{converted_wiki_info if converted_wiki_info else f"No information found for '{subject}' in the database."}
 
 NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Provide a comprehensive and detailed response focusing on the people and stories first, with complete context and information."""
+Provide a comprehensive and informative response about {subject} based on the database information above."""
 
 
-def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any]) -> str:
-    """Generate context for Stardancer information queries."""
-    # Local import to avoid circular dependency
-    from ..ai_logic.query_detection import extract_tell_me_about_subject
-    tell_me_about_subject = extract_tell_me_about_subject(user_message) or "USS Stardancer"
-    is_command_query = strategy.get('command_query', False)
+def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
+    """Generate context for Stardancer-specific queries."""
+    print(f"🚢 SEARCHING STARDANCER INFO (roleplay={is_roleplay})")
     
-    print(f"🚢 SEARCHING STARDANCER DATA WITH GUARD RAILS: '{tell_me_about_subject}' (command_query={is_command_query})")
+    if strategy.get('command_query'):
+        print(f"   👨‍✈️ COMMAND STAFF QUERY DETECTED")
+        # Search for command-related information specifically
+        stardancer_info = search_by_type("Stardancer command staff captain commander", 'personnel')
+        if not stardancer_info:
+            stardancer_info = get_ship_information("Stardancer")
+    else:
+        # General Stardancer information
+        stardancer_info = get_ship_information("Stardancer")
     
-    stardancer_info = ""
-    
-    if is_command_query:
-        # For command queries, search for personnel information specifically
-        command_searches = [
-            "Stardancer captain", "Stardancer commander", "Stardancer command", 
-            "Stardancer crew", "Stardancer officers", "Stardancer staff",
-            "USS Stardancer captain", "USS Stardancer commander"
-        ]
-        print(f"   🎖️ COMMAND QUERY: Searching for Stardancer command staff...")
-        
-        for search_query in command_searches:
-            print(f"      🔍 Command search: '{search_query}'")
-            personnel_results = get_relevant_wiki_context(search_query)
-            if personnel_results and personnel_results not in stardancer_info:
-                stardancer_info += f"\n\n---COMMAND INFO FOR '{search_query}'---\n\n{personnel_results}"
-    
-    # Always get basic ship information
-    stardancer_searches = ["stardancer", "USS Stardancer", "star dancer"]
-    for search_query in stardancer_searches:
-        ship_results = get_ship_information(search_query)
-        if ship_results and ship_results not in stardancer_info:
-            stardancer_info += f"\n\n---STARDANCER INFO FOR '{search_query}'---\n\n{ship_results}"
+    print(f"   - Retrieved Stardancer info length: {len(stardancer_info)} chars")
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
     converted_stardancer_info = stardancer_info
     
-    return f"""You are Elsie, the intelligent, attentive hologram aboard the USS Stardancer. when responding to a request for information about the stardancer, you are to respond with a warm, personable, and engaging manner.
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
 
-CRITICAL GUARD RAILS FOR USS STARDANCER QUERIES:
-- You are being asked about the USS Stardancer specifically
-- NEVER INVENT OR CREATE command staff, officers, or personnel for the Stardancer
-- ONLY use information provided in the STARDANCER DATABASE section below
-- If asking about command staff and no information is in the database, say: "I'm afraid I don't have any records of the current command staff in my database"
-- DO NOT make up names, ranks, or positions for Stardancer personnel
-- DO NOT extrapolate or assume command structure beyond what's explicitly stated
-- If no Stardancer information is found, say: "I don't have specific information about the Stardancer in my database right now"
+CRITICAL INSTRUCTIONS FOR STARDANCER QUERIES:
+- You are being asked about the USS Stardancer
+- ONLY use information provided in the STARDANCER DATABASE ACCESS section below
+- Focus on the ship's specifications, crew, missions, and achievements
+- If this is about command staff, emphasize leadership and command structure
+- Be proud and informative about your home ship
+- If no specific information is found, provide general context about the Stardancer
+- Ask: "Would you like to know more about any specific aspect of the Stardancer?"
 - Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
 
-{"COMMAND STAFF QUERY: This is asking about Stardancer command staff. The database search below contains extensive Stardancer information including personnel records. Look for and share any captain, commander, first officer, XO, or command crew information you find. Be confident in providing the command structure and personnel details from the database." if is_command_query else ""}
-
-STRICT DATABASE ADHERENCE REQUIRED:
-- USE the Stardancer information provided in the database results below
-- If command staff information is found in the database, provide it freely and confidently
-- DO NOT create fictional crew members beyond what's in the database
-- If command staff info exists in the results, share names, ranks, and positions as found
-- If no personnel info exists in the database results, then say you don't have that information
-
-STARDANCER DATABASE:
-{converted_stardancer_info if converted_stardancer_info else "No specific USS Stardancer information found in the ship database."}
+STARDANCER DATABASE ACCESS:
+{converted_stardancer_info if converted_stardancer_info else "No specific Stardancer information found in the database, but I can share that it's a distinguished Starfleet vessel."}
 
 NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
-Respond with your warm, personable, and engaging manner while strictly adhering to the database information. Never invent command staff or personnel."""
+Share information about the USS Stardancer with pride and comprehensive detail."""
 
 
-def get_ship_logs_context(user_message: str) -> str:
+def get_ship_logs_context(user_message: str, is_roleplay: bool = False) -> str:
     """Generate context for ship log queries."""
     # Local import to avoid circular dependency
     from ..ai_logic.query_detection import extract_ship_log_query
     is_ship_log, ship_details = extract_ship_log_query(user_message)
     ship_name = ship_details['ship']
-    print(f"🚢 SEARCHING COMPREHENSIVE SHIP DATA: {ship_name.upper()}")
+    print(f"🚢 SEARCHING COMPREHENSIVE SHIP DATA: {ship_name.upper()} (roleplay={is_roleplay})")
     
     ship_searches = [ship_name, f"{ship_name} log", f"{ship_name} mission", f"USS {ship_name}"]
     comprehensive_ship_info = ""
@@ -486,7 +455,7 @@ def get_ship_logs_context(user_message: str) -> str:
     for search_query in ship_searches:
         print(f"   🔎 Ship search: '{search_query}'")
         ship_results = get_ship_information(search_query)
-        log_results = get_log_content(search_query)
+        log_results = get_log_content(search_query, is_roleplay=is_roleplay)
         
         if ship_results and ship_results not in comprehensive_ship_info:
             comprehensive_ship_info += f"\n\n---SHIP INFO FOR '{search_query}'---\n\n{ship_results}"
@@ -518,10 +487,10 @@ NOTE: All dates are preserved in real Earth calendar format for accuracy.
 Share their story with your warm, musical personality, focusing on the people who brought the ship to life."""
 
 
-def get_general_with_context(user_message: str) -> str:
+def get_general_with_context(user_message: str, is_roleplay: bool = False) -> str:
     """Generate general context with light database information."""
-    print(f"📋 SEARCHING LIGHT CONTEXT DATA")
-    wiki_info = get_relevant_wiki_context(user_message, is_roleplay=False)
+    print(f"📋 SEARCHING LIGHT CONTEXT DATA (roleplay={is_roleplay})")
+    wiki_info = get_relevant_wiki_context(user_message, is_roleplay=is_roleplay)
     print(f"   - Retrieved general context length: {len(wiki_info)} chars")
     
     print(f"   ⚠️  NON-ROLEPLAY Query: Preserving real Earth dates for accuracy")
@@ -529,16 +498,31 @@ def get_general_with_context(user_message: str) -> str:
     return wiki_info if wiki_info else ""
 
 
-def handle_url_request(user_message: str) -> str:
-    """Handle URL requests directly."""
-    # Local import to avoid circular dependency
+def handle_url_request(user_message: str, is_roleplay: bool = False) -> str:
+    """Handle URL requests."""
     from ..ai_logic.query_detection import extract_url_request
-    is_url_request, search_query = extract_url_request(user_message)
-    if not is_url_request:
-        return "I can't seem to figure out which URL you need. Could you be more specific?"
-        
-    print(f"🔗 EXECUTING URL STRATEGY: '{search_query}'")
-    print(f"   ⚠️  NON-ROLEPLAY URL Request: Will preserve real Earth dates in response")
-    url_response = get_log_url(search_query)
-    print(f"   - URL response: {url_response}")
-    return url_response 
+    
+    is_url_query, url_details = extract_url_request(user_message)
+    search_query = url_details['search_query']
+    
+    print(f"🔗 URL REQUEST: Searching for '{search_query}' (roleplay={is_roleplay})")
+    
+    url_info = get_log_url(search_query)
+    print(f"   - Retrieved URL info length: {len(url_info)} chars")
+    
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
+
+CRITICAL INSTRUCTIONS FOR URL REQUESTS:
+- The user requested a URL/link for: {search_query}
+- ONLY use the URL information provided below
+- If a direct link was found, present it clearly
+- If no URL was found, explain that no direct link is available
+- Be helpful and suggest alternative search terms if needed
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+
+URL SEARCH RESULTS:
+{url_info}
+
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
+
+Present the URL information clearly and helpfully.""" 

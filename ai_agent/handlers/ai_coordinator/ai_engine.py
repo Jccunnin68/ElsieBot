@@ -24,6 +24,69 @@ from handlers.ai_emotion import get_mock_response
 from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
 from handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
 from handlers.ai_coordinator.conversation_utils import detect_topic_change
+from handlers.ai_wisdom.llm_query_processor import is_fallback_response
+
+def detect_processed_content(content: str) -> bool:
+    """
+    Detect if content has been processed by the secondary LLM processor.
+    This helps the main AI engine adjust its approach for narrative summation.
+    """
+    if not content:
+        return False
+    
+    # Check for indicators that content was processed by secondary LLM
+    processed_indicators = [
+        # Length indicators - processed content is typically under 14000 chars but substantial
+        len(content) > 5000 and len(content) < 14000,
+        
+        # Content structure indicators
+        "comprehensive summary" in content.lower(),
+        "key events" in content.lower(),
+        "character interactions" in content.lower(),
+        "mission details" in content.lower(),
+        "essential information" in content.lower(),
+        
+        # Fallback response indicators
+        is_fallback_response(content),
+        
+        # Processing artifacts
+        "[Response truncated to fit length limit]" in content,
+        "processing services" in content.lower(),
+        "rate limited" in content.lower(),
+    ]
+    
+    # If multiple indicators are present, likely processed
+    indicator_count = sum(1 for indicator in processed_indicators if indicator)
+    return indicator_count >= 2
+
+def is_log_content(content: str, user_message: str) -> bool:
+    """
+    Determine if the content is primarily log-based and should receive narrative treatment.
+    """
+    if not content:
+        return False
+    
+    # Check user message for log-related queries
+    log_query_indicators = [
+        'log', 'logs', 'mission', 'what happened', 'events', 'summarize', 
+        'summary', 'recap', 'tell me what', 'recent mission', 'latest'
+    ]
+    
+    user_wants_logs = any(indicator in user_message.lower() for indicator in log_query_indicators)
+    
+    # Check content for log-like structure
+    log_content_indicators = [
+        '**' in content and 'log' in content.lower(),  # Formatted log titles
+        '---LOG SEPARATOR---' in content,
+        '[Mission Log]' in content,
+        'stardate' in content.lower(),
+        'captain' in content.lower() and 'log' in content.lower(),
+        content.count('**') >= 2,  # Multiple formatted entries
+    ]
+    
+    content_is_logs = any(indicator for indicator in log_content_indicators)
+    
+    return user_wants_logs and content_is_logs
 
 def convert_to_third_person_emotes(response_text: str) -> str:
     """
@@ -278,12 +341,72 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         else:
             print(f"💬 SIMPLE CHAT MODE - No database search needed")
         
+        # Detect if we received processed content and if it's log-based
+        content_was_processed = detect_processed_content(wiki_info or context)
+        content_is_logs = is_log_content(wiki_info or context, user_message)
+        
+        if content_was_processed:
+            print(f"🔄 DETECTED PROCESSED CONTENT: was_processed={content_was_processed}, is_logs={content_is_logs}")
+        
         # Set default context for simple chats and cases without specific context
         if not context:
             # Detect personality context for non-roleplay conversations
             personality_context = detect_general_personality_context(user_message)
             
-            context = f"""You are Elsie, an intelligent, knowledgeable AI assistant aboard the USS Stardancer. You have expertise in stellar cartography, ship operations, and access to comprehensive databases.
+            # Enhanced context for processed log content
+            if content_was_processed and content_is_logs:
+                context = f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with expertise in stellar cartography and ship operations.
+
+PERSONALITY CONTEXT: {personality_context}
+
+CRITICAL INSTRUCTION - NARRATIVE LOG SUMMATION:
+The information below has been pre-processed and summarized from mission logs. Your task is to create an engaging, narrative summary that brings these events to life. DO NOT simply present the data - instead:
+
+- Transform the processed information into a compelling narrative story
+- Focus on the human drama, character interactions, and emotional moments
+- Describe events as if telling an engaging story to someone who wasn't there
+- Highlight key decisions, conflicts, and their consequences
+- Bring out character personalities and relationships
+- Create a flowing narrative that connects events chronologically
+- Use vivid, descriptive language to make the events feel immediate and real
+- Focus on WHO did WHAT and WHY, with emphasis on motivations and outcomes
+
+NARRATIVE STYLE:
+- Present events as a story, not a data summary
+- Use engaging, descriptive language
+- Connect events with narrative flow ("Meanwhile...", "As a result...", "This led to...")
+- Emphasize character moments and dialogue
+- Describe the stakes and tension in situations
+- Make the reader feel like they're experiencing the events
+
+{f"PROCESSED LOG INFORMATION TO NARRATIVIZE: {wiki_info}" if wiki_info else ""}
+
+Transform the above information into an engaging narrative summary that captures the drama and significance of these mission events."""
+            
+            # Enhanced context for other processed content
+            elif content_was_processed:
+                context = f"""You are Elsie, an intelligent AI assistant aboard the USS Stardancer with access to comprehensive databases.
+
+PERSONALITY CONTEXT: {personality_context}
+
+CRITICAL INSTRUCTION - ENHANCED INFORMATION PRESENTATION:
+The information below has been pre-processed and summarized. Your task is to present this information in a comprehensive, engaging way that goes beyond simple data presentation:
+
+- Organize the information logically and clearly
+- Provide context and background to help understanding
+- Explain relationships between different pieces of information
+- Highlight the most important and relevant details
+- Present information in a way that's easy to understand and actionable
+- Add your expertise and insights where appropriate
+- Make connections that help the user understand the bigger picture
+
+{f"PROCESSED INFORMATION: {wiki_info}" if wiki_info else ""}
+
+Present the above information in a comprehensive, well-organized response that fully addresses the user's question."""
+            
+            # Standard context for unprocessed content
+            else:
+                context = f"""You are Elsie, an intelligent, knowledgeable AI assistant aboard the USS Stardancer. You have expertise in stellar cartography, ship operations, and access to comprehensive databases.
 
 PERSONALITY CONTEXT: {personality_context}
 
@@ -432,9 +555,8 @@ Stay helpful and informative. When providing database information, be thorough a
                 rp_state.mark_response_turn(turn_number)
                 print(f"   📝 ENSURED: Elsie's response turn tracked (AI-enhanced {mock_type})")
         
-        print(f"✅ Response generated successfully ({len(response_text)} characters)")
         return response_text
         
     except Exception as e:
-        print(f"Gemma API error: {e}")
+        print(f"❌ Error in AI response generation: {e}")
         return get_mock_response(user_message) 

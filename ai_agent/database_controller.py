@@ -39,15 +39,59 @@ class FleetDatabaseController:
             print(f"✗ Error connecting to elsiebrain database: {e}")
             print(f"  Make sure the elsiebrain database exists and is accessible")
     
+    def log_search_results(self, results: List[Dict], operation: str, debug_level: int = 1) -> None:
+        """
+        Log detailed search results for debugging.
+        
+        Args:
+            results: List of database results to log
+            operation: Description of the operation being performed
+            debug_level: Level of detail (1=summary, 2=detailed, 3=full content)
+        """
+        if not results:
+            print(f"   📊 {operation}: No results found")
+            return
+            
+        print(f"   📊 {operation}: {len(results)} results")
+        
+        if debug_level >= 2:
+            print(f"   📋 DETAILED RESULTS:")
+            for i, result in enumerate(results[:10], 1):  # Show first 10 results
+                title = result.get('title', 'Unknown Title')
+                categories = result.get('categories', [])
+                ship_name = result.get('ship_name', 'Unknown Ship')
+                log_date = result.get('log_date', 'Unknown Date')
+                content_length = len(result.get('raw_content', ''))
+                record_id = result.get('id', 'Unknown ID')
+                
+                # Format categories nicely
+                category_str = ', '.join(categories) if categories else 'None'
+                
+                print(f"      {i}. ID={record_id}: '{title[:60]}{'...' if len(title) > 60 else ''}'")
+                print(f"         Ship: {ship_name} | Date: {log_date} | Size: {content_length} chars")
+                print(f"         Categories: [{category_str}]")
+                
+                if debug_level >= 3:
+                    # Show content preview
+                    content = result.get('raw_content', '')
+                    content_preview = content[:200].replace('\n', ' ') + ('...' if len(content) > 200 else '')
+                    print(f"         Content: {content_preview}")
+                
+                print()
+            
+            if len(results) > 10:
+                print(f"      ... and {len(results) - 10} more results")
+
     def search_pages(self, query: str, page_type: Optional[str] = None, 
                     ship_name: Optional[str] = None, limit: int = 10, 
-                    force_mission_logs_only: bool = False, categories: Optional[List[str]] = None) -> List[Dict]:
-        """Enhanced search with category support and backward compatibility"""
+                    force_mission_logs_only: bool = False, categories: Optional[List[str]] = None,
+                    debug_level: int = 1) -> List[Dict]:
+        """Enhanced search with category support, backward compatibility, and detailed debug logging"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     
-                    print(f"🔍 ENHANCED SEARCH - Query: '{query}' (force_mission_logs_only: {force_mission_logs_only})")
+                    print(f"🔍 ENHANCED SEARCH - Query: '{query}' (force_mission_logs_only: {force_mission_logs_only}, debug_level: {debug_level})")
                     
                     # Convert page_type to categories for backward compatibility
                     if page_type and not categories:
@@ -56,8 +100,9 @@ class FleetDatabaseController:
                     
                     # Override for mission logs only
                     if force_mission_logs_only:
-                        categories = self._get_all_ship_log_categories()
-                        print(f"   🎯 FORCING MISSION LOGS ONLY - using ship log categories: {len(categories)} categories")
+                        from handlers.ai_wisdom.category_mappings import get_all_log_categories
+                        categories = get_all_log_categories()
+                        print(f"   🎯 FORCING MISSION LOGS ONLY - using dynamic log categories: {len(categories)} categories")
                     
                     all_results = []
                     
@@ -82,7 +127,7 @@ class FleetDatabaseController:
                             """
                             cur.execute(ship_query, [detected_ship, limit])
                             ship_results = [dict(row) for row in cur.fetchall()]
-                            print(f"   📊 Ship-specific search found {len(ship_results)} results")
+                            self.log_search_results(ship_results, f"Ship-specific search for {detected_ship}", debug_level)
                             all_results.extend(ship_results)
                     
                     # STEP 2: Category-based search (PRIMARY)
@@ -122,7 +167,7 @@ class FleetDatabaseController:
                             
                             cur.execute(category_query, category_params)
                             category_results = [dict(row) for row in cur.fetchall()]
-                            print(f"   📊 Category search found {len(category_results)} results")
+                            self.log_search_results(category_results, "Category-based search", debug_level)
                             all_results.extend(category_results)
                     
                     # STEP 3: Title-based full-text search
@@ -161,7 +206,7 @@ class FleetDatabaseController:
                         
                         cur.execute(title_query, title_params)
                         title_results = [dict(row) for row in cur.fetchall()]
-                        print(f"   📊 Title FTS found {len(title_results)} results")
+                        self.log_search_results(title_results, "Title FTS search", debug_level)
                         all_results.extend(title_results)
                     
                     # STEP 4: Content-based search if still need more results
@@ -200,7 +245,7 @@ class FleetDatabaseController:
                         
                         cur.execute(content_query, content_params)
                         content_results = [dict(row) for row in cur.fetchall()]
-                        print(f"   📊 Content FTS found {len(content_results)} results")
+                        self.log_search_results(content_results, "Content FTS search", debug_level)
                         all_results.extend(content_results)
                     
                     # STEP 5: Fallback to LIKE search if FTS fails
@@ -230,7 +275,7 @@ class FleetDatabaseController:
                         
                         cur.execute(like_query, like_params)
                         like_results = [dict(row) for row in cur.fetchall()]
-                        print(f"   📊 LIKE search found {len(like_results)} results")
+                        self.log_search_results(like_results, "LIKE fallback search", debug_level)
                         all_results.extend(like_results)
                     
                     # Remove duplicates and limit results
@@ -245,11 +290,9 @@ class FleetDatabaseController:
                     
                     print(f"✅ ENHANCED SEARCH COMPLETE: {len(unique_results)} unique results")
                     
-                    # Debug: Show results
-                    for i, result in enumerate(unique_results[:3]):
-                        title_preview = result['title'][:50] + "..." if len(result['title']) > 50 else result['title']
-                        categories_preview = result.get('categories', [])
-                        print(f"      📄 Result {i+1}: '{title_preview}' (categories: {categories_preview})")
+                    # Final detailed debug output
+                    if debug_level >= 2:
+                        self.log_search_results(unique_results, "FINAL UNIQUE RESULTS", debug_level)
                     
                     # Track content access for all returned results
                     if unique_results:
@@ -304,17 +347,19 @@ class FleetDatabaseController:
         """Get all information about a specific ship"""
         return self.search_pages(ship_name, ship_name=ship_name.lower(), limit=20)
     
-    def get_recent_logs(self, ship_name: Optional[str] = None, limit: int = 10) -> List[Dict]:
-        """Get recent mission logs using categories"""
+    def get_recent_logs(self, ship_name: Optional[str] = None, limit: int = 10, debug_level: int = 1) -> List[Dict]:
+        """Get recent mission logs using dynamic log category filtering"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    # Use ship log categories instead of page_type
-                    from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+                    # Use dynamic log category filtering instead of hardcoded categories
+                    from handlers.ai_wisdom.category_mappings import get_ship_specific_log_categories
                     
-                    # Safety check: ensure SHIP_LOG_CATEGORIES is not empty
-                    if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
-                        print(f"   ⚠️  No ship log categories defined, falling back to page_type")
+                    log_categories = get_ship_specific_log_categories(ship_name)
+                    
+                    # Safety check: ensure log_categories is not empty
+                    if not log_categories or len(log_categories) == 0:
+                        print(f"   ⚠️  No log categories found, falling back to page_type")
                         query = """
                             SELECT id, title, raw_content, ship_name, log_date, url, categories
                             FROM wiki_pages 
@@ -322,6 +367,7 @@ class FleetDatabaseController:
                         """
                         params = []
                     else:
+                        print(f"   📊 Using dynamic log categories: {log_categories}")
                         query = """
                             SELECT id, title, raw_content, ship_name, log_date, url, categories
                             FROM wiki_pages 
@@ -329,7 +375,7 @@ class FleetDatabaseController:
                             AND array_length(categories, 1) > 0
                             AND categories && %s
                         """
-                        params = [SHIP_LOG_CATEGORIES]
+                        params = [log_categories]
                     
                     if ship_name:
                         query += " AND ship_name = %s"
@@ -340,6 +386,9 @@ class FleetDatabaseController:
                     
                     cur.execute(query, params)
                     results = [dict(row) for row in cur.fetchall()]
+                    
+                    # Enhanced debug logging
+                    self.log_search_results(results, f"Recent logs search (ship: {ship_name})", debug_level)
                     
                     # Track content access for returned logs
                     if results:
@@ -353,10 +402,10 @@ class FleetDatabaseController:
             return []
 
     def get_selected_logs(self, selection_type: str, ship_name: Optional[str] = None, 
-                         limit: int = 5, date_filter: Optional[str] = None) -> List[Dict]:
+                         limit: int = 5, date_filter: Optional[str] = None, debug_level: int = 1) -> List[Dict]:
         """
         Get logs based on selection criteria with proper ordering and filtering
-        Now uses categories instead of page_type
+        Now uses dynamic log category filtering instead of hardcoded categories
         
         Args:
             selection_type: 'latest', 'first', 'random', 'today', etc.
@@ -369,12 +418,14 @@ class FleetDatabaseController:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     print(f"🎯 SELECTED LOG SEARCH: type='{selection_type}', ship='{ship_name}', limit={limit}")
                     
-                    # Use ship log categories instead of page_type
-                    from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+                    # Use dynamic log category filtering instead of hardcoded categories
+                    from handlers.ai_wisdom.category_mappings import get_ship_specific_log_categories
                     
-                    # Safety check: ensure SHIP_LOG_CATEGORIES is not empty
-                    if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
-                        print(f"   ⚠️  No ship log categories defined, falling back to page_type")
+                    log_categories = get_ship_specific_log_categories(ship_name)
+                    
+                    # Safety check: ensure log_categories is not empty
+                    if not log_categories or len(log_categories) == 0:
+                        print(f"   ⚠️  No log categories found, falling back to page_type")
                         # Base query - ONLY mission logs using page_type fallback
                         query = """
                             SELECT id, title, raw_content, ship_name, log_date, url, categories
@@ -383,7 +434,8 @@ class FleetDatabaseController:
                         """
                         params = []
                     else:
-                        # Base query - ONLY mission logs using categories
+                        print(f"   📊 Using dynamic log categories: {log_categories}")
+                        # Base query - ONLY mission logs using dynamic categories
                         query = """
                             SELECT id, title, raw_content, ship_name, log_date, url, categories
                             FROM wiki_pages 
@@ -391,7 +443,7 @@ class FleetDatabaseController:
                             AND array_length(categories, 1) > 0
                             AND categories && %s
                         """
-                        params = [SHIP_LOG_CATEGORIES]
+                        params = [log_categories]
                     
                     # Add ship filter
                     if ship_name:
@@ -430,6 +482,9 @@ class FleetDatabaseController:
                     results = [dict(row) for row in cur.fetchall()]
                     
                     print(f"   ✅ Found {len(results)} selected logs")
+                    
+                    # Enhanced debug logging
+                    self.log_search_results(results, f"Selected logs ({selection_type}, ship: {ship_name})", debug_level)
                     
                     # Track content access for returned logs
                     if results:
@@ -829,8 +884,8 @@ class FleetDatabaseController:
     
     def _get_all_ship_log_categories(self) -> List[str]:
         """Get all ship log categories for mission log searches"""
-        from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
-        return SHIP_LOG_CATEGORIES
+        from handlers.ai_wisdom.category_mappings import get_all_log_categories
+        return get_all_log_categories()
     
     def search_by_categories(self, query: str, categories: List[str], limit: int = 10) -> List[Dict]:
         """Search pages by specific categories"""

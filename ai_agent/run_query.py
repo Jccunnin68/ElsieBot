@@ -8,6 +8,7 @@ import sys
 import os
 import json
 from datetime import datetime
+from typing import List
 
 # Add the current directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -181,6 +182,107 @@ def run_predefined_query(query_name: str, show_full: bool = False) -> bool:
     
     return execute_query(query, show_full)
 
+def test_enhanced_search(query: str, debug_level: int = 2) -> bool:
+    """Test the enhanced search functionality with debug output"""
+    try:
+        controller = get_db_controller()
+        
+        print(f"\n🔧 TESTING ENHANCED SEARCH")
+        print(f"Query: '{query}', Debug Level: {debug_level}")
+        print("-" * 50)
+        
+        # Test regular search
+        print(f"\n📋 REGULAR SEARCH:")
+        results = controller.search_pages(query, limit=5, debug_level=debug_level)
+        
+        # Test log-only search
+        print(f"\n📋 LOG-ONLY SEARCH:")
+        log_results = controller.search_pages(query, limit=5, force_mission_logs_only=True, debug_level=debug_level)
+        
+        # Test ship-specific search if query contains ship name
+        ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta']
+        for ship in ship_names:
+            if ship in query.lower():
+                print(f"\n📋 SHIP-SPECIFIC SEARCH ({ship.upper()}):")
+                ship_results = controller.search_pages(query, ship_name=ship, limit=3, debug_level=debug_level)
+                break
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error in enhanced search test: {e}")
+        return False
+
+def test_character_disambiguation(test_cases: List[str]) -> bool:
+    """Test character name disambiguation with different contexts"""
+    try:
+        from handlers.ai_wisdom.log_patterns import resolve_character_name_with_context
+        
+        print(f"\n🎭 TESTING CHARACTER DISAMBIGUATION")
+        print("-" * 50)
+        
+        for i, case in enumerate(test_cases, 1):
+            parts = case.split('|')
+            name = parts[0].strip()
+            ship_context = parts[1].strip() if len(parts) > 1 else None
+            surrounding_text = parts[2].strip() if len(parts) > 2 else ""
+            
+            print(f"\nTest {i}: '{name}'")
+            print(f"   Ship Context: {ship_context or 'None'}")
+            print(f"   Surrounding: '{surrounding_text}'")
+            
+            resolved = resolve_character_name_with_context(name, ship_context, surrounding_text)
+            print(f"   → Resolved: '{resolved}'")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error in character disambiguation test: {e}")
+        return False
+
+def test_log_category_filtering() -> bool:
+    """Test the new log category filtering functionality"""
+    try:
+        from handlers.ai_wisdom.category_mappings import (
+            get_all_log_categories, 
+            is_log_category,
+            filter_categories_for_logs
+        )
+        
+        print(f"\n📊 TESTING LOG CATEGORY FILTERING")
+        print("-" * 50)
+        
+        # Test log category detection
+        test_categories = [
+            'Stardancer Log', 'Ship Information', 'Episode Summary', 
+            'Mission Log', 'Characters', 'Medical Log', 'General Information'
+        ]
+        
+        print(f"Testing category filtering:")
+        for cat in test_categories:
+            is_log = is_log_category(cat)
+            print(f"   '{cat}': {'✓ LOG' if is_log else '✗ NOT LOG'}")
+        
+        # Test dynamic log categories
+        print(f"\nDynamic log categories:")
+        log_categories = get_all_log_categories()
+        for cat in log_categories:
+            print(f"   - {cat}")
+        
+        # Test filtering
+        print(f"\nFiltering test categories:")
+        filtered = filter_categories_for_logs(test_categories)
+        print(f"   Original: {len(test_categories)} categories")
+        print(f"   Filtered: {len(filtered)} log categories")
+        for cat in filtered:
+            print(f"   - {cat}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error in log category filtering test: {e}")
+        return False
+
 def main():
     """Main function"""
     print_header()
@@ -209,6 +311,27 @@ def main():
         elif command in ["ships", "stats", "recent", "ship_counts", "characters", "access", "categories"]:
             run_predefined_query(command)
             
+        elif command == "test_search":
+            # Test enhanced search functionality
+            query = sys.argv[2] if len(sys.argv) > 2 else "Tolena"
+            debug_level = int(sys.argv[3]) if len(sys.argv) > 3 else 2
+            test_enhanced_search(query, debug_level)
+            
+        elif command == "test_characters":
+            # Test character disambiguation
+            test_cases = [
+                "Tolena | stardancer | Ensign Tolena reported to the bridge",
+                "Tolena | protector | Doctor Tolena examined the patient",
+                "Blaine | stardancer | Captain Blaine issued orders",
+                "Blaine | | Ensign Blaine assisted with the mission",
+                "tolena | | medical emergency on deck 5"
+            ]
+            test_character_disambiguation(test_cases)
+            
+        elif command == "test_logs":
+            # Test log category filtering
+            test_log_category_filtering()
+            
         elif command == "custom" and len(sys.argv) > 2:
             # Run custom query passed as argument
             custom_query = " ".join(sys.argv[2:])
@@ -233,18 +356,23 @@ def main():
         else:
             print(f"❌ Unknown command: {command}")
             print("Usage:")
-            print("  python run_query.py interactive    # Interactive mode")
-            print("  python run_query.py examples       # Show example queries")
-            print("  python run_query.py tables         # Show database schema")
-            print("  python run_query.py ships          # List all ships")
-            print("  python run_query.py stats          # Database statistics") 
-            print("  python run_query.py recent         # Recent mission logs")
-            print("  python run_query.py ship_counts    # Log counts per ship")
-            print("  python run_query.py characters     # Find character mentions")
-            print("  python run_query.py access         # Content access statistics")
-            print("  python run_query.py categories     # Category breakdown")
-            print("  python run_query.py custom 'SQL'   # Run custom SQL query")
-            print("  python run_query.py full [command] # Show full content without truncation")
+            print("  python run_query.py interactive      # Interactive mode")
+            print("  python run_query.py examples         # Show example queries")
+            print("  python run_query.py tables           # Show database schema")
+            print("  python run_query.py ships            # List all ships")
+            print("  python run_query.py stats            # Database statistics") 
+            print("  python run_query.py recent           # Recent mission logs")
+            print("  python run_query.py ship_counts      # Log counts per ship")
+            print("  python run_query.py characters       # Find character mentions")
+            print("  python run_query.py access           # Content access statistics")
+            print("  python run_query.py categories       # Category breakdown")
+            print("  python run_query.py custom 'SQL'     # Run custom SQL query")
+            print("  python run_query.py full [command]   # Show full content without truncation")
+            print("")
+            print("  NEW TESTING COMMANDS:")
+            print("  python run_query.py test_search 'query' [debug_level]  # Test enhanced search")
+            print("  python run_query.py test_characters   # Test character disambiguation")
+            print("  python run_query.py test_logs         # Test log category filtering")
             
     else:
         # Default: show examples and enter interactive mode
