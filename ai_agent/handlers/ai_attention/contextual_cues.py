@@ -2,7 +2,7 @@
 Contextual Cues - Enhanced Context Data Structures
 ==================================================
 
-This module defines the rich data structures used by the enhanced getNextResponse
+This module defines the rich data structures used by the enhanced response decision
 system to provide comprehensive contextual intelligence for Elsie's decision making.
 """
 

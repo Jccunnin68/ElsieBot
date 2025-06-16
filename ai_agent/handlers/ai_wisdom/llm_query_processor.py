@@ -471,7 +471,7 @@ Process these logs with character rules applied and minimal summarization, prese
         """Create optimized prompt for general data"""
         return f"""You are a database analyst. Process the following information in response to this query: "{query}"
 
-CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 30000 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
 
 INSTRUCTIONS:
 - Extract key facts and relationships relevant to the query
@@ -480,14 +480,14 @@ INSTRUCTIONS:
 - Include comprehensive context and background information
 - Maintain accuracy of all factual content
 - Focus on information that directly answers the user's question
-- TARGET LENGTH: Aim for 12000-13800 characters - this should be a comprehensive, detailed response
+- TARGET LENGTH: Aim for 30000 characters - this should be a comprehensive, detailed response
 - Use the full available space to provide thorough coverage of the content
 - Only summarize if absolutely necessary to fit within the character limit
 
 DATA TO PROCESS:
 {data}
 
-Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
+Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. ENSURE YOUR RESPONSE IS UNDER 30000 CHARACTERS."""
 
     def _create_character_aware_general_summary_prompt(self, data: str, query: str,
                                                      character_context: CharacterContext) -> str:

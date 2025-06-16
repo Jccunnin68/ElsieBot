@@ -12,8 +12,6 @@ from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 import re
 
-from ..ai_logic.response_decision import ResponseDecision
-
 
 @dataclass
 class ConversationTurn:
@@ -126,175 +124,241 @@ class ConversationMemory:
         self.active_dynamics.clear()
         self.last_analysis_turn = 0
         print(f"   🧹 CONVERSATION MEMORY: Cleared all memory")
+    
+    def process_message_enhanced(self, user_message: str, turn_number: int, 
+                               conversation_history: List, channel_context: Dict) -> Dict:
+        """
+        LLM-enhanced message processing for roleplay routing decisions.
+        Uses Gemma to determine optimal response approach before routing.
+        
+        Args:
+            user_message: The current user message
+            turn_number: Current turn number
+            conversation_history: Previous conversation turns
+            channel_context: Channel and context information
+            
+        Returns:
+            Dict with processing_approach, contextual_cues, routing_confidence, etc.
+        """
+        print(f"   🤖 LLM-ENHANCED MESSAGE PROCESSING: Turn {turn_number}")
+        
+        try:
+            # Build conversation context
+            conversation_context = self.get_conversation_context_string()
+            
+            # Get roleplay state for context
+            from .state_manager import get_roleplay_state
+            rp_state = get_roleplay_state()
+            
+            # Build roleplay state context
+            roleplay_context = {
+                'is_roleplaying': rp_state.is_roleplaying,
+                'participants': rp_state.get_participant_names(),
+                'last_speaker': getattr(rp_state, 'last_speaker', None),
+                'is_dgm_session': rp_state.is_dgm_session(),
+                'listening_mode': getattr(rp_state, 'listening_mode', False)
+            }
+            
+            # Get LLM routing decision
+            routing_decision = self._get_llm_routing_decision(
+                user_message, conversation_context, roleplay_context, channel_context
+            )
+            
+            # Build contextual cues using existing system
+            from .context_gatherer import build_contextual_cues
+            contextual_cues = build_contextual_cues(user_message, rp_state, turn_number)
+            
+            print(f"      🎯 LLM Routing: {routing_decision['approach']} (confidence: {routing_decision['confidence']:.2f})")
+            print(f"      💭 Reasoning: {routing_decision['reasoning']}")
+            
+            return {
+                'processing_approach': routing_decision['approach'],
+                'contextual_cues': contextual_cues,
+                'routing_confidence': routing_decision['confidence'],
+                'suggested_response_type': routing_decision['response_type'],
+                'reasoning': routing_decision['reasoning'],
+                'needs_database': routing_decision.get('needs_database', False),
+                'priority_level': routing_decision.get('priority_level', 'medium')
+            }
+            
+        except Exception as e:
+            print(f"      ❌ LLM routing error: {e}")
+            # Fallback to basic processing
+            return self._get_fallback_routing_decision(user_message, turn_number)
+    
+    def _get_llm_routing_decision(self, user_message: str, conversation_context: str,
+                                roleplay_context: Dict, channel_context: Dict) -> Dict:
+        """Use Gemma LLM to make intelligent routing decisions."""
+        
+        try:
+            from config import GEMMA_API_KEY
+        except ImportError:
+            GEMMA_API_KEY = None
+        
+        if not GEMMA_API_KEY:
+            print(f"      ⚠️  No Gemma API key - using fallback routing")
+            return self._get_rule_based_routing(user_message, roleplay_context)
+        
+        try:
+            # Create the model
+            import google.generativeai as genai
+            genai.configure(api_key=GEMMA_API_KEY)
+            model = genai.GenerativeModel('gemma-3-27b-it')
+            
+            # Create routing prompt
+            prompt = self._create_routing_prompt(user_message, conversation_context, roleplay_context)
+            
+            # Get LLM response
+            response = model.generate_content(prompt)
+            
+            if response and response.text:
+                # Parse JSON response
+                import json
+                try:
+                    result = json.loads(response.text.strip())
+                    
+                    # Validate required fields
+                    required_fields = ['approach', 'confidence', 'response_type', 'reasoning']
+                    if all(field in result for field in required_fields):
+                        return result
+                    else:
+                        print(f"      ⚠️  LLM response missing fields: {response.text}")
+                        return self._get_rule_based_routing(user_message, roleplay_context)
+                        
+                except json.JSONDecodeError as e:
+                    print(f"      ⚠️  LLM response not valid JSON: {response.text}")
+                    return self._get_rule_based_routing(user_message, roleplay_context)
+            else:
+                print(f"      ⚠️  Empty LLM response")
+                return self._get_rule_based_routing(user_message, roleplay_context)
+                
+        except Exception as e:
+            print(f"      ❌ LLM API error: {e}")
+            return self._get_rule_based_routing(user_message, roleplay_context)
+    
+    def _create_routing_prompt(self, user_message: str, conversation_context: str,
+                             roleplay_context: Dict) -> str:
+        """Create optimized prompt for routing decisions."""
+        
+        participants_str = ", ".join(roleplay_context.get('participants', [])) or "none"
+        
+        return f"""You are Elsie's response routing intelligence. Analyze this roleplay situation and determine the optimal response approach.
+
+ROLEPLAY CONTEXT:
+- Session Active: {roleplay_context.get('is_roleplaying', False)}
+- Participants: {participants_str}
+- Last Speaker: {roleplay_context.get('last_speaker', 'unknown')}
+- DGM Session: {roleplay_context.get('is_dgm_session', False)}
+- Listening Mode: {roleplay_context.get('listening_mode', False)}
+
+RECENT CONVERSATION:
+{conversation_context if conversation_context else "No recent conversation history"}
+
+CURRENT MESSAGE: "{user_message}"
+
+ROUTING OPTIONS:
+1. roleplay_active - Direct engagement, full participation
+2. roleplay_supportive - Emotional support, listening mode  
+3. roleplay_service - Bar service, professional interaction
+4. roleplay_technical - Technical expertise, information sharing
+5. roleplay_group - Group addressing, social interaction
+6. roleplay_listening - Passive observation, minimal response
+7. roleplay_fallback - Safe fallback for unclear situations
+
+RESPONSE TYPES:
+- active_dialogue - Direct conversation engagement
+- supportive_listen - Emotional support and listening
+- subtle_service - Bar service and professional tasks
+- technical_expertise - Information and expertise sharing
+- group_acknowledgment - Group social interaction
+- none - No response needed
+
+Respond with ONLY valid JSON:
+{{
+    "approach": "roleplay_active",
+    "confidence": 0.85,
+    "response_type": "active_dialogue", 
+    "reasoning": "Character directly addressed Elsie with question",
+    "needs_database": false,
+    "priority_level": "high"
+}}"""
+
+    def _get_rule_based_routing(self, user_message: str, roleplay_context: Dict) -> Dict:
+        """Fallback rule-based routing when LLM is unavailable."""
+        
+        message_lower = user_message.lower()
+        
+        # Check for direct Elsie mentions
+        if any(name in message_lower for name in ['elsie', 'bartender']):
+            return {
+                'approach': 'roleplay_active',
+                'confidence': 0.8,
+                'response_type': 'active_dialogue',
+                'reasoning': 'Direct mention detected - rule-based fallback',
+                'needs_database': False,
+                'priority_level': 'high'
+            }
+        
+        # Check for service requests
+        if any(word in message_lower for word in ['drink', 'order', 'serve', 'glass']):
+            return {
+                'approach': 'roleplay_service',
+                'confidence': 0.7,
+                'response_type': 'subtle_service',
+                'reasoning': 'Service request detected - rule-based fallback',
+                'needs_database': False,
+                'priority_level': 'medium'
+            }
+        
+        # Check for emotional content
+        if any(word in message_lower for word in ['sad', 'upset', 'worried', 'trouble', 'help']):
+            return {
+                'approach': 'roleplay_supportive',
+                'confidence': 0.6,
+                'response_type': 'supportive_listen',
+                'reasoning': 'Emotional content detected - rule-based fallback',
+                'needs_database': False,
+                'priority_level': 'medium'
+            }
+        
+        # Default to listening mode
+        return {
+            'approach': 'roleplay_listening',
+            'confidence': 0.5,
+            'response_type': 'none',
+            'reasoning': 'No clear indicators - rule-based fallback to listening',
+            'needs_database': False,
+            'priority_level': 'low'
+        }
+    
+    def _get_fallback_routing_decision(self, user_message: str, turn_number: int) -> Dict:
+        """Emergency fallback when all routing fails."""
+        
+        # Build basic contextual cues
+        from .state_manager import get_roleplay_state
+        from .context_gatherer import build_contextual_cues
+        
+        try:
+            rp_state = get_roleplay_state()
+            contextual_cues = build_contextual_cues(user_message, rp_state, turn_number)
+        except:
+            contextual_cues = None
+        
+        return {
+            'processing_approach': 'roleplay_fallback',
+            'contextual_cues': contextual_cues,
+            'routing_confidence': 0.3,
+            'suggested_response_type': 'active_dialogue',
+            'reasoning': 'Emergency fallback - all routing methods failed',
+            'needs_database': False,
+            'priority_level': 'low'
+        }
 
 
-def getNextResponse(conversation_history: List[Dict[str, Any]], 
-                   memory_store: ConversationMemory,
-                   character_context: Optional[Dict[str, Any]] = None) -> Tuple[ResponseSuggestion, bool]:
-    """
-    Core subroutine to analyze conversation and suggest response characteristics.
-    
-    This doesn't generate the actual response - it analyzes conversation flow
-    and suggests the style/approach Elsie should use for her response.
-    
-    Args:
-        conversation_history: List of recent conversation turns
-        memory_store: ConversationMemory instance to update
-        character_context: Optional context about Elsie's character state
-        
-    Returns:
-        (ResponseSuggestion, should_analyze_now): Tuple of suggestion and whether to analyze
-    """
-    
-    # Check if we have enough context for analysis
-    if not memory_store.has_sufficient_context():
-        print(f"   💭 CONVERSATION ANALYSIS: Insufficient context ({len(memory_store.history)} turns)")
-        # Return default suggestion
-        response_suggestion = ResponseSuggestion(
-            style="contextual",
-            tone="natural",
-            approach="roleplay_active",
-            themes=[],
-            confidence=0.5,
-            reasoning="Insufficient conversation history for detailed analysis",
-            conversation_direction="continuing",
-            character_dynamics=[]
-        )
-        return response_suggestion, False
-    
-    # Check if we need fresh analysis (every 2 turns or when context changes significantly)  
-    current_turn = conversation_history[-1].get('turn_number', 0) if conversation_history else 0
-    needs_analysis = (
-        current_turn - memory_store.last_analysis_turn >= 2 or 
-        memory_store.last_analysis_turn == 0
-    )
-    
-    if not needs_analysis:
-        # Return cached suggestion if recent
-        cached_suggestion = memory_store.get_last_suggestion()
-        if cached_suggestion:
-            print(f"   💭 CONVERSATION ANALYSIS: Using cached suggestion (confidence: {cached_suggestion.confidence:.2f})")
-            return cached_suggestion, False
-    
-    print(f"   💭 CONVERSATION ANALYSIS: Analyzing conversation flow...")
-    
-    # Format conversation for analysis
-    conversation_context = memory_store.get_conversation_context_string()
-    
-    # Generate response suggestion using LLM analysis
-    try:
-        suggestion = _analyze_conversation_with_llm(conversation_context, character_context)
-        
-        # Store the suggestion
-        memory_store.response_suggestions[current_turn] = suggestion
-        memory_store.last_analysis_turn = current_turn
-        
-        # Update conversation themes
-        memory_store.conversation_themes = list(set(memory_store.conversation_themes + suggestion.themes))
-        memory_store.active_dynamics = suggestion.character_dynamics
-        
-        print(f"   💭 CONVERSATION ANALYSIS: Generated suggestion")
-        print(f"      - Style: {suggestion.style}")
-        print(f"      - Tone: {suggestion.tone}")  
-        print(f"      - Approach: {suggestion.approach}")
-        print(f"      - Confidence: {suggestion.confidence:.2f}")
-        print(f"      - Direction: {suggestion.conversation_direction}")
-        print(f"      - Themes: {suggestion.themes}")
-        
-        return suggestion, True
-        
-    except Exception as e:
-        print(f"   ❌ CONVERSATION ANALYSIS ERROR: {e}")
-        # Return fallback suggestion
-        fallback_suggestion = ResponseSuggestion(
-            style="natural",
-            tone="friendly", 
-            approach="roleplay_active",
-            themes=[],
-            confidence=0.3,
-            reasoning=f"Analysis failed: {str(e)}",
-            conversation_direction="continuing",
-            character_dynamics=[]
-        )
-        return fallback_suggestion, False
 
 
-def _analyze_conversation_with_llm(conversation_context: str, 
-                                 character_context: Optional[Dict[str, Any]] = None) -> ResponseSuggestion:
-    """
-    Analyze conversation using LLM to generate response suggestions.
-    This is a placeholder for the actual LLM integration.
-    """
-    
-    # For now, provide rule-based analysis
-    # TODO: Replace with actual LLM API call
-    
-    print(f"   🤖 LLM ANALYSIS: Analyzing conversation context...")
-    print(f"      - Context length: {len(conversation_context)} chars")
-    
-    # Simple analysis based on conversation patterns
-    context_lower = conversation_context.lower()
-    
-    # Detect conversation style
-    style = "contextual"
-    if "*" in conversation_context:  # Contains emotes
-        style = "emotive"
-    elif '"' in conversation_context:  # Contains dialogue
-        style = "conversational"
-    elif any(word in context_lower for word in ['orders', 'requests', 'drink', 'service']):
-        style = "service_oriented"
-    
-    # Detect tone
-    tone = "natural"
-    if any(word in context_lower for word in ['happy', 'excited', 'great', 'wonderful']):
-        tone = "upbeat"
-    elif any(word in context_lower for word in ['sad', 'tired', 'difficult', 'problem']):
-        tone = "supportive"
-    elif any(word in context_lower for word in ['thank', 'please', 'appreciate']):
-        tone = "warm"
-    
-    # Detect approach
-    approach = "roleplay_active"
-    if "?" in conversation_context:
-        approach = "roleplay_supportive"
-    elif any(word in context_lower for word in ['tell me', 'what about', 'explain']):
-        approach = "roleplay_technical"
-    elif any(word in context_lower for word in ['hello', 'hi', 'hey']):
-        approach = "roleplay_group"
-    
-    # Detect themes
-    themes = []
-    if any(word in context_lower for word in ['drink', 'bar', 'service']):
-        themes.append("bar_service")
-    if any(word in context_lower for word in ['ship', 'mission', 'crew']):
-        themes.append("ship_operations")
-    if any(word in context_lower for word in ['dance', 'music', 'art']):
-        themes.append("artistic")
-    if any(word in context_lower for word in ['star', 'space', 'navigation']):
-        themes.append("stellar_cartography")
-    
-    # Detect conversation direction
-    direction = "continuing"
-    if any(word in context_lower for word in ['goodbye', 'see you', 'leaving']):
-        direction = "concluding"
-    elif any(word in context_lower for word in ['hello', 'hi', 'greetings']):
-        direction = "opening"
-    elif "?" in conversation_context:
-        direction = "exploring"
-    
-    # Create suggestion
-    suggestion = ResponseSuggestion(
-        style=style,
-        tone=tone,
-        approach=approach,
-        themes=themes,
-        confidence=0.75,  # Rule-based analysis confidence
-        reasoning="Rule-based analysis of conversation patterns",
-        conversation_direction=direction,
-        character_dynamics=[]  # TODO: Detect character dynamics
-    )
-    
-    return suggestion
+
+
 
 
 def extract_conversation_metadata(message: str) -> Dict[str, Any]:
@@ -391,23 +455,7 @@ def track_elsie_response(response_text: str, turn_number: int, memory_store: Con
 
 
 
-def _get_relationship_tone(speaker: Optional[str], known_characters: Dict[str, Any]) -> str:
-    """Get appropriate relationship tone for addressing a character"""
-    if not speaker or speaker not in known_characters:
-        return "friendly"
-    
-    relationship = known_characters[speaker].relationship
-    
-    if relationship in ["close_friend", "special_affection"]:
-        return "warm"
-    elif relationship in ["captain", "superior"]:
-        return "respectful"
-    elif relationship in ["colleague", "crew_member"]:
-        return "professional"
-    elif relationship == "debtor":
-        return "slightly_teasing"
-    else:
-        return "friendly"
+
 
 
 def _extract_addressed_character_from_response(response_text: str) -> Optional[str]:
@@ -444,4 +492,7 @@ def get_global_conversation_tracker():
     rp_state = get_roleplay_state()
     if rp_state.is_roleplaying:
         return rp_state.conversation_memory
-    return None 
+    return None
+
+
+ 

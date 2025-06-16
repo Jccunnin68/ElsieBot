@@ -122,27 +122,39 @@ def _handle_standard_roleplay(user_message: str, conversation_history: List, cha
         print(f"      📊 Roleplay State: {rp_state.current_mode}")
         print(f"      🔄 Turn: {turn_number}")
         
-        # Enhanced contextual intelligence processing
+        # Enhanced LLM-based routing and contextual intelligence processing
         from ..ai_attention.conversation_memory import ConversationMemory
         
-        dgm = ConversationMemory()
-        dgm_result = dgm.process_message_enhanced(
+        # Use conversation memory for LLM-enhanced routing
+        conversation_memory = ConversationMemory()
+        
+        # Add current turn to conversation memory
+        conversation_memory.add_turn(
+            speaker="User",
+            message=user_message,
+            turn_number=turn_number,
+            message_type="standard"
+        )
+        
+        # Get LLM-enhanced routing decision
+        routing_result = conversation_memory.process_message_enhanced(
             user_message, 
             turn_number, 
             conversation_history, 
             channel_context
         )
         
-        print(f"      🧠 DGM Processing: {dgm_result.get('processing_approach', 'unknown')}")
+        print(f"      🧠 LLM Routing: {routing_result.get('processing_approach', 'unknown')}")
+        print(f"      🎯 Confidence: {routing_result.get('routing_confidence', 0.0):.2f}")
         
-        # Process through decision engine
-        response_decision = _process_dgm_action(dgm_result, user_message, turn_number, channel_context)
+        # Convert LLM routing to response decision
+        response_decision = _convert_llm_routing_to_response_decision(routing_result, user_message)
         
         # Update roleplay state
-        _update_roleplay_state_from_decision(response_decision, dgm_result.get('contextual_cues'), rp_state, turn_number)
+        _update_roleplay_state_from_decision(response_decision, routing_result.get('contextual_cues'), rp_state, turn_number)
         
         # Convert to final response decision
-        final_decision = _convert_to_final_response_decision(response_decision, dgm_result.get('contextual_cues'))
+        final_decision = _convert_to_final_response_decision(response_decision, routing_result.get('contextual_cues'))
         
         return final_decision
         
@@ -339,9 +351,58 @@ def _should_use_database(response_decision, contextual_cues) -> bool:
         return False
 
 
+def _convert_llm_routing_to_response_decision(routing_result: Dict, user_message: str):
+    """
+    Convert LLM routing result to response decision format.
+    
+    This bridges the new LLM routing system with the existing response decision system.
+    """
+    try:
+        from ..ai_attention.contextual_cues import create_response_decision, ResponseType
+        
+        # Get routing information
+        approach = routing_result.get('processing_approach', 'roleplay_active')
+        confidence = routing_result.get('routing_confidence', 0.7)
+        reasoning = routing_result.get('reasoning', 'LLM routing decision')
+        response_type_str = routing_result.get('suggested_response_type', 'active_dialogue')
+        
+        # Convert response type string to enum
+        response_type_map = {
+            'active_dialogue': ResponseType.ACTIVE_DIALOGUE,
+            'supportive_listen': ResponseType.SUPPORTIVE_LISTEN,
+            'subtle_service': ResponseType.SUBTLE_SERVICE,
+            'technical_expertise': ResponseType.TECHNICAL_EXPERTISE,
+            'group_acknowledgment': ResponseType.GROUP_ACKNOWLEDGMENT,
+            'none': ResponseType.NONE
+        }
+        
+        response_type = response_type_map.get(response_type_str, ResponseType.ACTIVE_DIALOGUE)
+        
+        # Create response decision
+        response_decision = create_response_decision(
+            should_respond=True,
+            response_type=response_type,
+            reasoning=reasoning
+        )
+        
+        # Add additional attributes
+        response_decision.confidence = confidence
+        response_decision.approach = approach
+        response_decision.response_style = routing_result.get('response_style', 'natural')
+        response_decision.tone = routing_result.get('tone', 'friendly')
+        
+        print(f"      ✅ LLM routing converted to response decision: {approach}")
+        return response_decision
+        
+    except Exception as e:
+        print(f"      ❌ Error converting LLM routing: {e}")
+        # Fallback to basic response decision
+        return _create_basic_response_decision(user_message)
+
+
 def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, channel_context: Optional[Dict]):
     """
-    Process DGM (Dynamic Group Memory) action and convert to response decision.
+    Process DGM () action and convert to response decision.
     
     This bridges the DGM system with the response decision system.
     """
@@ -367,7 +428,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
 def _create_basic_response_decision(user_message: str):
     """Create a basic response decision as fallback."""
     try:
-        from handlers.ai_attention.contextual_cues import create_response_decision, ResponseType
+        from ..ai_attention.contextual_cues import create_response_decision, ResponseType
         
         return create_response_decision(
             should_respond=True,
