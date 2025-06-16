@@ -26,17 +26,19 @@ def print_examples():
     print("1. Show all ships:")
     print("   SELECT DISTINCT ship_name FROM wiki_pages WHERE ship_name IS NOT NULL;")
     print("\n2. Count logs per ship:")
-    print("   SELECT ship_name, COUNT(*) as log_count FROM wiki_pages WHERE page_type = 'mission_log' GROUP BY ship_name ORDER BY log_count DESC;")
+    print("   SELECT ship_name, COUNT(*) as log_count FROM wiki_pages WHERE 'Stardancer Log' = ANY(categories) OR 'Adagio Log' = ANY(categories) GROUP BY ship_name ORDER BY log_count DESC;")
     print("\n3. Recent mission logs:")
-    print("   SELECT title, ship_name, log_date FROM wiki_pages WHERE page_type = 'mission_log' ORDER BY log_date DESC LIMIT 10;")
+    print("   SELECT title, ship_name, log_date FROM wiki_pages WHERE categories && ARRAY['Stardancer Log', 'Adagio Log', 'Pilgrim Log'] ORDER BY log_date DESC LIMIT 10;")
     print("\n4. Search content:")
-    print("   SELECT title, page_type, ship_name FROM wiki_pages WHERE raw_content ILIKE '%combat%' LIMIT 5;")
+    print("   SELECT title, categories, ship_name FROM wiki_pages WHERE raw_content ILIKE '%combat%' LIMIT 5;")
     print("\n5. Database statistics:")
-    print("   SELECT page_type, COUNT(*) as count FROM wiki_pages GROUP BY page_type ORDER BY count DESC;")
+    print("   SELECT unnest(categories) as category, COUNT(*) as count FROM wiki_pages WHERE categories IS NOT NULL GROUP BY unnest(categories) ORDER BY count DESC;")
     print("\n6. Find specific character mentions:")
-    print("   SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;")
+    print("   SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND categories && ARRAY['Stardancer Log', 'Adagio Log'] LIMIT 10;")
     print("\n7. Content access statistics:")
-    print("   SELECT title, page_type, content_accessed FROM wiki_pages WHERE content_accessed > 0 ORDER BY content_accessed DESC LIMIT 10;")
+    print("   SELECT title, categories, content_accessed FROM wiki_pages WHERE content_accessed > 0 ORDER BY content_accessed DESC LIMIT 10;")
+    print("\n8. Category breakdown:")
+    print("   SELECT unnest(categories) as category, COUNT(*) as count FROM wiki_pages WHERE categories IS NOT NULL GROUP BY unnest(categories) ORDER BY count DESC LIMIT 15;")
 
 def print_tables():
     """Show available tables and their structure"""
@@ -160,11 +162,12 @@ def run_predefined_query(query_name: str, show_full: bool = False) -> bool:
     """Run a predefined query by name"""
     predefined_queries = {
         "ships": "SELECT DISTINCT ship_name FROM wiki_pages WHERE ship_name IS NOT NULL ORDER BY ship_name;",
-        "stats": "SELECT page_type, COUNT(*) as count FROM wiki_pages GROUP BY page_type ORDER BY count DESC;",
-        "recent": "SELECT title, ship_name, log_date FROM wiki_pages WHERE page_type = 'mission_log' ORDER BY log_date DESC LIMIT 10;",
-        "ship_counts": "SELECT ship_name, COUNT(*) as log_count FROM wiki_pages WHERE page_type = 'mission_log' GROUP BY ship_name ORDER BY log_count DESC;",
-        "characters": "SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND page_type = 'mission_log' LIMIT 10;",
-        "access": "SELECT title, page_type, content_accessed FROM wiki_pages WHERE content_accessed > 0 ORDER BY content_accessed DESC LIMIT 10;"
+        "stats": "SELECT unnest(categories) as category, COUNT(*) as count FROM wiki_pages WHERE categories IS NOT NULL GROUP BY unnest(categories) ORDER BY count DESC LIMIT 15;",
+        "recent": "SELECT title, ship_name, log_date FROM wiki_pages WHERE categories && ARRAY['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log'] ORDER BY log_date DESC LIMIT 10;",
+        "ship_counts": "SELECT ship_name, COUNT(*) as log_count FROM wiki_pages WHERE categories && ARRAY['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log'] AND ship_name IS NOT NULL GROUP BY ship_name ORDER BY log_count DESC;",
+        "characters": "SELECT title, ship_name FROM wiki_pages WHERE raw_content ILIKE '%captain%' AND categories && ARRAY['Stardancer Log', 'Adagio Log', 'Pilgrim Log'] LIMIT 10;",
+        "access": "SELECT title, categories, content_accessed FROM wiki_pages WHERE content_accessed > 0 ORDER BY content_accessed DESC LIMIT 10;",
+        "categories": "SELECT unnest(categories) as category, COUNT(*) as count FROM wiki_pages WHERE categories IS NOT NULL GROUP BY unnest(categories) ORDER BY count DESC;"
     }
     
     if query_name not in predefined_queries:
@@ -203,7 +206,7 @@ def main():
         elif command == "tables":
             print_tables()
             
-        elif command in ["ships", "stats", "recent", "ship_counts", "characters", "access"]:
+        elif command in ["ships", "stats", "recent", "ship_counts", "characters", "access", "categories"]:
             run_predefined_query(command)
             
         elif command == "custom" and len(sys.argv) > 2:
@@ -215,7 +218,7 @@ def main():
         elif command == "full" and len(sys.argv) > 2:
             # Run any command with full content display
             sub_command = sys.argv[2].lower()
-            if sub_command in ["ships", "stats", "recent", "ship_counts", "characters", "access"]:
+            if sub_command in ["ships", "stats", "recent", "ship_counts", "characters", "access", "categories"]:
                 print("📄 (Showing full content - no truncation)")
                 run_predefined_query(sub_command, show_full=True)
             elif sub_command == "custom" and len(sys.argv) > 3:
@@ -224,7 +227,7 @@ def main():
                 print("📄 (Showing full content - no truncation)")
                 execute_query(custom_query, show_full=True)
             else:
-                print("Usage: python run_query.py full [ships|stats|recent|ship_counts|characters|access]")
+                print("Usage: python run_query.py full [ships|stats|recent|ship_counts|characters|access|categories]")
                 print("   or: python run_query.py full custom 'SQL_QUERY'")
             
         else:
@@ -239,6 +242,7 @@ def main():
             print("  python run_query.py ship_counts    # Log counts per ship")
             print("  python run_query.py characters     # Find character mentions")
             print("  python run_query.py access         # Content access statistics")
+            print("  python run_query.py categories     # Category breakdown")
             print("  python run_query.py custom 'SQL'   # Run custom SQL query")
             print("  python run_query.py full [command] # Show full content without truncation")
             

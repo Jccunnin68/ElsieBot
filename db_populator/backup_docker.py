@@ -152,15 +152,44 @@ def show_stats():
     """Show database statistics using Docker"""
     print("🐳 Database statistics:")
     
+    # Category-based statistics (primary)
     cmd = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
         SELECT 
             COUNT(*) as total_pages,
-            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
-            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
-            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel
+            COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
+            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories,
+            COUNT(DISTINCT ship_name) as unique_ships
         FROM wiki_pages;"'''
     
+    print("\n📊 Category Coverage:")
     result = run_docker_command(cmd, capture_output=False)
+    
+    # Category distribution
+    cmd2 = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
+        SELECT unnest(categories) as category, COUNT(*) as count 
+        FROM wiki_pages 
+        WHERE categories IS NOT NULL 
+        GROUP BY unnest(categories) 
+        ORDER BY count DESC 
+        LIMIT 10;"'''
+    
+    print("\n📈 Top Categories:")
+    result2 = run_docker_command(cmd2, capture_output=False)
+    
+    # Legacy page_type statistics for comparison
+    cmd3 = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
+        SELECT 
+            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
+            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
+            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
+            COUNT(CASE WHEN page_type = 'general' THEN 1 END) as general,
+            COUNT(CASE WHEN page_type = 'technology' THEN 1 END) as technology,
+            COUNT(CASE WHEN page_type = 'location' THEN 1 END) as location
+        FROM wiki_pages;"'''
+    
+    print("\n📋 Legacy Page Types (for comparison):")
+    result3 = run_docker_command(cmd3, capture_output=False)
+    
     return result
 
 

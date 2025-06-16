@@ -41,18 +41,23 @@ class FleetDatabaseController:
     
     def search_pages(self, query: str, page_type: Optional[str] = None, 
                     ship_name: Optional[str] = None, limit: int = 10, 
-                    force_mission_logs_only: bool = False) -> List[Dict]:
-        """Enhanced search with better ship name handling and fallbacks"""
+                    force_mission_logs_only: bool = False, categories: Optional[List[str]] = None) -> List[Dict]:
+        """Enhanced search with category support and backward compatibility"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     
                     print(f"🔍 ENHANCED SEARCH - Query: '{query}' (force_mission_logs_only: {force_mission_logs_only})")
                     
-                    # Override page_type if force_mission_logs_only is True
+                    # Convert page_type to categories for backward compatibility
+                    if page_type and not categories:
+                        categories = self._convert_page_type_to_categories(page_type, ship_name)
+                        print(f"   🔄 Converted page_type '{page_type}' to categories: {categories}")
+                    
+                    # Override for mission logs only
                     if force_mission_logs_only:
-                        page_type = 'mission_log'
-                        print(f"   🎯 FORCING MISSION LOGS ONLY - page_type set to 'mission_log'")
+                        categories = self._get_all_ship_log_categories()
+                        print(f"   🎯 FORCING MISSION LOGS ONLY - using ship log categories: {len(categories)} categories")
                     
                     all_results = []
                     
@@ -69,7 +74,7 @@ class FleetDatabaseController:
                         
                         if detected_ship:
                             ship_query = """
-                                SELECT id, title, raw_content, page_type, ship_name, log_date, url
+                                SELECT id, title, raw_content, ship_name, log_date, url, categories
                                 FROM wiki_pages 
                                 WHERE ship_name = %s
                                 ORDER BY log_date DESC
@@ -80,45 +85,90 @@ class FleetDatabaseController:
                             print(f"   📊 Ship-specific search found {len(ship_results)} results")
                             all_results.extend(ship_results)
                     
-                    # STEP 2: Title-based full-text search
-                    print(f"   🔍 Title FTS search...")
-                    title_query = """
-                        SELECT id, title, raw_content, page_type, ship_name, log_date, url,
-                               ts_rank(to_tsvector('english', title), 
-                                      plainto_tsquery('english', %s)) as rank
-                        FROM wiki_pages 
-                        WHERE to_tsvector('english', title) @@ plainto_tsquery('english', %s)
-                    """
+                    # STEP 2: Category-based search (PRIMARY)
+                    if categories and len(all_results) < limit:
+                        print(f"   🏷️ Category-based search for: {categories}")
+                        
+                        # Safety check: ensure categories is not empty
+                        if not categories or len(categories) == 0:
+                            print(f"   ⚠️  Empty categories array, skipping category search")
+                        else:
+                            category_query = """
+                                SELECT id, title, raw_content, ship_name, log_date, url, categories,
+                                       ts_rank(to_tsvector('english', title), 
+                                              plainto_tsquery('english', %s)) as rank
+                                FROM wiki_pages 
+                                WHERE categories IS NOT NULL 
+                                AND array_length(categories, 1) > 0
+                                AND categories && %s
+                                AND to_tsvector('english', title) @@ plainto_tsquery('english', %s)
+                            """
+                            
+                            category_params = [query, categories, query]
+                            
+                            if ship_name:
+                                category_query += " AND ship_name = %s"
+                                category_params.append(ship_name)
+                            
+                            # Exclude already found results
+                            if all_results:
+                                existing_ids = [str(r['id']) for r in all_results]
+                                category_query += f" AND id NOT IN ({','.join(['%s'] * len(existing_ids))})"
+                                category_params.extend(existing_ids)
+                            
+                            remaining_limit = limit - len(all_results)
+                            category_query += " ORDER BY rank DESC, log_date DESC LIMIT %s"
+                            category_params.append(remaining_limit)
+                            
+                            cur.execute(category_query, category_params)
+                            category_results = [dict(row) for row in cur.fetchall()]
+                            print(f"   📊 Category search found {len(category_results)} results")
+                            all_results.extend(category_results)
                     
-                    title_params = [query, query]
+                    # STEP 3: Title-based full-text search
+                    if len(all_results) < limit:
+                        print(f"   🔍 Title FTS search...")
+                        title_query = """
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories,
+                                   ts_rank(to_tsvector('english', title), 
+                                          plainto_tsquery('english', %s)) as rank
+                            FROM wiki_pages 
+                            WHERE to_tsvector('english', title) @@ plainto_tsquery('english', %s)
+                        """
+                        
+                        title_params = [query, query]
+                        
+                        # Use categories if available
+                        if categories:
+                            # Safety check: ensure categories is not empty
+                            if categories and len(categories) > 0:
+                                title_query += " AND categories IS NOT NULL AND array_length(categories, 1) > 0 AND categories && %s"
+                                title_params.append(categories)
+                        
+                        if ship_name:
+                            title_query += " AND ship_name = %s"
+                            title_params.append(ship_name)
+                        
+                        # Exclude already found ship results
+                        if all_results:
+                            existing_ids = [str(r['id']) for r in all_results]
+                            title_query += f" AND id NOT IN ({','.join(['%s'] * len(existing_ids))})"
+                            title_params.extend(existing_ids)
+                        
+                        remaining_limit = limit - len(all_results)
+                        title_query += " ORDER BY rank DESC, log_date DESC LIMIT %s"
+                        title_params.append(remaining_limit)
+                        
+                        cur.execute(title_query, title_params)
+                        title_results = [dict(row) for row in cur.fetchall()]
+                        print(f"   📊 Title FTS found {len(title_results)} results")
+                        all_results.extend(title_results)
                     
-                    if page_type:
-                        title_query += " AND page_type = %s"
-                        title_params.append(page_type)
-                    
-                    if ship_name:
-                        title_query += " AND ship_name = %s"
-                        title_params.append(ship_name)
-                    
-                    # Exclude already found ship results
-                    if all_results:
-                        existing_ids = [str(r['id']) for r in all_results]
-                        title_query += f" AND id NOT IN ({','.join(['%s'] * len(existing_ids))})"
-                        title_params.extend(existing_ids)
-                    
-                    title_query += " ORDER BY rank DESC, log_date DESC LIMIT %s"
-                    title_params.append(limit - len(all_results))
-                    
-                    cur.execute(title_query, title_params)
-                    title_results = [dict(row) for row in cur.fetchall()]
-                    print(f"   📊 Title FTS found {len(title_results)} results")
-                    all_results.extend(title_results)
-                    
-                    # STEP 3: Content-based search if still need more results
+                    # STEP 4: Content-based search if still need more results
                     if len(all_results) < limit:
                         print(f"   🔍 Content FTS search...")
                         content_query = """
-                            SELECT id, title, raw_content, page_type, ship_name, log_date, url,
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories,
                                    ts_rank(to_tsvector('english', raw_content), 
                                           plainto_tsquery('english', %s)) as rank
                             FROM wiki_pages 
@@ -127,9 +177,12 @@ class FleetDatabaseController:
                         
                         content_params = [query, query]
                         
-                        if page_type:
-                            content_query += " AND page_type = %s"
-                            content_params.append(page_type)
+                        # Use categories if available
+                        if categories:
+                            # Safety check: ensure categories is not empty
+                            if categories and len(categories) > 0:
+                                content_query += " AND categories IS NOT NULL AND array_length(categories, 1) > 0 AND categories && %s"
+                                content_params.append(categories)
                         
                         if ship_name:
                             content_query += " AND ship_name = %s"
@@ -150,20 +203,23 @@ class FleetDatabaseController:
                         print(f"   📊 Content FTS found {len(content_results)} results")
                         all_results.extend(content_results)
                     
-                    # STEP 4: Fallback to LIKE search if FTS fails
+                    # STEP 5: Fallback to LIKE search if FTS fails
                     if not all_results:
                         print(f"   🔄 Fallback LIKE search...")
                         like_query = """
-                            SELECT id, title, raw_content, page_type, ship_name, log_date, url
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories
                             FROM wiki_pages 
                             WHERE (LOWER(title) LIKE LOWER(%s) OR LOWER(raw_content) LIKE LOWER(%s))
                         """
                         
                         like_params = [f'%{query}%', f'%{query}%']
                         
-                        if page_type:
-                            like_query += " AND page_type = %s"
-                            like_params.append(page_type)
+                        # Use categories if available
+                        if categories:
+                            # Safety check: ensure categories is not empty
+                            if categories and len(categories) > 0:
+                                like_query += " AND categories IS NOT NULL AND array_length(categories, 1) > 0 AND categories && %s"
+                                like_params.append(categories)
                         
                         if ship_name:
                             like_query += " AND ship_name = %s"
@@ -192,7 +248,8 @@ class FleetDatabaseController:
                     # Debug: Show results
                     for i, result in enumerate(unique_results[:3]):
                         title_preview = result['title'][:50] + "..." if len(result['title']) > 50 else result['title']
-                        print(f"      📄 Result {i+1}: '{title_preview}' ({result['ship_name']})")
+                        categories_preview = result.get('categories', [])
+                        print(f"      📄 Result {i+1}: '{title_preview}' (categories: {categories_preview})")
                     
                     # Track content access for all returned results
                     if unique_results:
@@ -248,16 +305,31 @@ class FleetDatabaseController:
         return self.search_pages(ship_name, ship_name=ship_name.lower(), limit=20)
     
     def get_recent_logs(self, ship_name: Optional[str] = None, limit: int = 10) -> List[Dict]:
-        """Get recent mission logs"""
+        """Get recent mission logs using categories"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    query = """
-                        SELECT id, title, raw_content, ship_name, log_date, url, page_type
-                        FROM wiki_pages 
-                        WHERE page_type = 'mission_log'
-                    """
-                    params = []
+                    # Use ship log categories instead of page_type
+                    from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+                    
+                    # Safety check: ensure SHIP_LOG_CATEGORIES is not empty
+                    if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
+                        print(f"   ⚠️  No ship log categories defined, falling back to page_type")
+                        query = """
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories
+                            FROM wiki_pages 
+                            WHERE page_type = 'mission_log'
+                        """
+                        params = []
+                    else:
+                        query = """
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories
+                            FROM wiki_pages 
+                            WHERE categories IS NOT NULL 
+                            AND array_length(categories, 1) > 0
+                            AND categories && %s
+                        """
+                        params = [SHIP_LOG_CATEGORIES]
                     
                     if ship_name:
                         query += " AND ship_name = %s"
@@ -284,6 +356,7 @@ class FleetDatabaseController:
                          limit: int = 5, date_filter: Optional[str] = None) -> List[Dict]:
         """
         Get logs based on selection criteria with proper ordering and filtering
+        Now uses categories instead of page_type
         
         Args:
             selection_type: 'latest', 'first', 'random', 'today', etc.
@@ -296,13 +369,29 @@ class FleetDatabaseController:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     print(f"🎯 SELECTED LOG SEARCH: type='{selection_type}', ship='{ship_name}', limit={limit}")
                     
-                    # Base query - ONLY mission logs
-                    query = """
-                        SELECT id, title, raw_content, ship_name, log_date, url, page_type
-                        FROM wiki_pages 
-                        WHERE page_type = 'mission_log'
-                    """
-                    params = []
+                    # Use ship log categories instead of page_type
+                    from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+                    
+                    # Safety check: ensure SHIP_LOG_CATEGORIES is not empty
+                    if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
+                        print(f"   ⚠️  No ship log categories defined, falling back to page_type")
+                        # Base query - ONLY mission logs using page_type fallback
+                        query = """
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories
+                            FROM wiki_pages 
+                            WHERE page_type = 'mission_log'
+                        """
+                        params = []
+                    else:
+                        # Base query - ONLY mission logs using categories
+                        query = """
+                            SELECT id, title, raw_content, ship_name, log_date, url, categories
+                            FROM wiki_pages 
+                            WHERE categories IS NOT NULL 
+                            AND array_length(categories, 1) > 0
+                            AND categories && %s
+                        """
+                        params = [SHIP_LOG_CATEGORIES]
                     
                     # Add ship filter
                     if ship_name:
@@ -392,7 +481,7 @@ class FleetDatabaseController:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""
-                        SELECT title, page_type, ship_name, content_accessed, 
+                        SELECT title, ship_name, content_accessed, categories,
                                LEFT(raw_content, 100) as content_preview
                         FROM wiki_pages 
                         WHERE content_accessed > 0
@@ -405,22 +494,36 @@ class FleetDatabaseController:
             return []
 
     def get_stats(self) -> Dict:
-        """Get database statistics"""
+        """Get database statistics with focus on categories"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    # Primary category-based stats
                     cur.execute("""
                         SELECT 
                             COUNT(*) as total_pages,
-                            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
-                            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
-                            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
                             COUNT(DISTINCT ship_name) as unique_ships,
                             SUM(content_accessed) as total_accesses,
-                            AVG(content_accessed) as avg_accesses_per_page
+                            AVG(content_accessed) as avg_accesses_per_page,
+                            COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
+                            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) = 0 THEN 1 END) as pages_without_categories
                         FROM wiki_pages
                     """)
-                    return dict(cur.fetchone())
+                    stats = dict(cur.fetchone())
+                    
+                    # Category-based stats (PRIMARY)
+                    cur.execute("""
+                        SELECT unnest(categories) as category, COUNT(*) as count 
+                        FROM wiki_pages 
+                        WHERE categories IS NOT NULL 
+                        GROUP BY unnest(categories) 
+                        ORDER BY count DESC 
+                        LIMIT 15
+                    """)
+                    category_stats = {row['category']: row['count'] for row in cur.fetchall()}
+                    stats['category_breakdown'] = category_stats
+                    
+                    return stats
         except Exception as e:
             print(f"✗ Error getting stats: {e}")
             return {}
@@ -517,13 +620,27 @@ class FleetDatabaseController:
                     print("🧹 CLEANING UP MISSION LOG SHIP NAMES")
                     print("=" * 50)
                     
-                    # First, let's see what we're working with
-                    cur.execute("""
-                        SELECT COUNT(*) as total_mission_logs,
-                               COUNT(CASE WHEN ship_name IS NULL OR ship_name = '' THEN 1 END) as missing_ship_names
-                        FROM wiki_pages 
-                        WHERE page_type = 'mission_log'
-                    """)
+                    # First, let's see what we're working with - use categories instead of page_type
+                    from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+                    
+                    # Safety check: ensure SHIP_LOG_CATEGORIES is not empty
+                    if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
+                        print(f"   ⚠️  No ship log categories defined, using page_type fallback")
+                        cur.execute("""
+                            SELECT COUNT(*) as total_mission_logs,
+                                   COUNT(CASE WHEN ship_name IS NULL OR ship_name = '' THEN 1 END) as missing_ship_names
+                            FROM wiki_pages 
+                            WHERE page_type = 'mission_log'
+                        """)
+                    else:
+                        cur.execute("""
+                            SELECT COUNT(*) as total_mission_logs,
+                                   COUNT(CASE WHEN ship_name IS NULL OR ship_name = '' THEN 1 END) as missing_ship_names
+                            FROM wiki_pages 
+                            WHERE categories IS NOT NULL 
+                            AND array_length(categories, 1) > 0
+                            AND categories && %s
+                        """, (SHIP_LOG_CATEGORIES,))
                     stats_before = cur.fetchone()
                     print(f"📊 Before cleanup: {stats_before['total_mission_logs']} mission logs, {stats_before['missing_ship_names']} missing ship names")
                     
@@ -566,13 +683,25 @@ class FleetDatabaseController:
                     
                     updated_count = 0
                     for ship_name, pattern in ship_patterns:
-                        cur.execute("""
-                            UPDATE wiki_pages 
-                            SET ship_name = %s 
-                            WHERE page_type = 'mission_log' 
-                            AND (ship_name IS NULL OR ship_name = '' OR ship_name = 'None')
-                            AND title ~* %s
-                        """, (ship_name.lower(), pattern))
+                        if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
+                            # Fallback to page_type if no categories
+                            cur.execute("""
+                                UPDATE wiki_pages 
+                                SET ship_name = %s 
+                                WHERE page_type = 'mission_log'
+                                AND (ship_name IS NULL OR ship_name = '' OR ship_name = 'None')
+                                AND title ~* %s
+                            """, (ship_name.lower(), pattern))
+                        else:
+                            cur.execute("""
+                                UPDATE wiki_pages 
+                                SET ship_name = %s 
+                                WHERE categories IS NOT NULL 
+                                AND array_length(categories, 1) > 0
+                                AND categories && %s
+                                AND (ship_name IS NULL OR ship_name = '' OR ship_name = 'None')
+                                AND title ~* %s
+                            """, (ship_name.lower(), SHIP_LOG_CATEGORIES, pattern))
                         
                         count = cur.rowcount
                         if count > 0:
@@ -580,12 +709,22 @@ class FleetDatabaseController:
                             print(f"  ✓ Updated {count} entries for {ship_name}")
                     
                     # Check results
-                    cur.execute("""
-                        SELECT COUNT(*) as total_mission_logs,
-                               COUNT(CASE WHEN ship_name IS NULL OR ship_name = '' OR ship_name = 'None' THEN 1 END) as missing_ship_names
-                        FROM wiki_pages 
-                        WHERE page_type = 'mission_log'
-                    """)
+                    if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
+                        cur.execute("""
+                            SELECT COUNT(*) as total_mission_logs,
+                                   COUNT(CASE WHEN ship_name IS NULL OR ship_name = '' OR ship_name = 'None' THEN 1 END) as missing_ship_names
+                            FROM wiki_pages 
+                            WHERE page_type = 'mission_log'
+                        """)
+                    else:
+                        cur.execute("""
+                            SELECT COUNT(*) as total_mission_logs,
+                                   COUNT(CASE WHEN ship_name IS NULL OR ship_name = '' OR ship_name = 'None' THEN 1 END) as missing_ship_names
+                            FROM wiki_pages 
+                            WHERE categories IS NOT NULL 
+                            AND array_length(categories, 1) > 0
+                            AND categories && %s
+                        """, (SHIP_LOG_CATEGORIES,))
                     stats_after = cur.fetchone()
                     
                     print(f"📊 After cleanup: {stats_after['total_mission_logs']} mission logs, {stats_after['missing_ship_names']} missing ship names")
@@ -652,10 +791,11 @@ class FleetDatabaseController:
                             print(f"  🗑️  Deleted {count} entries matching '{pattern}'")
                     
                     # Also remove any entries with very short content (likely examples)
+                    # Use categories to avoid deleting legitimate general content
                     cur.execute("""
                         DELETE FROM wiki_pages 
-                        WHERE LENGTH(content) < 50 
-                        AND page_type = 'general'
+                        WHERE LENGTH(raw_content) < 50 
+                        AND (categories IS NULL OR 'General Information' = ANY(categories))
                     """)
                     short_content_deleted = cur.rowcount
                     if short_content_deleted > 0:
@@ -681,6 +821,20 @@ class FleetDatabaseController:
         except Exception as e:
             print(f"✗ Error cleaning up seed data: {e}")
             return {}
+
+    def _convert_page_type_to_categories(self, page_type: str, ship_name: Optional[str] = None) -> List[str]:
+        """Convert old page_type to new categories for backward compatibility"""
+        from handlers.ai_wisdom.category_mappings import convert_page_type_to_categories
+        return convert_page_type_to_categories(page_type, ship_name)
+    
+    def _get_all_ship_log_categories(self) -> List[str]:
+        """Get all ship log categories for mission log searches"""
+        from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+        return SHIP_LOG_CATEGORIES
+    
+    def search_by_categories(self, query: str, categories: List[str], limit: int = 10) -> List[Dict]:
+        """Search pages by specific categories"""
+        return self.search_pages(query, categories=categories, limit=limit)
 
 # Global database controller instance
 db_controller = None

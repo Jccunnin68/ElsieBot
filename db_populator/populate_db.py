@@ -69,7 +69,8 @@ def create_schema():
                     log_date DATE,
                     content_accessed INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    categories TEXT[]
                 );
             """)
             
@@ -93,6 +94,7 @@ def create_schema():
             cur.execute("CREATE INDEX idx_wiki_pages_title ON wiki_pages(title);")
             cur.execute("CREATE INDEX idx_wiki_pages_type ON wiki_pages(page_type);")
             cur.execute("CREATE INDEX idx_wiki_pages_ship ON wiki_pages(ship_name);")
+            cur.execute("CREATE INDEX idx_wiki_pages_categories ON wiki_pages USING gin(categories);")
             cur.execute("CREATE INDEX idx_page_metadata_title ON page_metadata(title);")
             cur.execute("CREATE INDEX idx_page_metadata_status ON page_metadata(status);")
             cur.execute("CREATE INDEX idx_page_metadata_last_crawled ON page_metadata(last_crawled);")

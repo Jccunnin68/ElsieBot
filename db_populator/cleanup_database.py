@@ -53,7 +53,9 @@ class DatabaseCleanup:
                             COUNT(CASE WHEN page_type = 'technology' THEN 1 END) as technology,
                             COUNT(DISTINCT ship_name) as unique_ships,
                             AVG(LENGTH(raw_content)) as avg_content_length,
-                            MAX(LENGTH(raw_content)) as max_content_length
+                            MAX(LENGTH(raw_content)) as max_content_length,
+                            COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
+                            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories
                         FROM wiki_pages
                     """)
                     wiki_stats = dict(cur.fetchone())
@@ -243,6 +245,18 @@ class DatabaseCleanup:
         
         print(f"📊 Content Statistics:")
         print(f"   Total Pages: {stats.get('total_pages', 0):,}")
+        
+        # Add category coverage if available
+        pages_with_categories = stats.get('pages_with_categories', 0)
+        pages_without_categories = stats.get('pages_without_categories', 0)
+        if pages_with_categories > 0 or pages_without_categories > 0:
+            total_pages = stats.get('total_pages', 0)
+            if total_pages > 0:
+                coverage_percent = (pages_with_categories / total_pages) * 100
+                print(f"   Pages with Categories: {pages_with_categories:,} ({coverage_percent:.1f}%)")
+                print(f"   Pages without Categories: {pages_without_categories:,}")
+        
+        print(f"\n📋 Legacy Page Type Distribution:")
         print(f"   Mission Logs: {stats.get('mission_logs', 0):,}")
         print(f"   Ship Info: {stats.get('ship_info', 0):,}")
         print(f"   Personnel: {stats.get('personnel', 0):,}")

@@ -20,14 +20,27 @@ class DatabaseOperations:
     """Handles all database operations for the wiki crawler"""
     
     def __init__(self):
-        # Database configuration for Docker container environment
+        # Database configuration - auto-detect Docker vs local environment
+        # When running in Docker, DB_HOST will be set to 'elsiebrain_db'
+        # When running locally, we use localhost:5433
+        db_host = os.getenv('DB_HOST', 'localhost')
+        db_port = os.getenv('DB_PORT', '5433' if db_host == 'localhost' else '5432')
+        
         self.db_config = {
             'dbname': os.getenv('DB_NAME', 'elsiebrain'),
             'user': os.getenv('DB_USER', 'elsie'),
             'password': os.getenv('DB_PASSWORD', 'elsie123'),
-            'host': os.getenv('DB_HOST', 'localhost'),  # Use localhost in development
-            'port': os.getenv('DB_PORT', '5433')  # Use 5433 in development
+            'host': db_host,
+            'port': db_port
         }
+        
+        print(f"🔧 Database config: {self.db_config['user']}@{self.db_config['host']}:{self.db_config['port']}/{self.db_config['dbname']}")
+        
+        # Detect environment
+        if db_host == 'elsiebrain_db':
+            print("🐳 Running in Docker container mode")
+        else:
+            print("💻 Running in local development mode")
     
     def get_connection(self):
         """Get database connection"""
@@ -102,15 +115,15 @@ class DatabaseOperations:
         return metadata.get('content_hash') != new_content_hash
     
     def save_page_to_database(self, page_data: Dict, content_processor) -> bool:
-        """Save page data to the database (no content splitting)"""
+        """Save page data to the database with categories support"""
         try:
             content = page_data['raw_content']
             title = page_data['title']
             
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Classify the page using full content
-                    page_type, ship_name, log_date = content_processor.classify_page_type(
+                    # Classify the page using full content - now returns categories too
+                    page_type, ship_name, log_date, categories = content_processor.classify_page_type(
                         title, content
                     )
                     
@@ -122,11 +135,12 @@ class DatabaseOperations:
                     existing_page = cur.fetchone()
                     
                     if existing_page:
-                        # Update existing page
+                        # Update existing page - now includes categories
                         cur.execute("""
                             UPDATE wiki_pages 
                             SET raw_content = %s, url = %s, crawl_date = %s,
-                                page_type = %s, ship_name = %s, log_date = %s, updated_at = NOW()
+                                page_type = %s, ship_name = %s, log_date = %s, 
+                                categories = %s, updated_at = NOW()
                             WHERE title = %s
                         """, (
                             content,
@@ -135,15 +149,16 @@ class DatabaseOperations:
                             page_type,
                             ship_name,
                             log_date,
+                            categories,  # New: categories array
                             title
                         ))
-                        print(f"  ✓ Updated existing page: {title} ({len(content):,} chars, type: {page_type})")
+                        print(f"  ✓ Updated existing page: {title} ({len(content):,} chars, type: {page_type}, categories: {categories})")
                     else:
-                        # Insert new page
+                        # Insert new page - now includes categories
                         cur.execute("""
                             INSERT INTO wiki_pages 
-                            (title, raw_content, url, crawl_date, page_type, ship_name, log_date)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            (title, raw_content, url, crawl_date, page_type, ship_name, log_date, categories)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         """, (
                             title,
                             content,
@@ -151,9 +166,10 @@ class DatabaseOperations:
                             page_data['crawled_at'],
                             page_type,
                             ship_name,
-                            log_date
+                            log_date,
+                            categories  # New: categories array
                         ))
-                        print(f"  ✓ Inserted new page: {title} ({len(content):,} chars, type: {page_type})")
+                        print(f"  ✓ Inserted new page: {title} ({len(content):,} chars, type: {page_type}, categories: {categories})")
                     
                     conn.commit()
                     return True
@@ -163,7 +179,7 @@ class DatabaseOperations:
             return False
     
     def get_database_stats(self):
-        """Get database statistics"""
+        """Get database statistics including categories"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -174,10 +190,28 @@ class DatabaseOperations:
                             COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
                             COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
                             COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
-                            COUNT(DISTINCT ship_name) as unique_ships
+                            COUNT(CASE WHEN page_type = 'location' THEN 1 END) as location,
+                            COUNT(CASE WHEN page_type = 'technology' THEN 1 END) as technology,
+                            COUNT(CASE WHEN page_type = 'general' THEN 1 END) as general,
+                            COUNT(DISTINCT ship_name) as unique_ships,
+                            COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
+                            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories
                         FROM wiki_pages
                     """)
                     wiki_stats = dict(cur.fetchone())
+                    
+                    # Category distribution stats
+                    cur.execute("""
+                        SELECT 
+                            unnest(categories) as category,
+                            COUNT(*) as count
+                        FROM wiki_pages 
+                        WHERE categories IS NOT NULL 
+                        GROUP BY unnest(categories)
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
+                    category_stats = cur.fetchall()
                     
                     # Metadata stats
                     cur.execute("""
@@ -189,6 +223,9 @@ class DatabaseOperations:
                         FROM page_metadata
                     """)
                     metadata_stats = dict(cur.fetchone())
+                    
+                    # Add category distribution to stats
+                    wiki_stats['category_distribution'] = [dict(row) for row in category_stats]
                     
                     return {**wiki_stats, **metadata_stats}
         except Exception as e:

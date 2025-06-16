@@ -1,7 +1,7 @@
 """Database-driven content retrieval and wiki search functionality"""
 
 from database_controller import get_db_controller
-from typing import Optional
+from typing import Optional, List
 import requests
 from urllib.parse import quote
 import re
@@ -573,11 +573,11 @@ def debug_schema_info():
         return {}
 
 def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
-    """Get full log content using hierarchical search (titles first, then content) - NO TRUNCATION
+    """Get full log content using hierarchical search with categories - NO TRUNCATION
     
     Args:
         query: Search query
-        mission_logs_only: If True, only search mission_log type pages, ignore other types
+        mission_logs_only: If True, only search ship log categories, ignore other types
         is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
@@ -604,31 +604,25 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
                 # Get date-filtered logs
                 return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
         
-        # Standard log search with mission logs only enforcement
-        log_types = ["mission_log"]
-        print(f"   📊 STANDARD LOG REQUEST: Searching mission_log type pages only")
+        # Use ship log categories instead of page_type
+        from .category_mappings import SHIP_LOG_CATEGORIES
+        print(f"   📊 STANDARD LOG REQUEST: Using ship log categories: {len(SHIP_LOG_CATEGORIES)} categories")
         
-        all_results = []
+        # Search using categories instead of page_type
+        if mission_logs_only:
+            # Use only ship log categories
+            results = controller.search_by_categories(query, SHIP_LOG_CATEGORIES, limit=20)
+            print(f"   📊 Ship log category search returned {len(results)} results")
+        else:
+            # Use force_mission_logs_only for backward compatibility
+            results = controller.search_pages(query, limit=20, force_mission_logs_only=True)
+            print(f"   📊 Force mission logs search returned {len(results)} results")
         
-        for log_type in log_types:
-            # Force mission logs only for all log queries
-            results = controller.search_pages(query, page_type=log_type, limit=20, force_mission_logs_only=True)
-            print(f"   📊 {log_type} hierarchical search returned {len(results)} results")
-            all_results.extend(results)
-        
-        # Remove duplicates based on ID
-        seen_ids = set()
-        unique_results = []
-        for result in all_results:
-            if result['id'] not in seen_ids:
-                unique_results.append(result)
-                seen_ids.add(result['id'])
-        
-        print(f"   📊 Total unique log results: {len(unique_results)}")
+        unique_results = results
         
         if not unique_results and not mission_logs_only:
             # Fallback: Try general hierarchical search with log keywords (only if not mission_logs_only)
-            print(f"   🔄 No typed logs found, trying general hierarchical search...")
+            print(f"   🔄 No category-based logs found, trying general hierarchical search...")
             results = controller.search_pages(f"{query} log", limit=20)  # Increased limit
             print(f"   📊 General hierarchical search returned {len(results)} results")
             
@@ -637,11 +631,15 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             for r in results:
                 title = r['title']
                 content_preview = r['raw_content'][:50] + "..." if len(r['raw_content']) > 50 else r['raw_content']
+                categories = r.get('categories', [])
                 
-                # Use enhanced ship log detection
-                if is_ship_log_title(title):
+                # Check if it has ship log categories or use enhanced ship log detection
+                if any(cat in SHIP_LOG_CATEGORIES for cat in categories):
                     log_results.append(r)
-                    print(f"   ✓ Detected ship log: '{title}' Content='{content_preview}'")
+                    print(f"   ✓ Category-based ship log: '{title}' Categories={categories}")
+                elif is_ship_log_title(title):
+                    log_results.append(r)
+                    print(f"   ✓ Title-based ship log: '{title}' Content='{content_preview}'")
                 # Also check for other log indicators
                 elif any(indicator in title.lower() for indicator in ['personal', 'captain', 'stardate']):
                     log_results.append(r)
@@ -652,7 +650,7 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             print(f"   📊 Enhanced filtering found {len(log_results)} log-like results")
             unique_results = log_results
         elif not unique_results and mission_logs_only:
-            print(f"   🎯 No mission logs found for specific request: '{query}'")
+            print(f"   🎯 No ship log categories found for specific request: '{query}'")
             return ""
         
         if not unique_results:
@@ -664,8 +662,9 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
         for result in unique_results:
             title = result['title']
             content = result['raw_content']  # NO LENGTH LIMIT
+            categories = result.get('categories', [])
             page_type = result.get('page_type', 'unknown')
-            print(f"   📄 Processing {page_type}: '{title}' ({len(content)} chars)")
+            print(f"   📄 Processing {page_type}: '{title}' (categories: {categories}) ({len(content)} chars)")
             
             # Parse character speaking patterns in the log using enhanced dialogue parsing
             parsed_content = parse_log_characters(content)
@@ -837,10 +836,20 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
         return ""
 
 def search_by_type(query: str, content_type: str) -> str:
-    """Search for specific type of content"""
+    """Search for specific type of content using categories when available"""
     try:
         controller = get_db_controller()
-        results = controller.search_pages(query, page_type=content_type, limit=10)  # Increased limit
+        
+        # Convert content_type to categories for better search
+        from .category_mappings import convert_page_type_to_categories
+        categories = convert_page_type_to_categories(content_type)
+        
+        if categories:
+            print(f"🏷️ CATEGORY SEARCH: '{content_type}' -> categories: {categories}")
+            results = controller.search_by_categories(query, categories, limit=10)
+        else:
+            print(f"📋 UNKNOWN CONTENT TYPE: '{content_type}' - using general search")
+            results = controller.search_pages(query, limit=10)
         
         if not results:
             return ""
@@ -850,8 +859,11 @@ def search_by_type(query: str, content_type: str) -> str:
         for result in results:
             title = result['title']
             content = result['raw_content']
-
-            page_text = f"**{title}**\n{content}"
+            categories = result.get('categories', [])
+            
+            # Add category info to the result
+            category_info = f" [Categories: {', '.join(categories)}]" if categories else ""
+            page_text = f"**{title}**{category_info}\n{content}"
             search_results.append(page_text)
 
         final_content = '\n\n---\n\n'.join(search_results)
@@ -885,7 +897,9 @@ def get_tell_me_about_content(subject: str) -> str:
         # If it looks like a ship name, also search ship-specific content
         if any(ship in subject.lower() for ship in ['uss', 'ship', 'vessel']):
             print(f"   🚢 Ship detected, searching ship-specific content...")
-            ship_results = controller.search_pages(subject, page_type='ship_info', limit=10)  # Increased limit
+            from .category_mappings import convert_page_type_to_categories
+            ship_categories = convert_page_type_to_categories('ship_info')
+            ship_results = controller.search_by_categories(subject, ship_categories, limit=10)
             print(f"   📊 Ship-specific search returned {len(ship_results)} results")
             
             # Merge ship results with general results, prioritizing ship info
@@ -903,18 +917,22 @@ def get_tell_me_about_content(subject: str) -> str:
         for result in results:  # Include ALL results
             title = result['title']
             content = result['raw_content']
-            page_type = result.get('page_type', 'general')
+            categories = result.get('categories', [])
             
-            # Add type indicator for clarity
-            type_indicator = ""
-            if page_type == 'mission_log':
-                type_indicator = " [Mission Log]"
-            elif page_type == 'ship_info':
-                type_indicator = " [Ship Information]"
-            elif page_type == 'personnel':
-                type_indicator = " [Personnel File]"
+            # Add category indicator for clarity
+            category_indicator = ""
+            if categories:
+                # Determine primary category type
+                if any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']):
+                    category_indicator = " [Mission Log]"
+                elif 'Ship Information' in categories:
+                    category_indicator = " [Ship Information]"
+                elif 'Characters' in categories:
+                    category_indicator = " [Personnel File]"
+                elif categories:
+                    category_indicator = f" [{categories[0]}]"
             
-            page_text = f"**{title}{type_indicator}**\n{content}"
+            page_text = f"**{title}{category_indicator}**\n{content}"
             content_parts.append(page_text)
         
         final_content = '\n\n---\n\n'.join(content_parts)
@@ -946,14 +964,18 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
         ship_info_results = []
         if any(indicator in subject.lower() for indicator in ['uss', 'ship', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise']):
             print(f"   🚢 PRIORITY: Searching ship info pages first...")
-            ship_info_results = controller.search_pages(subject, page_type='ship_info', limit=10)  # Increased limit
+            from .category_mappings import convert_page_type_to_categories
+            ship_categories = convert_page_type_to_categories('ship_info')
+            ship_info_results = controller.search_by_categories(subject, ship_categories, limit=10)
             print(f"   📊 Ship info search found {len(ship_info_results)} results")
         
         # Step 2: Search for personnel records
         personnel_results = []
         if any(indicator in subject.lower() for indicator in ['captain', 'commander', 'lieutenant', 'ensign', 'admiral', 'officer']):
             print(f"   👥 PRIORITY: Searching personnel records...")
-            personnel_results = controller.search_pages(subject, page_type='personnel', limit=10)  # Increased limit
+            from .category_mappings import convert_page_type_to_categories
+            personnel_categories = convert_page_type_to_categories('personnel')
+            personnel_results = controller.search_by_categories(subject, personnel_categories, limit=10)
             print(f"   📊 Personnel search found {len(personnel_results)} results")
         
         # Step 3: If we have ship info or personnel, use those first
@@ -987,25 +1009,29 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
         for result in unique_results:  # Include ALL unique results
             title = result['title']
             content = result['raw_content']  # NO LENGTH LIMIT
-            page_type = result.get('page_type', 'general')
+            categories = result.get('categories', [])
             
             # Skip mission logs unless no other content was found
-            if page_type == 'mission_log' and priority_results:
+            is_mission_log = any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']) if categories else False
+            if is_mission_log and priority_results:
                 print(f"   ⏭️  Skipping mission log '{title}' (ship/personnel info available)")
                 continue
             
-            # Add type indicator for clarity
-            type_indicator = ""
-            if page_type == 'mission_log':
-                type_indicator = " [Mission Log]"
-            elif page_type == 'ship_info':
-                type_indicator = " [Ship Information]"
-            elif page_type == 'personnel':
-                type_indicator = " [Personnel File]"
+            # Add category indicator for clarity
+            category_indicator = ""
+            if categories:
+                if is_mission_log:
+                    category_indicator = " [Mission Log]"
+                elif 'Ship Information' in categories:
+                    category_indicator = " [Ship Information]"
+                elif 'Characters' in categories:
+                    category_indicator = " [Personnel File]"
+                elif categories:
+                    category_indicator = f" [{categories[0]}]"
             
-            page_text = f"**{title}{type_indicator}**\n{content}"
+            page_text = f"**{title}{category_indicator}**\n{content}"
             content_parts.append(page_text)
-            print(f"   ✓ Added {page_type}: '{title}'")
+            print(f"   ✓ Added {categories[0] if categories else 'unknown'}: '{title}'")
         
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
@@ -1023,23 +1049,26 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
         print(f"✗ Error getting prioritized 'tell me about' content: {e}")
         return ""
 
-def debug_manual_query(query: str, page_type: str = None) -> str:
-    """Manual query function for debugging database searches"""
+def debug_manual_query(query: str, categories: List[str] = None) -> str:
+    """Manual query function for debugging database searches - now uses categories"""
     try:
         controller = get_db_controller()
         print(f"\n🔧 MANUAL DEBUG QUERY")
         print(f"Query: '{query}'")
-        print(f"Page Type Filter: {page_type}")
+        print(f"Categories Filter: {categories}")
         print("-" * 40)
         
-        results = controller.search_pages(query, page_type=page_type, limit=10)
+        if categories:
+            results = controller.search_by_categories(query, categories, limit=10)
+        else:
+            results = controller.search_pages(query, limit=10)
         
         print(f"Found {len(results)} results:")
         for i, result in enumerate(results, 1):
             print(f"\nResult {i}:")
             print(f"  ID: {result['id']}")
             print(f"  Title: '{result['title']}'")
-            print(f"  Page Type: '{result['page_type']}'")
+            print(f"  Categories: {result.get('categories', [])}")
             print(f"  Ship Name: '{result['ship_name']}'")
             print(f"  Content (50 chars): '{result['raw_content'][:50]}...'")
             print(f"  Log Date: {result['log_date']}")
@@ -1123,8 +1152,10 @@ def get_log_url(search_query: str) -> str:
             results = controller.get_recent_logs(ship_name=ship_name, limit=3)
             if results:
                 # Find the first result that has a URL and is actually a mission log
+                from .category_mappings import SHIP_LOG_CATEGORIES
                 for result in results:
-                    if result.get('url') and result.get('page_type') == 'mission_log':
+                    categories = result.get('categories', [])
+                    if result.get('url') and any(cat in SHIP_LOG_CATEGORIES for cat in categories):
                         best_result = result
                         best_strategy = f"most recent mission log for {ship_name}"
                         print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
@@ -1134,7 +1165,9 @@ def get_log_url(search_query: str) -> str:
         # Strategy 2: Check for ship info pages (USS [ship] format or ship names)
         if not best_result:
             print(f"   📋 Strategy 2: Ship info page search")
-            ship_results = controller.search_pages(search_query, page_type='ship_info', limit=10)
+            from .category_mappings import convert_page_type_to_categories
+            ship_categories = convert_page_type_to_categories('ship_info')
+            ship_results = controller.search_by_categories(search_query, ship_categories, limit=10)
             if ship_results:
                 # Find first ship info page with URL
                 for result in ship_results:
@@ -1176,18 +1209,22 @@ def get_log_url(search_query: str) -> str:
                 for result in title_results:
                     title = result.get('title', '')
                     if result.get('url') and (search_query.lower() in title.lower() or title.lower() in search_query.lower()):
+                        categories = result.get('categories', [])
+                        category_type = categories[0] if categories else 'unknown'
                         best_result = result
-                        best_strategy = f"exact title match ({result.get('page_type', 'unknown')})"
-                        print(f"   ✓ Found exact match with URL: '{title}' ({result.get('page_type')})")
+                        best_strategy = f"exact title match ({category_type})"
+                        print(f"   ✓ Found exact match with URL: '{title}' ({category_type})")
                         break
                 
                 # If no exact match with URL, use first result with URL
                 if not best_result:
                     for result in title_results:
                         if result.get('url'):
+                            categories = result.get('categories', [])
+                            category_type = categories[0] if categories else 'page'
                             best_result = result
-                            best_strategy = f"{result.get('page_type', 'page')} with URL"
-                            print(f"   ✓ Found page with URL: '{result.get('title')}' ({result.get('page_type')})")
+                            best_strategy = f"{category_type} with URL"
+                            print(f"   ✓ Found page with URL: '{result.get('title')}' ({category_type})")
                             break
                 
                 print(f"   📊 Found {len(title_results)} pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
@@ -1200,9 +1237,11 @@ def get_log_url(search_query: str) -> str:
                 # Find first result with URL
                 for result in general_results:
                     if result.get('url'):
+                        categories = result.get('categories', [])
+                        category_type = categories[0] if categories else 'unknown'
                         best_result = result
-                        best_strategy = f"general search ({result.get('page_type', 'unknown')})"
-                        print(f"   ✓ Found page with URL: '{result.get('title')}' ({result.get('page_type')})")
+                        best_strategy = f"general search ({category_type})"
+                        print(f"   ✓ Found page with URL: '{result.get('title')}' ({category_type})")
                         break
                 print(f"   📊 Found {len(general_results)} pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
         
@@ -1213,24 +1252,29 @@ def get_log_url(search_query: str) -> str:
         # Extract information from the best result
         title = best_result.get('title', 'Unknown Title')
         url = best_result.get('url', None)
-        page_type = best_result.get('page_type', 'page')
+        categories = best_result.get('categories', [])
         log_date = best_result.get('log_date', None)
         ship_name = best_result.get('ship_name', None)
         
         print(f"✅ Found page via {best_strategy}: '{title}' - {url}")
         
         if url:
-            # Format response based on page type
-            if page_type == 'mission_log':
-                return f"**Mission Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
-            elif page_type == 'ship_info':
-                return f"**Ship Information Found:**\n\n**{title}**\nType: Ship Information Page\n🔗 Direct Link: {url}"
-            elif page_type == 'personnel':
-                return f"**Personnel Record Found:**\n\n**{title}**\nType: Personnel File\n🔗 Direct Link: {url}"
+            # Format response based on categories
+            if categories:
+                category_type = categories[0]
+                if any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']):
+                    return f"**Mission Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
+                elif 'Ship Information' in categories:
+                    return f"**Ship Information Found:**\n\n**{title}**\nType: Ship Information Page\n🔗 Direct Link: {url}"
+                elif 'Characters' in categories:
+                    return f"**Personnel Record Found:**\n\n**{title}**\nType: Personnel File\n🔗 Direct Link: {url}"
+                else:
+                    return f"**Page Found:**\n\n**{title}**\nType: {category_type}\n🔗 Direct Link: {url}"
             else:
-                return f"**Page Found:**\n\n**{title}**\nType: {page_type.title()}\n🔗 Direct Link: {url}"
+                return f"**Page Found:**\n\n**{title}**\nType: Unknown\n🔗 Direct Link: {url}"
         else:
-            return f"**Page Found:**\n\n**{title}**\nType: {page_type.title()}\n⚠️  No direct URL available for this page."
+            category_type = categories[0] if categories else 'Unknown'
+            return f"**Page Found:**\n\n**{title}**\nType: {category_type}\n⚠️  No direct URL available for this page."
         
     except Exception as e:
         print(f"✗ Error searching for page URL: {e}")

@@ -181,14 +181,42 @@ def main():
         if show_stats:
             stats = crawler.db_ops.get_database_stats()
             print("\n📈 Database Statistics:")
-            print(f"   Total Pages: {stats.get('total_pages', 0)}")
-            print(f"   Mission Logs: {stats.get('mission_logs', 0)}")
-            print(f"   Ship Info: {stats.get('ship_info', 0)}")
-            print(f"   Personnel: {stats.get('personnel', 0)}")
-            print(f"   Unique Ships: {stats.get('unique_ships', 0)}")
-            print(f"   Tracked Pages: {stats.get('total_tracked_pages', 0)}")
-            print(f"   Active Pages: {stats.get('active_pages', 0)}")
-            print(f"   Error Pages: {stats.get('error_pages', 0)}")
+            print(f"   Total Pages: {stats.get('total_pages', 0):,}")
+            print(f"   Pages with Categories: {stats.get('pages_with_categories', 0):,}")
+            print(f"   Pages without Categories: {stats.get('pages_without_categories', 0):,}")
+            
+            # Calculate category coverage
+            total_pages = stats.get('total_pages', 0)
+            pages_with_categories = stats.get('pages_with_categories', 0)
+            if total_pages > 0:
+                coverage_percent = (pages_with_categories / total_pages) * 100
+                print(f"   Category Coverage: {coverage_percent:.1f}%")
+            
+            # Show category distribution
+            category_dist = stats.get('category_distribution', [])
+            if category_dist:
+                print(f"\n📊 Top Categories:")
+                for category_info in category_dist[:8]:  # Show top 8 categories
+                    category = category_info.get('category', 'Unknown')
+                    count = category_info.get('count', 0)
+                    print(f"   {category}: {count:,}")
+            
+            # Legacy page_type stats for comparison (during transition)
+            print(f"\n📋 Legacy Page Types (for comparison):")
+            print(f"   Mission Logs: {stats.get('mission_logs', 0):,}")
+            print(f"   Personnel: {stats.get('personnel', 0):,}")
+            print(f"   Ship Info: {stats.get('ship_info', 0):,}")
+            print(f"   General: {stats.get('general', 0):,}")
+            print(f"   Technology: {stats.get('technology', 0):,}")
+            print(f"   Location: {stats.get('location', 0):,}")
+            
+            print(f"\n🚢 Ship Statistics:")
+            print(f"   Unique Ships: {stats.get('unique_ships', 0):,}")
+            
+            print(f"\n📋 Metadata Statistics:")
+            print(f"   Tracked Pages: {stats.get('total_tracked_pages', 0):,}")
+            print(f"   Active Pages: {stats.get('active_pages', 0):,}")
+            print(f"   Error Pages: {stats.get('error_pages', 0):,}")
             print(f"   Last Crawl: {stats.get('last_crawl_time', 'Never')}")
             return
         
@@ -223,12 +251,43 @@ def main():
             # Show final stats
             stats = crawler.db_ops.get_database_stats()
             print(f"\n📈 Final Database Statistics:")
-            print(f"   Total Pages: {stats.get('total_pages', 0)}")
-            print(f"   Mission Logs: {stats.get('mission_logs', 0)}")
-            print(f"   Ship Info: {stats.get('ship_info', 0)}")
-            print(f"   Personnel: {stats.get('personnel', 0)}")
-            print(f"   Unique Ships: {stats.get('unique_ships', 0)}")
-            print(f"   Tracked Pages: {stats.get('total_tracked_pages', 0)}")
+            print(f"   Total Pages: {stats.get('total_pages', 0):,}")
+            print(f"   Pages with Categories: {stats.get('pages_with_categories', 0):,}")
+            print(f"   Pages without Categories: {stats.get('pages_without_categories', 0):,}")
+            
+            # Calculate category coverage
+            total_pages = stats.get('total_pages', 0)
+            pages_with_categories = stats.get('pages_with_categories', 0)
+            if total_pages > 0:
+                coverage_percent = (pages_with_categories / total_pages) * 100
+                print(f"   Category Coverage: {coverage_percent:.1f}%")
+            
+            # Show category distribution
+            category_dist = stats.get('category_distribution', [])
+            if category_dist:
+                print(f"\n📊 Top Categories:")
+                for category_info in category_dist[:8]:  # Show top 8 categories
+                    category = category_info.get('category', 'Unknown')
+                    count = category_info.get('count', 0)
+                    print(f"   {category}: {count:,}")
+            
+            # Legacy page_type stats for comparison (during transition)
+            print(f"\n📋 Legacy Page Types (for comparison):")
+            print(f"   Mission Logs: {stats.get('mission_logs', 0):,}")
+            print(f"   Personnel: {stats.get('personnel', 0):,}")
+            print(f"   Ship Info: {stats.get('ship_info', 0):,}")
+            print(f"   General: {stats.get('general', 0):,}")
+            print(f"   Technology: {stats.get('technology', 0):,}")
+            print(f"   Location: {stats.get('location', 0):,}")
+            
+            print(f"\n🚢 Ship Statistics:")
+            print(f"   Unique Ships: {stats.get('unique_ships', 0):,}")
+            
+            print(f"\n📋 Metadata Statistics:")
+            print(f"   Tracked Pages: {stats.get('total_tracked_pages', 0):,}")
+            print(f"   Active Pages: {stats.get('active_pages', 0):,}")
+            print(f"   Error Pages: {stats.get('error_pages', 0):,}")
+            print(f"   Last Crawl: {stats.get('last_crawl_time', 'Never')}")
             
             print("\n✅ Modular wiki crawling to elsiebrain database completed successfully!")
         else:
