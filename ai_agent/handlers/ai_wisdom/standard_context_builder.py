@@ -1,6 +1,6 @@
 """
-Non-Roleplay Context Builder - Standard and OOC Context Generation
-====================================================================
+Standard Context Builder - Standard and OOC Context Generation
+==============================================================
 
 This module handles context generation for all standard (non-roleplay) 
 database queries including character info, logs, ship data, OOC, and 
@@ -10,64 +10,108 @@ general information.
 from typing import Dict, Any
 
 
-class NonRoleplayContextBuilder:
-    """Context builder for non-roleplay scenarios."""
+class StandardContextBuilder:
+    """Context builder for standard scenarios."""
     
     def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
-        """Build context for non-roleplay strategies."""
+        """Build context for standard strategies."""
         approach = strategy.get('approach', 'general')
-        print(f"            🔧 NonRoleplayContextBuilder: Processing approach '{approach}'")
+        print(f"         🎯 STANDARD CONTEXT BUILDER: Processing approach '{approach}'")
         
-        # Handle specific approaches
         if approach == 'ship_info':
-            print(f"            🚢 Building ship_info context")
+            result = self._get_ship_context(strategy, user_message)
+            print(f"         🚢 Ship context generated: {len(result)} characters")
+            
+        elif approach == 'character_info':
+            result = self._get_character_context(strategy, user_message)
+            print(f"         👤 Character context generated: {len(result)} characters")
+            
+        elif approach == 'logs':
+            result = self._get_logs_context(strategy, user_message) 
+            print(f"         📚 Logs context generated: {len(result)} characters")
+            
+        elif approach == 'tell_me_about':
+            result = self._get_tell_me_about_context(strategy, user_message)
+            print(f"         📖 Tell-me-about context generated: {len(result)} characters")
+            
+        elif approach == 'comprehensive':
+            result = self._get_comprehensive_context(strategy, user_message)
+            print(f"         🔍 Comprehensive context generated: {len(result)} characters")
+            
+        elif approach == 'simple_chat':
+            result = "Simple conversational response - no additional context needed."
+            print(f"         💬 Simple chat mode - minimal context")
+            
+        elif approach == 'federation_archives':
+            result = self._get_federation_archives_context(strategy, user_message)
+            print(f"         🏛️ Federation archives context generated: {len(result)} characters")
+            
+        elif approach == 'url_request':
+            result = self._get_url_context(strategy, user_message)
+            print(f"         🔗 URL context generated: {len(result)} characters")
+            
+        elif approach == 'general':
+            result = self._get_general_context(strategy, user_message)
+            print(f"         🌐 General context generated: {len(result)} characters")
+            
+        elif approach == 'continuation':
+            result = self._get_continuation_context(strategy, user_message)
+            print(f"         🔄 Continuation context generated: {len(result)} characters")
+            
+        else:
+            print(f"         ⚠️ Unknown approach '{approach}' - using general context")
+            result = self._get_general_context(strategy, user_message)
+        
+        return result
+
+    def _get_ship_context(self, strategy: Dict, user_message: str) -> str:
+        """Get ship-specific context."""
+        ship_name = strategy.get('ship_name', 'Stardancer')
+        return get_ship_context(ship_name, strategy, is_roleplay=False)
+    
+    def _get_character_context(self, strategy: Dict, user_message: str) -> str:
+        """Get character-specific context."""
+        return get_character_context(user_message, strategy, is_roleplay=False)
+    
+    def _get_logs_context(self, strategy: Dict, user_message: str) -> str:
+        """Get logs context."""
+        return get_logs_context(user_message, strategy, is_roleplay=False)
+    
+    def _get_tell_me_about_context(self, strategy: Dict, user_message: str) -> str:
+        """Get tell-me-about context."""
+        return get_tell_me_about_context(user_message, is_roleplay=False)
+    
+    def _get_comprehensive_context(self, strategy: Dict, user_message: str) -> str:
+        """Get comprehensive context with disambiguation."""
+        query_type = strategy.get('query_type', 'general')
+        
+        if query_type == 'tell_me_about':
+            return get_tell_me_about_context(user_message, is_roleplay=False)
+        elif query_type == 'character':
+            return get_character_context(user_message, strategy, is_roleplay=False)
+        elif query_type == 'ship':
             ship_name = strategy.get('ship_name', 'Stardancer')
             return get_ship_context(ship_name, strategy, is_roleplay=False)
-        
-        elif approach == 'character_info':
-            print(f"            🧑 Building character_info context")
-            return get_character_context(user_message, strategy, is_roleplay=False)
-        
-        elif approach == 'logs':
-            print(f"            📋 Building logs context")
+        elif query_type in ['logs', 'log']:
             return get_logs_context(user_message, strategy, is_roleplay=False)
-        
-        elif approach == 'tell_me_about':
-            print(f"            🔍 Building tell_me_about context")
-            return get_tell_me_about_context(user_message, is_roleplay=False)
-        
-        elif approach == 'non_roleplay_comprehensive_database':
-            print(f"            📚 Building comprehensive database context")
-            query_type = strategy.get('query_type', 'general')
-            
-            if query_type == 'tell_me_about':
-                return get_tell_me_about_context(user_message, is_roleplay=False)
-            elif query_type == 'character':
-                return get_character_context(user_message, strategy, is_roleplay=False)
-            elif query_type == 'ship':
-                ship_name = strategy.get('ship_name', 'Stardancer')
-                return get_ship_context(ship_name, strategy, is_roleplay=False)
-            elif query_type in ['logs', 'log']:
-                return get_logs_context(user_message, strategy, is_roleplay=False)
-            else:
-                return get_general_with_context(user_message, is_roleplay=False)
-        
-        elif approach == 'federation_archives':
-            return get_federation_archives_context(user_message, is_roleplay=False)
-        
-        elif approach == 'url_request':
-            return handle_url_request(user_message, is_roleplay=False)
-        
-        elif approach == 'general_with_context':
-            return get_general_with_context(user_message, is_roleplay=False)
-        
-        elif approach == 'continuation':
-            return get_focused_continuation_context(strategy, is_roleplay=False)
-        
         else:
-            # Default to general context
-            print(f"            ⚠️  Unknown approach '{approach}', using general context")
             return get_general_with_context(user_message, is_roleplay=False)
+    
+    def _get_federation_archives_context(self, strategy: Dict, user_message: str) -> str:
+        """Get federation archives context."""
+        return get_federation_archives_context(user_message, is_roleplay=False)
+    
+    def _get_url_context(self, strategy: Dict, user_message: str) -> str:
+        """Get URL request context."""
+        return handle_url_request(user_message, is_roleplay=False)
+    
+    def _get_general_context(self, strategy: Dict, user_message: str) -> str:
+        """Get general context."""
+        return get_general_with_context(user_message, is_roleplay=False)
+    
+    def _get_continuation_context(self, strategy: Dict, user_message: str) -> str:
+        """Get continuation context."""
+        return get_focused_continuation_context(strategy, is_roleplay=False)
 
 from .content_retriever import (
     get_log_content,
@@ -133,7 +177,7 @@ def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool
     # Process through secondary LLM if content is too large
     wiki_info = _process_large_content_if_needed(wiki_info, context_type, focus_subject, is_roleplay)
     
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    # STANDARD: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
     return f"""CRITICAL INSTRUCTIONS FOR FOCUSED INFORMATION QUERIES:
@@ -210,7 +254,7 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is
     # Process through secondary LLM if content is too large
     character_info = _process_large_content_if_needed(character_info, "character", user_message, is_roleplay)
     
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    # STANDARD: Preserve real Earth dates - no conversion needed
     converted_character_info = character_info
     
     return f"""CRITICAL INSTRUCTIONS FOR CHARACTER INFORMATION QUERIES:
@@ -302,7 +346,7 @@ def get_federation_archives_context(user_message: str, is_roleplay: bool = False
     # Process through secondary LLM if content is too large
     archives_info = _process_large_content_if_needed(archives_info, "general", user_message, is_roleplay)
     
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    # STANDARD: Preserve real Earth dates - no conversion needed
     converted_archives_info = archives_info
     
     return f"""CRITICAL INSTRUCTIONS FOR FEDERATION ARCHIVES ACCESS:
@@ -417,7 +461,7 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any], is_roleplay: b
     
     total_found = wiki_info.count("**") if wiki_info else 0
     
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    # STANDARD: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
     # Check if this is a fallback response and adjust instructions accordingly
@@ -494,7 +538,7 @@ def get_tell_me_about_context(user_message: str, is_roleplay: bool = False) -> s
     # Process through secondary LLM if content is too large
     wiki_info = _process_large_content_if_needed(wiki_info, "general", user_message, is_roleplay)
     
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    # STANDARD: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
     
     # Check if this is a fallback response and adjust instructions accordingly
@@ -583,7 +627,7 @@ def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_rolepla
     # Process through secondary LLM if content is too large
     ship_info = _process_large_content_if_needed(ship_info, "general", ship_name, is_roleplay)
     
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    # STANDARD: Preserve real Earth dates - no conversion needed
     converted_ship_info = ship_info
     
     return f"""CRITICAL INSTRUCTIONS FOR SHIP INFORMATION QUERIES:
@@ -610,12 +654,6 @@ DATABASE SEARCH RESULTS:
 Transform the database information into a comprehensive, informative prose that tells the story of this vessel's specifications, capabilities, and service record and personnel"""
 
 
-
-
-
-
-
-
 def get_general_with_context(user_message: str, is_roleplay: bool = False) -> str:
     """Generate general context with light database information."""
     print(f"📋 SEARCHING LIGHT CONTEXT DATA (roleplay={is_roleplay})")
@@ -625,8 +663,8 @@ def get_general_with_context(user_message: str, is_roleplay: bool = False) -> st
     # Process through secondary LLM if content is too large
     wiki_info = _process_large_content_if_needed(wiki_info, "general", user_message, is_roleplay)
     
-    print(f"   ⚠️  NON-ROLEPLAY Query: Preserving real Earth dates for accuracy")
-    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    print(f"   ⚠️  STANDARD Query: Preserving real Earth dates for accuracy")
+    # STANDARD: Preserve real Earth dates - no conversion needed
     return wiki_info if wiki_info else ""
 
 

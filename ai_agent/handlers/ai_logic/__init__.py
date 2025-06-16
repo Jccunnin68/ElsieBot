@@ -24,7 +24,7 @@ from .response_router import route_message_to_handler
 from .response_decision_engine import create_response_decision_engine
 from .response_decision import ResponseDecision
 
-from .non_roleplay_handler import handle_non_roleplay_message
+from .standard_handler import handle_standard_message
 
 # Context detection utilities
 from .context_detection import (

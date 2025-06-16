@@ -21,7 +21,7 @@ from ..ai_attention.dgm_handler import check_dgm_post
 
 # Import the specialized handlers
 from .roleplay_handler import handle_roleplay_message, handle_cross_channel_busy
-from .non_roleplay_handler import handle_non_roleplay_message
+from .standard_handler import handle_standard_message
 
 
 def route_message_to_handler(user_message: str, conversation_history: List, channel_context: Optional[Dict] = None) -> ResponseDecision:
@@ -80,7 +80,7 @@ def route_message_to_handler(user_message: str, conversation_history: List, chan
         if routing_context['mode'] == 'roleplay':
             return _route_to_roleplay_handler(user_message, conversation_history, channel_context, query_info)
         else:
-            return _route_to_non_roleplay_handler(user_message, conversation_history, query_info)
+            return _route_to_standard_handler(user_message, conversation_history, query_info)
             
     except Exception as e:
         print(f"   ❌ CRITICAL ERROR in response router: {e}")
@@ -101,77 +101,32 @@ def route_message_to_handler(user_message: str, conversation_history: List, chan
 
 def _determine_routing_context(channel_context: Optional[Dict], conversation_history: List, query_info: Dict) -> Dict:
     """
-    Determine whether to route to roleplay or non-roleplay handler.
+    Determine whether to route to roleplay or standard handler.
     
-    Enhanced with query-aware routing decisions.
+    SIMPLIFIED LOGIC: Only route to roleplay when actively in a roleplay state.
     """
     try:
         # Get current roleplay state
         rp_state = get_roleplay_state()
         
-        # Check for explicit roleplay context from state
+        # SIMPLIFIED: Only route to roleplay if actively in roleplay state
         if rp_state.is_roleplaying:
-            # Check if this is a database query that might benefit from comprehensive mode
-            complex_query_types = ['tell_me_about']
-            if query_info['type'] in complex_query_types:
-                return {
-                    'mode': 'non_roleplay',
-                    'reasoning': f'Complex query type {query_info["type"]} - comprehensive mode preferred even in roleplay'
-                }
-            else:
-                return {
-                    'mode': 'roleplay',
-                    'reasoning': 'Active roleplay state detected'
-                }
-        
-        # Check for explicit roleplay context from channel
-        if channel_context:
-            channel_type = channel_context.get('channel_type', '').lower()
-            channel_name = channel_context.get('channel_name', '').lower()
-            
-            # Check for roleplay channel indicators
-            roleplay_indicators = ['roleplay', 'rp', 'character', 'scene', 'story']
-            if any(indicator in channel_name for indicator in roleplay_indicators):
-                return {
-                    'mode': 'roleplay',
-                    'reasoning': f'Channel name indicates roleplay: {channel_name}'
-                }
-            
-            # Check for DM context (typically non-roleplay for database queries)
-            if channel_type in ['dm', 'group_dm']:
-                database_query_types = ['character', 'ship', 'tell_me_about', 'ship_log', 'character_log', 'log']
-                if query_info['type'] in database_query_types:
-                    return {
-                        'mode': 'non_roleplay',
-                        'reasoning': f'DM database query - comprehensive response mode preferred'
-                    }
-        
-        # Query-type based routing decisions
-        if query_info['type'] == 'tell_me_about':
             return {
-                'mode': 'non_roleplay',
-                'reasoning': 'Tell me about queries benefit from comprehensive disambiguation'
+                'mode': 'roleplay',
+                'reasoning': 'Active roleplay state detected'
             }
         
-        # Default to non-roleplay for specific database queries when not in active roleplay
-        database_query_types = ['character', 'ship', 'ship_log', 'character_log', 'log']
-        if query_info['type'] in database_query_types:
-            return {
-                'mode': 'non_roleplay',
-                'reasoning': 'Database query outside roleplay - comprehensive mode preferred'
-            }
-        
-        # Default to roleplay for general conversation
+        # All other cases go to standard handler
         return {
-            'mode': 'roleplay',
-            'reasoning': 'General conversation - defaulting to roleplay mode'
+            'mode': 'standard',
+            'reasoning': 'Not in active roleplay - using standard handler'
         }
         
     except Exception as e:
         print(f"      ⚠️  Error determining routing context: {e}")
         return {
-            'mode': 'non_roleplay',
-            'reasoning': f'Error fallback - using non-roleplay: {e}'
+            'mode': 'standard',
+            'reasoning': f'Error fallback - using standard: {e}'
         }
 
 
@@ -197,23 +152,23 @@ def _route_to_roleplay_handler(user_message: str, conversation_history: List, ch
         )
 
 
-def _route_to_non_roleplay_handler(user_message: str, conversation_history: List, query_info: Dict) -> ResponseDecision:
-    """Route to non-roleplay handler with enhanced query information."""
+def _route_to_standard_handler(user_message: str, conversation_history: List, query_info: Dict) -> ResponseDecision:
+    """Route to standard handler with enhanced query information."""
     try:
-        print(f"   💬 ROUTING TO NON-ROLEPLAY HANDLER")
+        print(f"   💬 ROUTING TO STANDARD HANDLER")
         print(f"      Mode: Comprehensive response with disambiguation")
         
-        return handle_non_roleplay_message(user_message, conversation_history)
+        return handle_standard_message(user_message, conversation_history)
         
     except Exception as e:
-        print(f"   ❌ ERROR routing to non-roleplay handler: {e}")
+        print(f"   ❌ ERROR routing to standard handler: {e}")
         return ResponseDecision(
             needs_ai_generation=False,
             pre_generated_response="I'm having difficulty processing that request right now.",
             strategy={
-                'approach': 'non_roleplay_error_fallback',
+                'approach': 'standard_error_fallback',
                 'needs_database': False,
-                'reasoning': f'Non-roleplay handler error: {e}',
+                'reasoning': f'Standard handler error: {e}',
                 'context_priority': 'safety'
             }
         )

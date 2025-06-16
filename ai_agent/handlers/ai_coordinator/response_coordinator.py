@@ -85,4 +85,4 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     
     # Otherwise, do the expensive AI generation
     print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")
-    return generate_ai_response_with_decision(decision, user_message, conversation_history, channel_context) 
+    return generate_ai_response_with_decision(decision, user_message, conversation_history) 

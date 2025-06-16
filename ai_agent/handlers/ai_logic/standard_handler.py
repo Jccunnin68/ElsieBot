@@ -1,6 +1,6 @@
 """
-Non-Roleplay Handler - Simple Responses and Factual Queries
-===========================================================
+Standard Handler - Simple Responses and Factual Queries
+=======================================================
 
 This module handles ALL responses when Elsie is NOT in roleplay mode.
 Provides simple, efficient responses including:
@@ -25,11 +25,11 @@ from .query_detection import (
 )
 
 
-def handle_non_roleplay_message(user_message: str, conversation_history: List) -> ResponseDecision:
+def handle_standard_message(user_message: str, conversation_history: List) -> ResponseDecision:
     """
-    Handle ALL non-roleplay mode messages with comprehensive responses.
+    Handle ALL standard mode messages with comprehensive responses.
     
-    Non-roleplay mode provides:
+    Standard mode provides:
     - Simple mock responses for basic interactions
     - Comprehensive database queries with disambiguation
     - Basic conversational responses
@@ -44,7 +44,7 @@ def handle_non_roleplay_message(user_message: str, conversation_history: List) -
     Returns:
         ResponseDecision with appropriate strategy
     """
-    print(f"\n💬 NON-ROLEPLAY HANDLER - Comprehensive response mode")
+    print(f"\n💬 STANDARD HANDLER - Comprehensive response mode")
     
     # Use enhanced query detection with conflict resolution
     query_info = detect_query_type_with_conflicts(user_message)
@@ -58,7 +58,7 @@ def handle_non_roleplay_message(user_message: str, conversation_history: List) -
     if query_info['type'] in simple_query_types:
         return _handle_simple_mock_response(user_message, query_info['type'])
     
-    # Handle special non-roleplay cases
+    # Handle special standard cases
     if query_info['type'] == 'menu_request':
         return _handle_menu_request()
     
@@ -125,20 +125,20 @@ def detect_legacy_query_type(user_message: str) -> str:
 
 def _handle_comprehensive_database_query(user_message: str, query_info: Dict) -> ResponseDecision:
     """
-    Comprehensive database query for non-roleplay contexts with disambiguation.
+    Comprehensive database query for standard contexts with disambiguation.
     
     KEY FEATURE: Returns summary + disambiguation for multiple results.
     """
     print(f"   📚 COMPREHENSIVE DATABASE QUERY: {query_info['type']}")
     
     strategy = {
-        'approach': 'non_roleplay_comprehensive_database',
+        'approach': 'comprehensive',
         'needs_database': True,
         'query_type': query_info['type'],
         'subject': query_info.get('subject'),
         'response_mode': 'comprehensive_with_disambiguation',  # KEY: Comprehensive mode
         'context_priority': 'factual',
-        'reasoning': f"Non-roleplay comprehensive database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
+        'reasoning': f"Standard comprehensive database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
     }
     
     # Add specific query details
@@ -208,17 +208,17 @@ def _handle_simple_mock_response(user_message: str, query_type: str) -> Response
 
 
 def _handle_menu_request() -> ResponseDecision:
-    """Handle menu requests in non-roleplay mode."""
+    """Handle menu requests in standard mode."""
     from handlers.ai_emotion.drink_menu import get_menu_response
     
-    print(f"   📋 MENU REQUEST: Non-roleplay menu")
+    print(f"   📋 MENU REQUEST: Standard menu")
     
     menu_response = get_menu_response()
     
     strategy = {
         'approach': 'menu_request',
         'needs_database': False,
-        'reasoning': 'Menu request in non-roleplay mode',
+        'reasoning': 'Menu request in standard mode',
         'context_priority': 'none'
     }
     
@@ -261,7 +261,7 @@ def _handle_default_conversational(user_message: str) -> ResponseDecision:
         mock_response = get_mock_response(user_message)
         
         strategy = {
-            'approach': 'simple_conversational',
+            'approach': 'simple_chat',
             'needs_database': False,
             'reasoning': 'Simple conversational response',
             'context_priority': 'none'
@@ -275,7 +275,7 @@ def _handle_default_conversational(user_message: str) -> ResponseDecision:
     else:
         # General AI response with light context
         strategy = {
-            'approach': 'general_with_context',
+            'approach': 'general',
             'needs_database': True,
             'reasoning': 'General conversational response with light context',
             'context_priority': 'low'
@@ -298,11 +298,11 @@ def _build_legacy_database_strategy(user_message: str, query_type: str) -> Dict:
         'ship_info': 'ship_info',
         'tell_me_about': 'tell_me_about',
         'federation_archives': 'federation_archives',
-        'ship_logs': 'ship_logs',
+        'ship_logs': 'logs',  # Simplified: ship_logs uses standard logs approach
         'url_request': 'url_request'
     }
     
-    approach = approach_mapping.get(query_type, 'general_with_context')
+    approach = approach_mapping.get(query_type, 'general')
     
     strategy = {
         'approach': approach,

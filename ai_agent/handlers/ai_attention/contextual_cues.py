@@ -130,7 +130,7 @@ class ResponseDecision:
     # Style Guidance
     response_style: str = "conversational"  # "conversational", "professional", "caring", "technical"
     tone: str = "natural"  # "warm", "professional", "playful", "supportive", "natural"
-    approach: str = "responsive"  # "direct", "subtle", "questioning", "informative", "responsive"
+    approach: str = "roleplay_active"  # "direct", "subtle", "questioning", "informative", "responsive"
     
     # Character Interaction
     address_character: Optional[str] = None  # Who to primarily address

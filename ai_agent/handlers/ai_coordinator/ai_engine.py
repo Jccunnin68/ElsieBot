@@ -12,7 +12,7 @@ import re
 
 from config import GEMMA_API_KEY
 from handlers.handlers_utils import estimate_token_count
-from handlers.ai_logic import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
+from handlers.ai_logic import ResponseDecision, detect_who_elsie_addressed
 from handlers.handlers_utils import (
     filter_meeting_info,
     convert_earth_date_to_star_trek,
@@ -24,69 +24,6 @@ from handlers.ai_emotion import get_mock_response
 from handlers.ai_wisdom.context_coordinator import get_context_for_strategy
 from handlers.ai_emotion import should_trigger_poetic_circuit, get_poetic_response
 from handlers.ai_coordinator.conversation_utils import detect_topic_change
-from handlers.ai_wisdom.llm_query_processor import is_fallback_response
-
-def detect_processed_content(content: str) -> bool:
-    """
-    Detect if content has been processed by the secondary LLM processor.
-    This helps the main AI engine adjust its approach for narrative summation.
-    """
-    if not content:
-        return False
-    
-    # Check for indicators that content was processed by secondary LLM
-    processed_indicators = [
-        # Length indicators - processed content is typically under 14000 chars but substantial
-        len(content) > 5000 and len(content) < 14000,
-        
-        # Content structure indicators
-        "comprehensive summary" in content.lower(),
-        "key events" in content.lower(),
-        "character interactions" in content.lower(),
-        "mission details" in content.lower(),
-        "essential information" in content.lower(),
-        
-        # Fallback response indicators
-        is_fallback_response(content),
-        
-        # Processing artifacts
-        "[Response truncated to fit length limit]" in content,
-        "processing services" in content.lower(),
-        "rate limited" in content.lower(),
-    ]
-    
-    # If multiple indicators are present, likely processed
-    indicator_count = sum(1 for indicator in processed_indicators if indicator)
-    return indicator_count >= 2
-
-def is_log_content(content: str, user_message: str) -> bool:
-    """
-    Determine if the content is primarily log-based and should receive narrative treatment.
-    """
-    if not content:
-        return False
-    
-    # Check user message for log-related queries
-    log_query_indicators = [
-        'log', 'logs', 'mission', 'what happened', 'events', 'summarize', 
-        'summary', 'recap', 'tell me what', 'recent mission', 'latest'
-    ]
-    
-    user_wants_logs = any(indicator in user_message.lower() for indicator in log_query_indicators)
-    
-    # Check content for log-like structure
-    log_content_indicators = [
-        '**' in content and 'log' in content.lower(),  # Formatted log titles
-        '---LOG SEPARATOR---' in content,
-        '[Mission Log]' in content,
-        'stardate' in content.lower(),
-        'captain' in content.lower() and 'log' in content.lower(),
-        content.count('**') >= 2,  # Multiple formatted entries
-    ]
-    
-    content_is_logs = any(indicator for indicator in log_content_indicators)
-    
-    return user_wants_logs and content_is_logs
 
 def convert_to_third_person_emotes(response_text: str) -> str:
     """
@@ -293,10 +230,11 @@ def strip_discord_emojis(response_text: str) -> str:
     
     return response_text
 
-def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
+def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list) -> str:
     """
     AI response generation using a pre-made decision.
     Contains only the expensive operations (AI calls, database searches).
+    SIMPLIFIED: Always uses context builders, no manual context generation.
     """
     
     try:
@@ -311,133 +249,21 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         # Detect topic changes for conversation flow
         is_topic_change = detect_topic_change(user_message, conversation_history)
         
-        # Initialize context variables
-        context = ""
-        wiki_info = ""
+        # SIMPLIFIED CONTEXT GENERATION - Always use context builders
+        print(f"🔍 GENERATING CONTEXT for {strategy['approach']} strategy...")
         
-        # Generate context based on strategy
-        if strategy['approach'] == 'roleplay_active':
-            # ALL roleplay_active responses should use enhanced roleplay context
-            print(f"🎭 ROLEPLAY ACTIVE - Using enhanced roleplay context generation")
+        # SIMPLIFIED APPROACH DETECTION: Check for roleplay_ prefix
+        if strategy['approach'].startswith('roleplay_'):
+            # ALL roleplay responses use enhanced roleplay context
+            print(f"🎭 ROLEPLAY MODE - Using enhanced roleplay context generation")
             from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
             context = get_enhanced_roleplay_context(strategy, user_message)
-        
-        elif strategy['approach'] == 'roleplay_mock_enhanced':
-            # Roleplay mock enhanced responses also use enhanced roleplay context
-            mock_type = strategy.get('mock_response_type', 'unknown')
-            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with enhanced roleplay context")
-            from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
-            context = get_enhanced_roleplay_context(strategy, user_message)
-        
-        elif strategy['needs_database']:
-            print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")
-            context = get_context_for_strategy(strategy, user_message)
-            print(f"📋 CONTEXT FROM STRATEGY: {len(context)} characters")
-            # Don't reset context - use what the context builders provide
-            if not context:
-                print(f"⚠️  No context returned from strategy, will use default")
-        
-        # Generate context for simple chat (no database search needed)
         else:
-            print(f"💬 SIMPLE CHAT MODE - No database search needed")
-            context = ""  # Ensure context is empty for simple chat
+            # ALL non-roleplay responses use context coordinator
+            print(f"💬 STANDARD MODE - Using context coordinator")
+            context = get_context_for_strategy(strategy, user_message)
         
-        # Detect if we received processed content and if it's log-based
-        content_was_processed = detect_processed_content(wiki_info or context)
-        content_is_logs = is_log_content(wiki_info or context, user_message)
-        
-        if content_was_processed:
-            print(f"🔄 DETECTED PROCESSED CONTENT: was_processed={content_was_processed}, is_logs={content_is_logs}")
-        
-        # Set default context ONLY for simple chats and cases without specific context
-        if not context:
-            print(f"🔧 USING DEFAULT CONTEXT GENERATION (no context from strategy)")
-            # Detect personality context for non-roleplay conversations
-            personality_context = detect_general_personality_context(user_message)
-            
-            # Enhanced context for processed log content
-            if content_was_processed and content_is_logs:
-                context = f"""PERSONALITY CONTEXT: {personality_context}
-
-CRITICAL INSTRUCTION - NARRATIVE LOG SUMMATION:
-The information below has been pre-processed and summarized from mission logs. Your task is to create an engaging, narrative summary that brings these events to life. DO NOT simply present the data - instead:
-
-- Transform the processed information into a compelling narrative story
-- Focus on the human drama, character interactions, and emotional moments
-- Describe events as if telling an engaging story to someone who wasn't there
-- Highlight key decisions, conflicts, and their consequences
-- Bring out character personalities and relationships
-- Create a flowing narrative that connects events chronologically
-- Use vivid, descriptive language to make the events feel immediate and real
-- Focus on WHO did WHAT and WHY, with emphasis on motivations and outcomes
-- Present information directly without formal introductions
-
-NARRATIVE STYLE:
-- Present events as a story, not a data summary
-- Use engaging, descriptive language
-- Connect events with narrative flow ("Meanwhile...", "As a result...", "This led to...")
-- Emphasize character moments and dialogue
-- Describe the stakes and tension in situations
-- Make the reader feel like they're experiencing the events
-
-{f"PROCESSED LOG INFORMATION TO NARRATIVIZE: {wiki_info}" if wiki_info else ""}
-
-Transform the above information into an engaging narrative summary that captures the drama and significance of these mission events."""
-            
-            # Enhanced context for other processed content
-            elif content_was_processed:
-                context = f"""PERSONALITY CONTEXT: {personality_context}
-
-CRITICAL INSTRUCTION - ENHANCED INFORMATION PRESENTATION:
-The information below has been pre-processed and summarized. Your task is to present this information in a comprehensive, engaging way that goes beyond simple data presentation:
-
-- Organize the information logically and clearly
-- Provide context and background to help understanding
-- Explain relationships between different pieces of information
-- Highlight the most important and relevant details
-- Present information in a way that's easy to understand and actionable
-- Add your expertise and insights where appropriate
-- Make connections that help the user understand the bigger picture
-- Present information directly without formal introductions
-
-{f"PROCESSED INFORMATION: {wiki_info}" if wiki_info else ""}
-
-Present the above information in a comprehensive, well-organized response that fully addresses the user's question."""
-            
-            # Standard context for unprocessed content
-            else:
-                context = f"""PERSONALITY CONTEXT: {personality_context}
-
-COMMUNICATION INSTRUCTIONS:
-- Be matter-of-fact and informative when providing information
-- Use a casual and conversational communication style
-- Be intelligent and perceptive, understanding what users are really asking for
-- Provide genuinely helpful and thorough responses
-- Be professional but approachable - not overly formal or stilted
-- Draw on expertise areas naturally when relevant
-- Present information directly without formal introductions
-
-EXPERTISE AREAS:
-- Stellar cartography and navigation
-- Ship operations and fleet information
-- Database research and information retrieval
-- When drinks are specifically mentioned, you can discuss bartending experience
-- Access to Federation archives for canonical information
-
-COMMUNICATION STYLE:
-- Present tense actions without first person: *checks database* not "I check the database"
-- Wrap actions in *asterisks* for formatting
-- Speak naturally and conversationally
-- Be thorough and informative, especially when providing database information
-- Don't artificially limit responses - provide comprehensive information when requested
-- Use "I" naturally in conversation - you're not avoiding first person speech
-- Keep holographic bartender roleplay elements minimal unless specifically relevant
-
-CURRENT SETTING: Aboard the USS Stardancer with access to ship databases and Federation archives. When providing information, give detailed, comprehensive responses without artificial length restrictions.
-
-{f"AVAILABLE INFORMATION: {wiki_info}" if wiki_info else ""}
-
-Provide helpful and informative responses. When presenting database information, be thorough and comprehensive. Keep responses natural and conversational while being as detailed as needed to fully answer the user's question."""
+        print(f"📋 CONTEXT GENERATED: {len(context)} characters")
         
         # Format conversation history with topic change awareness
         # Special handling for DGM-controlled Elsie content
@@ -456,8 +282,16 @@ Provide helpful and informative responses. When presenting database information,
         estimated_tokens = estimate_token_count(prompt)
         print(f"🧮 Estimated token count: {estimated_tokens} (using full context - no chunking)")
         
+        # Generate response with explicit output limit to avoid excessive verbosity
+        from google.generativeai.types import GenerationConfig
+
+        generation_config = GenerationConfig(
+            max_output_tokens=6000,  # Allow up to ~24k characters, within new 6k-token limit
+            temperature=0.7  # Maintain creativity balance
+        )
+
         # Generate response
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config=generation_config)
         response_text = response.text.strip()
         
         # Filter out AI-generated conversation continuations (hallucinated customer dialogue)
@@ -474,7 +308,7 @@ Provide helpful and informative responses. When presenting database information,
                 break
         
         # Determine if this is a roleplay response (should use Star Trek dates)
-        is_roleplay_response = strategy.get('approach', '').startswith('roleplay')
+        is_roleplay_response = strategy.get('approach', '').startswith('roleplay_')
         
         # Filter meeting information unless it's a non-roleplay schedule query
         schedule_terms = ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']
@@ -488,7 +322,7 @@ Provide helpful and informative responses. When presenting database information,
             response_text = convert_earth_date_to_star_trek(response_text)
         
         # Check for poetic short circuit during casual dialogue
-        if strategy['approach'] in ['simple_chat', 'general_with_context'] and should_trigger_poetic_circuit(user_message, conversation_history):
+        if strategy['approach'] in ['simple_chat', 'general'] and should_trigger_poetic_circuit(user_message, conversation_history):
             print(f"🎭 POETIC SHORT CIRCUIT TRIGGERED - Replacing casual response with esoteric poetry")
             response_text = get_poetic_response(user_message, response_text)
         

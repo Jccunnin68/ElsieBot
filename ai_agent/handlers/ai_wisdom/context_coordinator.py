@@ -123,33 +123,30 @@ def _get_comprehensive_with_disambiguation(strategy: Dict, user_message: str) ->
 
 def _get_standard_context(strategy: Dict, user_message: str) -> str:
     """
-    Standard context handling for existing approaches.
+    Standard context handling with simplified routing logic.
     
-    This maintains compatibility with existing context builders.
+    REFACTORED: Uses clean approach-based routing:
+    - All roleplay_ approaches -> RoleplayContextBuilder
+    - All other approaches -> StandardContextBuilder
     """
     print(f"      🔄 STANDARD CONTEXT MODE")
     
     try:
         # Import context builders
         from .roleplay_context_builder import RoleplayContextBuilder
-        from .non_roleplay_context_builder import NonRoleplayContextBuilder
+        from .standard_context_builder import StandardContextBuilder
         
         approach = strategy.get('approach', 'general')
         print(f"         🎯 CONTEXT COORDINATOR: Building context for approach '{approach}'")
         
-        # Determine which context builder to use
-        # Check for non-roleplay approaches first (more specific)
-        if approach.startswith('non_roleplay') or approach in ['tell_me_about', 'character_info', 'logs', 'ship_info', 'federation_archives', 'ship_logs', 'url_request', 'general_with_context']:
-            print(f"         📋 Using NonRoleplayContextBuilder")
-            context_builder = NonRoleplayContextBuilder()
-            result = context_builder.build_context_for_strategy(strategy, user_message)
-        elif 'roleplay' in approach:
-            print(f"         🎭 Using RoleplayContextBuilder")
+        # SIMPLIFIED ROUTING: Single check based on prefix convention
+        if approach.startswith('roleplay_'):
+            print(f"         🎭 Using RoleplayContextBuilder (roleplay_ approach)")
             context_builder = RoleplayContextBuilder()
             result = context_builder.build_context_for_strategy(strategy, user_message)
         else:
-            print(f"         📋 Using NonRoleplayContextBuilder (default)")
-            context_builder = NonRoleplayContextBuilder()
+            print(f"         📋 Using StandardContextBuilder (standard approach)")
+            context_builder = StandardContextBuilder()
             result = context_builder.build_context_for_strategy(strategy, user_message)
         
         print(f"         ✅ Context generated: {len(result)} characters")

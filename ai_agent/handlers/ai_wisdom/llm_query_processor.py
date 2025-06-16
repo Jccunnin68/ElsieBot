@@ -149,7 +149,9 @@ class LLMQueryProcessor:
     Enhanced with character rule integration for proper name disambiguation.
     """
     
-    PROCESSING_THRESHOLD = 14000  # Characters
+    # New limits expressed as tokens (Gemini supports larger context windows).
+    # Using a rough 4-chars-per-token heuristic to convert: 14 000 tokens ≈ 56 000 characters.
+    PROCESSING_THRESHOLD = 56000  # Characters (~14k tokens)
     MAX_RETRIES = 3
     
     def __init__(self):
@@ -628,26 +630,21 @@ Return the full content with character disambiguation and filtering applied. DO 
         print(f"🔄 LLM CALL: Prompt size = {len(prompt)} chars")
         
         try:
-            response = self.client.generate_content(prompt)
+            # Apply explicit generation limits – Gemini can output up to 6 000 tokens safely
+            from google.generativeai.types import GenerationConfig
+
+            generation_config = GenerationConfig(
+                max_output_tokens=13000,  # Allow up to ~52k chars (~13k tokens)
+                temperature=0.7
+            )
+
+            response = self.client.generate_content(prompt, generation_config=generation_config)
             if response and response.text:
                 content = response.text.strip()
                 print(f"✅ LLM RESPONSE: Received {len(content)} chars")
                 
-                # More generous truncation - aim for closer to 14000
-                if len(content) > 14000:
-                    print(f"⚠️  LLM response ({len(content)} chars) exceeds 14000 limit, truncating to ~13800...")
-                    # Find a good break point near 13800 characters
-                    truncate_point = 13800
-                    
-                    # Try to find a sentence break near the truncation point
-                    for i in range(truncate_point, max(truncate_point - 200, 13600), -1):
-                        if i < len(content) and content[i] in '.!?':
-                            truncate_point = i + 1
-                            break
-                    
-                    content = content[:truncate_point] + "\n\n[Response truncated to fit length limit]"
-                    print(f"📏 TRUNCATED: Final length = {len(content)} chars")
-                    
+                # No manual truncation – rely on GenerationConfig token limit instead.
+                
                 return content
             else:
                 raise Exception("Empty response from Gemini")

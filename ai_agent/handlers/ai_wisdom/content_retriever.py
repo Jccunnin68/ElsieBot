@@ -42,7 +42,9 @@ def _get_roleplay_context_from_caller() -> bool:
     try:
         # Check call stack for roleplay indicators
         frame = inspect.currentframe()
-        while frame:
+        max_depth = 50  # Safety guard to prevent infinite loops in rare cases
+        depth = 0
+        while frame and depth < max_depth:
             frame_info = inspect.getframeinfo(frame)
             filename = frame_info.filename
             
@@ -57,6 +59,9 @@ def _get_roleplay_context_from_caller() -> bool:
                     return True
                 break
             frame = frame.f_back
+            depth += 1
+        if depth >= max_depth:
+            print("⚠️  Stack inspection aborted after reaching max depth to prevent infinite loop")
     except Exception:
         # If anything goes wrong with call stack inspection, default to False
         pass

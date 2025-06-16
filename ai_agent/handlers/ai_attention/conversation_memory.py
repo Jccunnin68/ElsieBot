@@ -150,17 +150,17 @@ def getNextResponse(conversation_history: List[Dict[str, Any]],
     if not memory_store.has_sufficient_context():
         print(f"   💭 CONVERSATION ANALYSIS: Insufficient context ({len(memory_store.history)} turns)")
         # Return default suggestion
-        default_suggestion = ResponseSuggestion(
+        response_suggestion = ResponseSuggestion(
             style="contextual",
             tone="natural",
-            approach="responsive",
+            approach="roleplay_active",
             themes=[],
             confidence=0.5,
             reasoning="Insufficient conversation history for detailed analysis",
             conversation_direction="continuing",
             character_dynamics=[]
         )
-        return default_suggestion, False
+        return response_suggestion, False
     
     # Check if we need fresh analysis (every 2 turns or when context changes significantly)  
     current_turn = conversation_history[-1].get('turn_number', 0) if conversation_history else 0
@@ -209,7 +209,7 @@ def getNextResponse(conversation_history: List[Dict[str, Any]],
         fallback_suggestion = ResponseSuggestion(
             style="natural",
             tone="friendly", 
-            approach="responsive",
+            approach="roleplay_active",
             themes=[],
             confidence=0.3,
             reasoning=f"Analysis failed: {str(e)}",
@@ -254,13 +254,13 @@ def _analyze_conversation_with_llm(conversation_context: str,
         tone = "warm"
     
     # Detect approach
-    approach = "responsive"
+    approach = "roleplay_active"
     if "?" in conversation_context:
-        approach = "answering"
+        approach = "roleplay_supportive"
     elif any(word in context_lower for word in ['tell me', 'what about', 'explain']):
-        approach = "informative"
+        approach = "roleplay_technical"
     elif any(word in context_lower for word in ['hello', 'hi', 'hey']):
-        approach = "welcoming"
+        approach = "roleplay_group"
     
     # Detect themes
     themes = []
