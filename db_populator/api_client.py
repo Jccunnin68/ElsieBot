@@ -6,7 +6,7 @@ Handles all low-level API communication with the MediaWiki API.
 
 import time
 import requests
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from bs4 import BeautifulSoup
 
 
@@ -27,13 +27,14 @@ class MediaWikiAPIClient:
                 'action': 'query',
                 'format': 'json',
                 'titles': page_title,
-                'prop': 'extracts|info|revisions',
+                'prop': 'extracts|info|revisions|categories',  # ADD categories
                 'inprop': 'url|touched',  # Get URL and touched timestamp
                 'exintro': False,  # Get full content
                 'explaintext': True,
                 'exsectionformat': 'plain',
                 'rvprop': 'content',
                 'rvslots': '*',
+                'cllimit': 'max',  # Get all categories
                 # No character limits for full content
             }
             
@@ -45,6 +46,14 @@ class MediaWikiAPIClient:
             
             page = next(iter(data['query']['pages'].values()))
             
+            # Extract categories from API response
+            categories = []
+            if 'categories' in page:
+                for cat in page['categories']:
+                    cat_title = cat.get('title', '')
+                    if cat_title.startswith('Category:'):
+                        categories.append(cat_title[9:])  # Remove "Category:" prefix
+            
             # Extract all available data from single response
             result = {
                 'title': page_title,
@@ -54,7 +63,8 @@ class MediaWikiAPIClient:
                 'page_exists': page.get('pageid', -1) != -1,
                 'canonical_url': page.get('canonicalurl', ''),  # MediaWiki canonical URL
                 'touched': page.get('touched', ''),  # MediaWiki last modification timestamp
-                'lastrevid': page.get('lastrevid', 0)  # Last revision ID for change detection
+                'lastrevid': page.get('lastrevid', 0),  # Last revision ID for change detection
+                'categories': categories  # ADD real categories
             }
             
             # Get raw wikitext if available
@@ -67,6 +77,41 @@ class MediaWikiAPIClient:
             print(f"  ⚠️  Error in combined API call: {e}")
             return {}
     
+    def get_page_categories(self, page_title: str) -> List[str]:
+        """Get actual categories from MediaWiki API"""
+        try:
+            params = {
+                'action': 'query',
+                'format': 'json',
+                'titles': page_title,
+                'prop': 'categories',
+                'cllimit': 'max'  # Get all categories
+            }
+            
+            response = requests.get(self.api_url, params=params, headers=self.headers)
+            data = response.json()
+            
+            if 'query' not in data or 'pages' not in data['query']:
+                return []
+            
+            page = next(iter(data['query']['pages'].values()))
+            
+            if 'categories' not in page:
+                return []
+            
+            # Extract category names (remove "Category:" prefix)
+            categories = []
+            for cat in page['categories']:
+                cat_title = cat.get('title', '')
+                if cat_title.startswith('Category:'):
+                    categories.append(cat_title[9:])  # Remove "Category:" prefix
+            
+            return categories
+            
+        except Exception as e:
+            print(f"  ⚠️  Error getting categories: {e}")
+            return []
+
     def get_page_metadata(self, page_title: str) -> Dict:
         """Get page metadata including touched timestamp and URLs for update detection"""
         try:

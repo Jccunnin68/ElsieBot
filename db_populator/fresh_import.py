@@ -119,7 +119,7 @@ class FreshImportController:
                     self.stats['successful'] += 1
                     
                     # Track category statistics
-                    categories = self.processor.classify_content(title, page_data['raw_content'])
+                    categories = self.processor.get_categories_from_page_data(page_data)
                     for category in categories:
                         self.stats['categories'][category] = self.stats['categories'].get(category, 0) + 1
                 else:

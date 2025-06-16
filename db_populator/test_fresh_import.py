@@ -14,59 +14,47 @@ from db_operations import DatabaseOperations
 
 def test_content_classification():
     """Test content classification system"""
-    print("🧪 Testing Content Classification System")
+    print("🧪 Testing Real Category Extraction System")
     print("=" * 50)
     
     processor = ContentProcessor()
     
-    # Test cases for different content types
+    # Test cases for real category extraction
     test_cases = [
-        # Ship logs
-        ("Stardancer 2024/09/29 Mission Log", "Mission log content", ["Stardancer Log"]),
-        ("Adagio 4/23/2022 Personal Log", "Personal log entry", ["Adagio Log"]),
+        # Test with real categories
+        ({'categories': ['Stardancer Log']}, ['Stardancer Log']),
+        ({'categories': ['Characters', 'Starfleet Personnel']}, ['Characters', 'Starfleet Personnel']),
+        ({'categories': ['Ship Information', 'Starships']}, ['Ship Information', 'Starships']),
+        ({'categories': ['Technology', 'Warp Drive']}, ['Technology', 'Warp Drive']),
         
-        # Ship information
-        ("USS Enterprise (NCC-1701)", "Constitution class starship", ["Ship Information"]),
-        ("USS Voyager", "Intrepid class starship", ["Ship Information"]),
+        # Test with no categories (fallback)
+        ({}, ['General Information']),
+        ({'categories': []}, ['General Information']),
         
-        # Characters
-        ("Marcus Blaine", "Rank: Captain, Species: Human", ["Characters"]),
-        ("Captain Kirk", "Starfleet captain", ["Characters"]),
-        ("Dr. McCoy", "Chief Medical Officer", ["Characters"]),
-        
-        # Technology
-        ("Warp Drive", "Faster than light propulsion", ["Technology"]),
-        ("Transporter", "Matter to energy conversion", ["Technology"]),
-        
-        # Locations
-        ("Deep Space 9", "Space station", ["Locations"]),
-        ("Bajor System", "Star system", ["Locations"]),
-        
-        # General
-        ("Starfleet Academy", "Training institution", ["General Information"]),
-        ("Federation Charter", "Founding document", ["General Information"])
+        # Test with mixed categories
+        ({'categories': ['NPCs', 'Alien Species', 'Characters']}, ['NPCs', 'Alien Species', 'Characters']),
     ]
     
     all_passed = True
     
-    for title, content, expected_categories in test_cases:
+    for page_data, expected_categories in test_cases:
         try:
-            result_categories = processor.classify_content(title, content)
+            result_categories = processor.get_categories_from_page_data(page_data)
             
             if result_categories == expected_categories:
-                print(f"   ✅ {title} → {result_categories}")
+                print(f"   ✅ {page_data} → {result_categories}")
             else:
-                print(f"   ❌ {title} → Expected: {expected_categories}, Got: {result_categories}")
+                print(f"   ❌ {page_data} → Expected: {expected_categories}, Got: {result_categories}")
                 all_passed = False
                 
         except Exception as e:
-            print(f"   ❌ {title} → Error: {e}")
+            print(f"   ❌ {page_data} → Error: {e}")
             all_passed = False
     
     if all_passed:
-        print("   🎉 All classification tests passed!")
+        print("   🎉 All category extraction tests passed!")
     else:
-        print("   ⚠️  Some classification tests failed!")
+        print("   ⚠️  Some category extraction tests failed!")
     
     return all_passed
 

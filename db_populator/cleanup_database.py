@@ -77,7 +77,7 @@ class DatabaseCleanup:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     # Find entries with part patterns
                     cur.execute("""
-                        SELECT id, title, page_type, ship_name, log_date, 
+                        SELECT id, title, categories, 
                                LENGTH(raw_content) as content_length
                         FROM wiki_pages 
                         WHERE title ~ '\\(Part \\d+/\\d+\\)$'
@@ -144,15 +144,19 @@ class DatabaseCleanup:
         if len(groups) > 5:
             print(f"   ... and {len(groups) - 5} more split entries")
         
-        # Show page type distribution
-        type_counts = {}
+        # Show category distribution
+        category_counts = {}
         for entry in split_entries:
-            page_type = entry.get('page_type', 'unknown')
-            type_counts[page_type] = type_counts.get(page_type, 0) + 1
+            categories = entry.get('categories', [])
+            if categories:
+                for category in categories:
+                    category_counts[category] = category_counts.get(category, 0) + 1
+            else:
+                category_counts['No Categories'] = category_counts.get('No Categories', 0) + 1
         
-        print(f"\n📋 Split entries by page type:")
-        for page_type, count in sorted(type_counts.items()):
-            print(f"   {page_type}: {count}")
+        print(f"\n📋 Split entries by category:")
+        for category, count in sorted(category_counts.items()):
+            print(f"   {category}: {count}")
     
     def remove_split_entries(self, confirm: bool = False) -> int:
         """Remove all split entries from the database"""

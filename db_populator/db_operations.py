@@ -165,8 +165,8 @@ class DatabaseOperations:
                     title = page_data['title']
                     content = page_data['raw_content']
                     
-                    # Classify content to get categories only
-                    categories = content_processor.classify_content(title, content)
+                    # Get real categories from page data (no classification)
+                    categories = content_processor.get_categories_from_page_data(page_data)
                     
                     # Extract MediaWiki metadata
                     canonical_url = page_data.get('canonical_url') or page_data.get('url', '')

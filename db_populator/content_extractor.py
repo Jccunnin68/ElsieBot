@@ -45,6 +45,7 @@ class ContentExtractor:
                         'touched': combined_data.get('touched', ''),
                         'lastrevid': combined_data.get('lastrevid', 0),
                         'raw_content': formatted_content,
+                        'categories': combined_data.get('categories', []),  # ADD categories
                         'crawled_at': datetime.now()
                     }
             
@@ -66,6 +67,7 @@ class ContentExtractor:
                         'touched': combined_data.get('touched', ''),
                         'lastrevid': combined_data.get('lastrevid', 0),
                         'raw_content': formatted_content,
+                        'categories': combined_data.get('categories', []),  # ADD categories
                         'crawled_at': datetime.now()
                     }
             
@@ -83,6 +85,7 @@ class ContentExtractor:
                         'touched': combined_data.get('touched', ''),
                         'lastrevid': combined_data.get('lastrevid', 0),
                         'raw_content': processed_content,
+                        'categories': combined_data.get('categories', []),  # ADD categories
                         'crawled_at': datetime.now()
                     }
             
