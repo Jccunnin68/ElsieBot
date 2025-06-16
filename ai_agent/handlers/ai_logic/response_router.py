@@ -91,7 +91,7 @@ def route_message_to_handler(user_message: str, conversation_history: List, chan
             needs_ai_generation=False,
             pre_generated_response="I'm having difficulty processing that request right now. Please try again in a moment.",
             strategy={
-                'approach': 'router_error_fallback',
+                'approach': 'general',
                 'needs_database': False,
                 'reasoning': f'Router error fallback: {str(e)}',
                 'context_priority': 'safety'
@@ -144,7 +144,7 @@ def _route_to_roleplay_handler(user_message: str, conversation_history: List, ch
             needs_ai_generation=False,
             pre_generated_response="I'm having difficulty with roleplay processing right now.",
             strategy={
-                'approach': 'roleplay_error_fallback',
+                'approach': 'roleplay_fallback',
                 'needs_database': False,
                 'reasoning': f'Roleplay handler error: {e}',
                 'context_priority': 'safety'
@@ -166,7 +166,7 @@ def _route_to_standard_handler(user_message: str, conversation_history: List, qu
             needs_ai_generation=False,
             pre_generated_response="I'm having difficulty processing that request right now.",
             strategy={
-                'approach': 'standard_error_fallback',
+                'approach': 'general',
                 'needs_database': False,
                 'reasoning': f'Standard handler error: {e}',
                 'context_priority': 'safety'
@@ -231,7 +231,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
         )
     
     elif dgm_action == 'control_elsie':
-        print(f"   🎭 DGM Controlled Elsie - Adding to context")
+        print(f"   🎭 DGM Controlled Elsie - Processing DGM content for Elsie awareness")
         
         # Ensure roleplay session is active
         rp_state = get_roleplay_state()
@@ -247,15 +247,36 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
         if scene_context:
             rp_state.store_dgm_scene_context(scene_context)
         
+        # Extract the DGM content that Elsie "said"
+        elsie_content = dgm_result.get('elsie_content', '')
+        
+        if not elsie_content:
+            print(f"   ⚠️  No DGM content provided - using NO_RESPONSE")
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response="NO_RESPONSE",
+                strategy={
+                    'approach': 'dgm_controlled_elsie',
+                    'needs_database': False,
+                    'reasoning': 'DGM controlled Elsie - no content provided',
+                    'context_priority': 'none'
+                }
+            )
+        
+        print(f"   📝 DGM Content for Elsie: '{elsie_content}'")
+        
+        # Return the DGM content as Elsie's response so she's aware of it
+        # Use roleplay approach so it goes through roleplay context pipeline
         return ResponseDecision(
             needs_ai_generation=False,
-            pre_generated_response="NO_RESPONSE",
+            pre_generated_response=elsie_content,
             strategy={
-                'approach': 'dgm_controlled_elsie',
+                'approach': 'roleplay_dgm_controlled',
                 'needs_database': False,
-                'reasoning': f'DGM controlled Elsie - content: "{dgm_result.get("elsie_content", "")}"',
-                'context_priority': 'dgm_elsie_context',
-                'elsie_content': dgm_result.get('elsie_content', '')
+                'reasoning': f'DGM controlled Elsie - content processed for awareness',
+                'context_priority': 'roleplay',
+                'dgm_controlled': True,
+                'original_dgm_content': elsie_content
             }
         )
     

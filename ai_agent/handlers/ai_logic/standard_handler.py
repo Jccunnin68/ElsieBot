@@ -136,7 +136,6 @@ def _handle_comprehensive_database_query(user_message: str, query_info: Dict) ->
         'needs_database': True,
         'query_type': query_info['type'],
         'subject': query_info.get('subject'),
-        'response_mode': 'comprehensive_with_disambiguation',  # KEY: Comprehensive mode
         'context_priority': 'factual',
         'reasoning': f"Standard comprehensive database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
     }

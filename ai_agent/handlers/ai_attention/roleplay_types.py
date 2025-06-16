@@ -129,7 +129,8 @@ ROLEPLAY_APPROACHES = {
     'roleplay_mock_enhanced': 'roleplay_mock_enhanced',
     'roleplay_fallback': 'roleplay_fallback',
     'roleplay_dgm_controlled': 'roleplay_dgm_controlled',
-    'roleplay_cross_channel': 'roleplay_cross_channel'
+    'roleplay_cross_channel_busy': 'roleplay_cross_channel_busy',
+    'roleplay_quick_database': 'roleplay_quick_database'
 }
 
 # Standard approach types - Clean, simple names only

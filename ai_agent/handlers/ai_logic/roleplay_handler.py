@@ -75,7 +75,6 @@ def _handle_roleplay_database_query(user_message: str, query_info: Dict) -> Resp
         'needs_database': True,
         'query_type': query_info['type'],
         'subject': query_info.get('subject'),
-        'response_mode': 'quick_single_result',  # KEY: Quick mode
         'context_priority': 'roleplay',
         'reasoning': f"Roleplay quick database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
     }
@@ -183,15 +182,15 @@ def handle_cross_channel_busy(rp_state, channel_context: Dict) -> ResponseDecisi
     busy_response = random.choice(busy_responses)
     
     strategy = {
-        'approach': 'cross_channel_busy',
+        'approach': 'roleplay_cross_channel_busy',
         'needs_database': False,
-        'reasoning': 'Elsie is active in another channel - cross-channel busy state',
-        'context_priority': 'none'
+        'reasoning': f'Cross-channel busy - roleplay active in {rp_state.roleplay_channel}',
+        'context_priority': 'minimal'
     }
     
     return ResponseDecision(
         needs_ai_generation=False,
-        pre_generated_response=busy_response,
+        pre_generated_response=f"*is busy with patrons in another area*",
         strategy=strategy
     )
 

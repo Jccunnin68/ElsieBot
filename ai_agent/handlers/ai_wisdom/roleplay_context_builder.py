@@ -79,6 +79,10 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     # Check if this is a DGM-initiated session
     is_dgm_session = 'dgm_scene_setting' in triggers
     
+    # Check if this is DGM-controlled Elsie content
+    is_dgm_controlled = strategy.get('dgm_controlled', False)
+    dgm_content = strategy.get('original_dgm_content', '')
+    
     participants_list = ', '.join(participants) if participants else "none identified yet"
     new_chars_note = f" (New characters this turn: {', '.join(new_characters)})" if new_characters else ""
     addressed_note = f" (Characters being addressed: {', '.join(addressed_characters)})" if addressed_characters else ""
@@ -91,6 +95,19 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     print(f"   💬 Response Reason: {response_reason}")
     print(f"   🏷️ Elsie Mentioned: {elsie_mentioned}")
     print(f"   🎬 DGM Session: {is_dgm_session}")
+    print(f"   🎭 DGM Controlled: {is_dgm_controlled}")
+    
+    # Special handling for DGM-controlled content
+    dgm_controlled_note = ""
+    if is_dgm_controlled:
+        dgm_controlled_note = f"""
+🎬 **DGM CONTROLLED CONTENT AWARENESS**:
+- The DGM has made you say: "{dgm_content}"
+- You need to process and remember this content for conversation continuity
+- This was YOUR response in the roleplay - acknowledge and remember it
+- Future responses should build on this as if you naturally said it
+- Do not mention that it was DGM controlled - it's part of your natural roleplay flow
+"""
     
     # Detect what type of expertise should be emphasized
     personality_context = detect_roleplay_personality_context(user_message)
@@ -312,6 +329,7 @@ Detected triggers: {', '.join(triggers)}
 {addressed_note}
 {"Direct mention detected - engage fully!" if elsie_mentioned else ""}
 {"DGM SELECTIVE PASSIVE MODE: Respond when directly addressed, following up on conversations you started, or clear service requests. Do not respond to general bar actions or characters talking to each other unless you're part of the conversation." if is_dgm_session else ""}
+{dgm_controlled_note}
 
 Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, maintain natural conversation flow when you're involved but avoid initiating new interactions." if is_dgm_session else ""}{database_section}{conversation_section}"""
 

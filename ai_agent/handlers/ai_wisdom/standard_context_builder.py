@@ -494,6 +494,7 @@ Present this information naturally and suggest the user try again later or rephr
     
     return f"""CRITICAL INSTRUCTIONS FOR LOG INFORMATION QUERIES:
 - Present and organize the log information for: {log_type_description}
+-START WITH "I AM IN FALLBACK MODE" printed in bold
 - ENHANCED SEARCH was performed: prioritizing log-specific content over general information
 - Search focused specifically on mission logs when ship/character names were combined with log terms
 - PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
