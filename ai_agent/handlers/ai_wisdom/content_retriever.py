@@ -555,10 +555,9 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
                 # Get date-filtered logs
                 return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
         
-        # Use dynamic log category filtering instead of hardcoded categories
-        from .category_mappings import get_all_log_categories
-        log_categories = get_all_log_categories()
-        print(f"   📊 STANDARD LOG REQUEST: Using dynamic log categories: {len(log_categories)} categories")
+        # Use direct database query instead of artificial category mappings
+        log_categories = controller._get_actual_log_categories_from_db()
+        print(f"   📊 STANDARD LOG REQUEST: Using actual database log categories: {len(log_categories)} categories")
         
         # Search using dynamic log categories instead of hardcoded categories
         if mission_logs_only:
@@ -809,15 +808,8 @@ def search_by_type(query: str, content_type: str) -> str:
         controller = get_db_controller()
         
         # Convert content_type to categories for better search
-        from .category_mappings import convert_page_type_to_categories
-        categories = convert_page_type_to_categories(content_type)
-        
-        if categories:
-            print(f"🏷️ CATEGORY SEARCH: '{content_type}' -> categories: {categories}")
-            results = controller.search_by_categories(query, categories, limit=10)
-        else:
-            print(f"📋 UNKNOWN CONTENT TYPE: '{content_type}' - using general search")
-            results = controller.search_pages(query, limit=10)
+        # Search using actual database categories instead of artificial mappings
+        results = controller.search_pages(query, limit=10)
         
         if not results:
             return ""
@@ -865,9 +857,8 @@ def get_tell_me_about_content(subject: str) -> str:
         # If it looks like a ship name, also search ship-specific content
         if any(ship in subject.lower() for ship in ['uss', 'ship', 'vessel']):
             print(f"   🚢 Ship detected, searching ship-specific content...")
-            from .category_mappings import convert_page_type_to_categories
-            ship_categories = convert_page_type_to_categories('ship_info')
-            ship_results = controller.search_by_categories(subject, ship_categories, limit=10)
+            # Search using actual database categories instead of artificial mappings
+            ship_results = controller.search_pages(subject, limit=10)
             print(f"   📊 Ship-specific search returned {len(ship_results)} results")
             
             # Merge ship results with general results, prioritizing ship info
@@ -932,18 +923,16 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
         ship_info_results = []
         if any(indicator in subject.lower() for indicator in ['uss', 'ship', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise']):
             print(f"   🚢 PRIORITY: Searching ship info pages first...")
-            from .category_mappings import convert_page_type_to_categories
-            ship_categories = convert_page_type_to_categories('ship_info')
-            ship_info_results = controller.search_by_categories(subject, ship_categories, limit=10)
+            # Search using actual database categories instead of artificial mappings
+            ship_info_results = controller.search_pages(subject, limit=10)
             print(f"   📊 Ship info search found {len(ship_info_results)} results")
         
         # Step 2: Search for personnel records
         personnel_results = []
         if any(indicator in subject.lower() for indicator in ['captain', 'commander', 'lieutenant', 'ensign', 'admiral', 'officer']):
             print(f"   👥 PRIORITY: Searching personnel records...")
-            from .category_mappings import convert_page_type_to_categories
-            personnel_categories = convert_page_type_to_categories('personnel')
-            personnel_results = controller.search_by_categories(subject, personnel_categories, limit=10)
+            # Search using actual database categories instead of artificial mappings
+            personnel_results = controller.search_pages(subject, limit=10)
             print(f"   📊 Personnel search found {len(personnel_results)} results")
         
         # Step 3: If we have ship info or personnel, use those first
@@ -1120,10 +1109,9 @@ def get_log_url(search_query: str) -> str:
             results = controller.get_recent_logs(ship_name=ship_name, limit=3)
             if results:
                 # Find the first result that has a URL and is actually a mission log
-                from .category_mappings import SHIP_LOG_CATEGORIES
                 for result in results:
                     categories = result.get('categories', [])
-                    if result.get('url') and any(cat in SHIP_LOG_CATEGORIES for cat in categories):
+                    if result.get('url') and any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']):
                         best_result = result
                         best_strategy = f"most recent mission log for {ship_name}"
                         print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
@@ -1133,9 +1121,7 @@ def get_log_url(search_query: str) -> str:
         # Strategy 2: Check for ship info pages (USS [ship] format or ship names)
         if not best_result:
             print(f"   📋 Strategy 2: Ship info page search")
-            from .category_mappings import convert_page_type_to_categories
-            ship_categories = convert_page_type_to_categories('ship_info')
-            ship_results = controller.search_by_categories(search_query, ship_categories, limit=10)
+            ship_results = controller.search_pages(search_query, limit=10)
             if ship_results:
                 # Find first ship info page with URL
                 for result in ship_results:

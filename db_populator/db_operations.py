@@ -105,6 +105,49 @@ class DatabaseOperations:
         except Exception as e:
             print(f"✗ Error upserting page metadata: {e}")
     
+    def should_update_page_by_touched(self, page_title: str, remote_touched: str) -> bool:
+        """Check if page should be updated based on MediaWiki touched timestamp"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT touched FROM wiki_pages WHERE title = %s
+                    """, (page_title,))
+                    result = cur.fetchone()
+                    
+                    if not result:
+                        return True  # New page, should update
+                    
+                    local_touched = result['touched']
+                    if not local_touched:
+                        return True  # No local touched data, should update
+                    
+                    if not remote_touched:
+                        return False  # No remote touched data, don't update
+                    
+                    # Convert remote touched timestamp
+                    try:
+                        remote_dt = datetime.fromisoformat(remote_touched.replace('Z', '+00:00'))
+                        local_dt = local_touched if isinstance(local_touched, datetime) else \
+                                  datetime.fromisoformat(str(local_touched).replace('Z', '+00:00'))
+                        
+                        # Update if remote is newer than local
+                        should_update = remote_dt > local_dt
+                        if should_update:
+                            print(f"  🔄 Page '{page_title}' needs update: remote {remote_dt} > local {local_dt}")
+                        else:
+                            print(f"  ✓ Page '{page_title}' is current: remote {remote_dt} <= local {local_dt}")
+                        
+                        return should_update
+                        
+                    except Exception as e:
+                        print(f"  ⚠️  Error comparing timestamps for '{page_title}': {e}")
+                        return True  # On error, update to be safe
+                        
+        except Exception as e:
+            print(f"  ⚠️  Error checking update status for '{page_title}': {e}")
+            return True  # On error, update to be safe
+    
     def should_update_page(self, page_title: str, new_content_hash: str) -> bool:
         """Check if page should be updated based on content hash"""
         metadata = self.get_page_metadata(page_title)
@@ -115,61 +158,64 @@ class DatabaseOperations:
         return metadata.get('content_hash') != new_content_hash
     
     def save_page_to_database(self, page_data: Dict, content_processor) -> bool:
-        """Save page data to the database with categories support"""
+        """Save page content to database using clean schema with categories and MediaWiki metadata"""
         try:
-            content = page_data['raw_content']
-            title = page_data['title']
-            
             with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    # Classify the page using full content - now returns categories too
-                    page_type, ship_name, log_date, categories = content_processor.classify_page_type(
-                        title, content
-                    )
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    title = page_data['title']
+                    content = page_data['raw_content']
                     
-                    # Check if page already exists
-                    cur.execute("""
-                        SELECT id FROM wiki_pages WHERE title = %s
-                    """, (title,))
+                    # Classify content to get categories only
+                    categories = content_processor.classify_content(title, content)
                     
+                    # Extract MediaWiki metadata
+                    canonical_url = page_data.get('canonical_url') or page_data.get('url', '')
+                    touched = page_data.get('touched')
+                    
+                    # Convert MediaWiki touched timestamp if present
+                    touched_timestamp = None
+                    if touched:
+                        try:
+                            # MediaWiki format: "2025-05-13T15:09:05Z"
+                            touched_timestamp = datetime.fromisoformat(touched.replace('Z', '+00:00'))
+                        except Exception as e:
+                            print(f"      ⚠️  Could not parse touched timestamp '{touched}': {e}")
+                    
+                    # Check for existing page
+                    cur.execute("SELECT id FROM wiki_pages WHERE title = %s", (title,))
                     existing_page = cur.fetchone()
                     
                     if existing_page:
-                        # Update existing page - now includes categories
+                        # Update existing page with clean schema + metadata
                         cur.execute("""
                             UPDATE wiki_pages 
                             SET raw_content = %s, url = %s, crawl_date = %s,
-                                page_type = %s, ship_name = %s, log_date = %s, 
-                                categories = %s, updated_at = NOW()
+                                touched = %s, categories = %s, updated_at = NOW()
                             WHERE title = %s
                         """, (
                             content,
-                            page_data['url'],
+                            canonical_url,
                             page_data['crawled_at'],
-                            page_type,
-                            ship_name,
-                            log_date,
-                            categories,  # New: categories array
+                            touched_timestamp,
+                            categories,
                             title
                         ))
-                        print(f"  ✓ Updated existing page: {title} ({len(content):,} chars, type: {page_type}, categories: {categories})")
+                        print(f"  ✓ Updated existing page: {title} ({len(content):,} chars, categories: {categories}, touched: {touched})")
                     else:
-                        # Insert new page - now includes categories
+                        # Insert new page with clean schema + metadata
                         cur.execute("""
                             INSERT INTO wiki_pages 
-                            (title, raw_content, url, crawl_date, page_type, ship_name, log_date, categories)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            (title, raw_content, url, crawl_date, touched, categories)
+                            VALUES (%s, %s, %s, %s, %s, %s)
                         """, (
                             title,
                             content,
-                            page_data['url'],
+                            canonical_url,
                             page_data['crawled_at'],
-                            page_type,
-                            ship_name,
-                            log_date,
-                            categories  # New: categories array
+                            touched_timestamp,
+                            categories
                         ))
-                        print(f"  ✓ Inserted new page: {title} ({len(content):,} chars, type: {page_type}, categories: {categories})")
+                        print(f"  ✓ Inserted new page: {title} ({len(content):,} chars, categories: {categories}, touched: {touched})")
                     
                     conn.commit()
                     return True
@@ -179,55 +225,48 @@ class DatabaseOperations:
             return False
     
     def get_database_stats(self):
-        """Get database statistics including categories"""
+        """Get database statistics using categories"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    # Wiki pages stats
+                    # Wiki pages stats with categories
                     cur.execute("""
                         SELECT 
                             COUNT(*) as total_pages,
-                            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
-                            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
-                            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
-                            COUNT(CASE WHEN page_type = 'location' THEN 1 END) as location,
-                            COUNT(CASE WHEN page_type = 'technology' THEN 1 END) as technology,
-                            COUNT(CASE WHEN page_type = 'general' THEN 1 END) as general,
-                            COUNT(DISTINCT ship_name) as unique_ships,
                             COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
-                            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories
+                            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories,
+                            AVG(LENGTH(raw_content)) as avg_content_length,
+                            MAX(LENGTH(raw_content)) as max_content_length
                         FROM wiki_pages
                     """)
                     wiki_stats = dict(cur.fetchone())
                     
-                    # Category distribution stats
+                    # Category distribution
                     cur.execute("""
-                        SELECT 
-                            unnest(categories) as category,
-                            COUNT(*) as count
+                        SELECT unnest(categories) as category, COUNT(*) as count 
                         FROM wiki_pages 
                         WHERE categories IS NOT NULL 
-                        GROUP BY unnest(categories)
+                        GROUP BY unnest(categories) 
                         ORDER BY count DESC
-                        LIMIT 10
                     """)
-                    category_stats = cur.fetchall()
+                    category_stats = [dict(row) for row in cur.fetchall()]
                     
                     # Metadata stats
                     cur.execute("""
                         SELECT 
                             COUNT(*) as total_tracked_pages,
                             COUNT(CASE WHEN status = 'active' THEN 1 END) as active_pages,
-                            COUNT(CASE WHEN status = 'error' THEN 1 END) as error_pages,
-                            MAX(last_crawled) as last_crawl_time
+                            COUNT(CASE WHEN status != 'active' THEN 1 END) as error_pages
                         FROM page_metadata
                     """)
                     metadata_stats = dict(cur.fetchone())
                     
-                    # Add category distribution to stats
-                    wiki_stats['category_distribution'] = [dict(row) for row in category_stats]
+                    return {
+                        'wiki_stats': wiki_stats,
+                        'category_stats': category_stats,
+                        'metadata_stats': metadata_stats
+                    }
                     
-                    return {**wiki_stats, **metadata_stats}
         except Exception as e:
-            logger.error(f"✗ Error getting database stats: {e}")
+            print(f"✗ Error getting database stats: {e}")
             return {} 

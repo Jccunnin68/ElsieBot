@@ -17,20 +17,24 @@ from typing import List, Dict
 sys.path.append(os.path.join(os.path.dirname(__file__), 'ai_agent'))
 
 def test_phase_1_log_category_filtering():
-    """Test Phase 1: Log Category Filtering"""
+    """Test Phase 1: Log Category Filtering using actual database categories"""
     print("\n🔍 PHASE 1: LOG CATEGORY FILTERING TESTS")
     print("=" * 60)
     
     try:
-        from handlers.ai_wisdom.category_mappings import (
-            is_log_category, 
-            get_all_log_categories,
-            filter_categories_for_logs,
-            get_ship_specific_log_categories
-        )
+        from database_controller import get_db_controller
         
-        # Test 1: Category detection
-        print("\n📋 Test 1: Category Detection")
+        controller = get_db_controller()
+        
+        # Test 1: Get actual log categories from database
+        print("\n📋 Test 1: Actual Database Log Categories")
+        log_categories = controller._get_actual_log_categories_from_db()
+        print(f"   Found {len(log_categories)} actual log categories in database:")
+        for cat in log_categories:
+            print(f"     - {cat}")
+        
+        # Test 2: Category detection logic
+        print("\n📋 Test 2: Category Detection Logic")
         test_categories = [
             'Stardancer Log',      # Should be log ✓
             'Episode Summary',     # Should NOT be log ✗
@@ -38,33 +42,29 @@ def test_phase_1_log_category_filtering():
             'Ship Information',    # Should NOT be log ✗
             'Medical Log',         # Should be log ✓
             'Characters',          # Should NOT be log ✗
-            'Engineering Log'      # Should be log ✓
+            'Engineering Log',     # Should be log ✓
+            'Stardancer Episode Summary'  # Should NOT be log ✗
         ]
         
         for cat in test_categories:
-            is_log = is_log_category(cat)
+            is_log = 'log' in cat.lower() and 'episode summary' not in cat.lower()
             status = "✓ LOG" if is_log else "✗ NOT LOG"
             print(f"   '{cat}': {status}")
-        
-        # Test 2: Dynamic log category collection
-        print("\n📋 Test 2: Dynamic Log Categories")
-        log_categories = get_all_log_categories()
-        print(f"   Found {len(log_categories)} log categories:")
-        for cat in log_categories:
-            print(f"     - {cat}")
         
         # Test 3: Category filtering
         print("\n📋 Test 3: Category Filtering")
         mixed_categories = ['Stardancer Log', 'Episode Summary', 'Ship Information', 'Mission Log']
-        filtered = filter_categories_for_logs(mixed_categories)
+        filtered = [cat for cat in mixed_categories if 'log' in cat.lower() and 'episode summary' not in cat.lower()]
         print(f"   Original: {mixed_categories}")
         print(f"   Filtered: {filtered}")
         
-        # Test 4: Ship-specific log categories
-        print("\n📋 Test 4: Ship-Specific Log Categories")
-        for ship in ['stardancer', 'adagio', None]:
-            ship_cats = get_ship_specific_log_categories(ship)
-            print(f"   Ship '{ship}': {ship_cats}")
+        # Test 4: Database-driven log search
+        print("\n📋 Test 4: Database-Driven Log Search")
+        if log_categories:
+            results = controller.search_pages("mission", categories=log_categories, limit=2)
+            print(f"   Found {len(results)} results using actual database log categories")
+        else:
+            print("   No log categories found in database")
         
         print("✅ Phase 1 tests completed successfully")
         return True

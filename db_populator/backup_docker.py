@@ -158,10 +158,11 @@ def show_stats():
             COUNT(*) as total_pages,
             COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
             COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories,
-            COUNT(DISTINCT ship_name) as unique_ships
+            COUNT(touched) as pages_with_touched,
+            COUNT(*) - COUNT(touched) as pages_without_touched
         FROM wiki_pages;"'''
     
-    print("\n📊 Category Coverage:")
+    print("\n📊 Content & Metadata Coverage:")
     result = run_docker_command(cmd, capture_output=False)
     
     # Category distribution
@@ -176,18 +177,16 @@ def show_stats():
     print("\n📈 Top Categories:")
     result2 = run_docker_command(cmd2, capture_output=False)
     
-    # Legacy page_type statistics for comparison
+    # Touched timestamp statistics
     cmd3 = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
         SELECT 
-            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
-            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
-            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
-            COUNT(CASE WHEN page_type = 'general' THEN 1 END) as general,
-            COUNT(CASE WHEN page_type = 'technology' THEN 1 END) as technology,
-            COUNT(CASE WHEN page_type = 'location' THEN 1 END) as location
-        FROM wiki_pages;"'''
+            MIN(touched) as oldest_touched,
+            MAX(touched) as newest_touched,
+            COUNT(touched) as pages_with_touched
+        FROM wiki_pages 
+        WHERE touched IS NOT NULL;"'''
     
-    print("\n📋 Legacy Page Types (for comparison):")
+    print("\n🕒 MediaWiki Touched Timestamps:")
     result3 = run_docker_command(cmd3, capture_output=False)
     
     return result

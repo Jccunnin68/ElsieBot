@@ -93,16 +93,10 @@ class FleetDatabaseController:
                     
                     print(f"🔍 ENHANCED SEARCH - Query: '{query}' (force_mission_logs_only: {force_mission_logs_only}, debug_level: {debug_level})")
                     
-                    # Convert page_type to categories for backward compatibility
-                    if page_type and not categories:
-                        categories = self._convert_page_type_to_categories(page_type, ship_name)
-                        print(f"   🔄 Converted page_type '{page_type}' to categories: {categories}")
-                    
-                    # Override for mission logs only
+                    # Override for mission logs only - use database query instead of artificial mappings
                     if force_mission_logs_only:
-                        from handlers.ai_wisdom.category_mappings import get_all_log_categories
-                        categories = get_all_log_categories()
-                        print(f"   🎯 FORCING MISSION LOGS ONLY - using dynamic log categories: {len(categories)} categories")
+                        categories = self._get_actual_log_categories_from_db()
+                        print(f"   🎯 FORCING MISSION LOGS ONLY - using actual database log categories: {len(categories)} categories")
                     
                     all_results = []
                     
@@ -352,10 +346,8 @@ class FleetDatabaseController:
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    # Use dynamic log category filtering instead of hardcoded categories
-                    from handlers.ai_wisdom.category_mappings import get_ship_specific_log_categories
-                    
-                    log_categories = get_ship_specific_log_categories(ship_name)
+                    # Use actual database log categories instead of artificial mappings
+                    log_categories = self._get_actual_log_categories_from_db()
                     
                     # Safety check: ensure log_categories is not empty
                     if not log_categories or len(log_categories) == 0:
@@ -418,10 +410,8 @@ class FleetDatabaseController:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     print(f"🎯 SELECTED LOG SEARCH: type='{selection_type}', ship='{ship_name}', limit={limit}")
                     
-                    # Use dynamic log category filtering instead of hardcoded categories
-                    from handlers.ai_wisdom.category_mappings import get_ship_specific_log_categories
-                    
-                    log_categories = get_ship_specific_log_categories(ship_name)
+                    # Use actual database log categories instead of artificial mappings
+                    log_categories = self._get_actual_log_categories_from_db()
                     
                     # Safety check: ensure log_categories is not empty
                     if not log_categories or len(log_categories) == 0:
@@ -676,7 +666,7 @@ class FleetDatabaseController:
                     print("=" * 50)
                     
                     # First, let's see what we're working with - use categories instead of page_type
-                    from handlers.ai_wisdom.category_mappings import SHIP_LOG_CATEGORIES
+                    SHIP_LOG_CATEGORIES = self._get_actual_log_categories_from_db()
                     
                     # Safety check: ensure SHIP_LOG_CATEGORIES is not empty
                     if not SHIP_LOG_CATEGORIES or len(SHIP_LOG_CATEGORIES) == 0:
@@ -877,15 +867,27 @@ class FleetDatabaseController:
             print(f"✗ Error cleaning up seed data: {e}")
             return {}
 
-    def _convert_page_type_to_categories(self, page_type: str, ship_name: Optional[str] = None) -> List[str]:
-        """Convert old page_type to new categories for backward compatibility"""
-        from handlers.ai_wisdom.category_mappings import convert_page_type_to_categories
-        return convert_page_type_to_categories(page_type, ship_name)
-    
-    def _get_all_ship_log_categories(self) -> List[str]:
-        """Get all ship log categories for mission log searches"""
-        from handlers.ai_wisdom.category_mappings import get_all_log_categories
-        return get_all_log_categories()
+    def _get_actual_log_categories_from_db(self) -> List[str]:
+        """Get categories that actually contain 'log' from the database"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT unnest(categories) as category 
+                        FROM wiki_pages 
+                        WHERE categories IS NOT NULL 
+                        AND EXISTS (
+                            SELECT 1 FROM unnest(categories) cat 
+                            WHERE LOWER(cat) LIKE '%log%'
+                        )
+                        ORDER BY category
+                    """)
+                    categories = [row[0] for row in cur.fetchall()]
+                    print(f"   📊 Found {len(categories)} actual log categories in database: {categories}")
+                    return categories
+        except Exception as e:
+            print(f"✗ Error getting log categories from database: {e}")
+            return []
     
     def search_by_categories(self, query: str, categories: List[str], limit: int = 10) -> List[Dict]:
         """Search pages by specific categories"""

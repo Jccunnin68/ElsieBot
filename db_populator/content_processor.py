@@ -27,11 +27,17 @@ SHIP_NAMES = [
 class ContentProcessor:
     """Handles content processing, classification, and formatting"""
     
-    def classify_page_type(self, title: str, content: str) -> Tuple[str, Optional[str], Optional[str], List[str]]:
+    def classify_content(self, title: str, content: str) -> List[str]:
         """
-        Classify page type and extract metadata with enhanced character detection.
-        Now automatically detects character pages to prevent manual tagging issues.
-        Returns: (page_type, ship_name, log_date, categories)
+        Classify content and return categories array only.
+        Ship names and dates can be derived from categories when needed.
+        
+        Args:
+            title: Page title
+            content: Page content
+            
+        Returns:
+            List of category names for this content
         """
         title_lower = title.lower()
         content_lower = content.lower() if content else ""
@@ -42,46 +48,46 @@ class ContentProcessor:
             # Enhanced ship name extraction for mission logs
             ship_name = self.extract_ship_name_from_title(title)
             
-            # Extract date
-            log_date = self.extract_log_date(title)
-            
             # Generate categories for mission log
-            categories = self._generate_categories_for_page_type('mission_log', ship_name)
+            if ship_name:
+                categories = [f'{ship_name.capitalize()} Log']
+            else:
+                categories = ['Mission Log']
             
-            print(f"   🚢 Classified as mission_log: '{title}' -> ship: '{ship_name}', date: '{log_date}', categories: {categories}")
-            return "mission_log", ship_name, log_date, categories
+            print(f"   🚢 Classified as mission log: '{title}' -> categories: {categories}")
+            return categories
         
         # Check if it's a ship info page
         ship_pattern = r'uss\s+(\w+)|(\w+)\s+\(ncc-\d+\)'
         if re.search(ship_pattern, title_lower):
+            categories = ['Ship Information']
             ship_name = self.extract_ship_name_from_title(title)
-            categories = self._generate_categories_for_page_type('ship_info', ship_name)
-            print(f"   🚢 Classified as ship_info: '{title}' -> ship: '{ship_name}', categories: {categories}")
-            return "ship_info", ship_name, None, categories
+            print(f"   🚢 Classified as ship info: '{title}' -> categories: {categories}")
+            return categories
         
         # ENHANCED CHARACTER/PERSONNEL DETECTION
         is_character = self._detect_character_page(title, content_lower)
         if is_character:
-            categories = self._generate_categories_for_page_type('personnel')
-            print(f"   👤 Classified as personnel: '{title}' (auto-detected character), categories: {categories}")
-            return "personnel", None, None, categories
+            categories = ['Characters']
+            print(f"   👤 Classified as personnel: '{title}' -> categories: {categories}")
+            return categories
         
         # Check if it's a location/system page
         if any(keyword in title_lower for keyword in ['system', 'planet', 'station', 'starbase']):
-            categories = self._generate_categories_for_page_type('location')
-            print(f"   🌍 Classified as location: '{title}', categories: {categories}")
-            return "location", None, None, categories
+            categories = ['Locations']
+            print(f"   🌍 Classified as location: '{title}' -> categories: {categories}")
+            return categories
         
         # Check if it's technology
         if any(keyword in title_lower for keyword in ['class', 'drive', 'system', 'matrix', 'interface']) and 'system' not in title_lower:
-            categories = self._generate_categories_for_page_type('technology')
-            print(f"   🔧 Classified as technology: '{title}', categories: {categories}")
-            return "technology", None, None, categories
+            categories = ['Technology']
+            print(f"   🔧 Classified as technology: '{title}' -> categories: {categories}")
+            return categories
         
         # Default to general article
-        categories = self._generate_categories_for_page_type('general')
-        print(f"   📄 Classified as general: '{title}', categories: {categories}")
-        return "general", None, None, categories
+        categories = ['General Information']
+        print(f"   📄 Classified as general: '{title}' -> categories: {categories}")
+        return categories
     
     def _detect_character_page(self, title: str, content_lower: str) -> bool:
         """
@@ -527,56 +533,4 @@ class ContentProcessor:
             
         except Exception as e:
             print(f"  ⚠️  Error building simple content: {e}")
-            return f"**{title}**\n\n{extract_content}"
-    
-    def _generate_categories_for_page_type(self, page_type: str, ship_name: Optional[str] = None) -> List[str]:
-        """
-        Generate categories based on page type and ship name using our category mapping system.
-        This integrates with the category mappings from Phase 1.
-        """
-        # Import the category mapping functions
-        try:
-            # Simple category mapping based on page type
-            category_mapping = {
-                'mission_log': self._get_ship_log_category(ship_name) if ship_name else ['Mission Logs'],
-                'personnel': ['Characters'],  # Primary character category
-                'ship_info': ['Ship Information'],
-                'technology': ['Technical Data'],
-                'location': ['Locations'],
-                'general': ['General Information']
-            }
-            
-            categories = category_mapping.get(page_type, ['General Information'])
-            
-            # Ensure we return a list
-            if isinstance(categories, str):
-                categories = [categories]
-            elif not isinstance(categories, list):
-                categories = [str(categories)]
-                
-            return categories
-            
-        except Exception as e:
-            print(f"   ⚠️  Error generating categories: {e}")
-            return ['General Information']  # Fallback
-    
-    def _get_ship_log_category(self, ship_name: Optional[str]) -> List[str]:
-        """Generate ship-specific log category"""
-        if not ship_name:
-            return ['Mission Logs']
-        
-        # Normalize ship name and create log category
-        ship_normalized = ship_name.lower().strip()
-        ship_title_case = ship_normalized.capitalize()
-        
-        # Known ships get specific log categories
-        known_ships = [
-            'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 
-            'sentinel', 'banshee', 'caelian', 'enterprise', 'defiant',
-            'faraday', 'cook', 'mjolnir', 'rendino', 'gigantes'
-        ]
-        
-        if ship_normalized in known_ships:
-            return [f'{ship_title_case} Log']
-        else:
-            return ['Mission Logs']  # Generic category for unknown ships 
+            return f"**{title}**\n\n{extract_content}" 

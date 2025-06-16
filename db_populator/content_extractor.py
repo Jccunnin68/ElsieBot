@@ -40,7 +40,10 @@ class ContentExtractor:
                 if formatted_content and len(formatted_content) > 50:
                     return {
                         'title': page_title,
-                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'url': combined_data.get('canonical_url') or f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'canonical_url': combined_data.get('canonical_url', ''),
+                        'touched': combined_data.get('touched', ''),
+                        'lastrevid': combined_data.get('lastrevid', 0),
                         'raw_content': formatted_content,
                         'crawled_at': datetime.now()
                     }
@@ -58,7 +61,10 @@ class ContentExtractor:
                     print(f"  ✓ Successfully extracted {len(formatted_content)} characters (optimized)")
                     return {
                         'title': page_title,
-                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'url': combined_data.get('canonical_url') or f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'canonical_url': combined_data.get('canonical_url', ''),
+                        'touched': combined_data.get('touched', ''),
+                        'lastrevid': combined_data.get('lastrevid', 0),
                         'raw_content': formatted_content,
                         'crawled_at': datetime.now()
                     }
@@ -72,7 +78,10 @@ class ContentExtractor:
                 if processed_content and len(processed_content) > 30:
                     return {
                         'title': page_title,
-                        'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'url': combined_data.get('canonical_url') or f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
+                        'canonical_url': combined_data.get('canonical_url', ''),
+                        'touched': combined_data.get('touched', ''),
+                        'lastrevid': combined_data.get('lastrevid', 0),
                         'raw_content': processed_content,
                         'crawled_at': datetime.now()
                     }
@@ -112,7 +121,10 @@ class ContentExtractor:
                     page_data = {
                         'title': page_title,
                         'url': f"https://22ndmobile.fandom.com/wiki/{page_title.replace(' ', '_')}",
-                        'raw_content': formatted_content,  # Same content in both fields  
+                        'canonical_url': '',  # Not available in legacy method
+                        'touched': '',  # Not available in legacy method
+                        'lastrevid': 0,  # Not available in legacy method
+                        'raw_content': formatted_content,
                         'crawled_at': datetime.now()
                     }
                     
@@ -147,6 +159,9 @@ class ContentExtractor:
                     page_data = {
                         'title': page_title,
                         'url': url,
+                        'canonical_url': '',  # Not available in legacy method
+                        'touched': '',  # Not available in legacy method  
+                        'lastrevid': 0,  # Not available in legacy method
                         'raw_content': processed_content,
                         'crawled_at': datetime.now()
                     }

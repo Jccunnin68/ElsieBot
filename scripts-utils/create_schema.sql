@@ -12,7 +12,8 @@ CREATE TABLE wiki_pages (
     raw_content TEXT NOT NULL,
     url VARCHAR(500),
     crawl_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    categories TEXT[], -- Array of category names for enhanced classification
+    touched TIMESTAMP, -- MediaWiki last modification timestamp
+    categories TEXT[] NOT NULL, -- Array of category names for enhanced classification
     content_accessed INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -35,6 +36,7 @@ CREATE TABLE page_metadata (
 
 -- Create indexes for better performance
 CREATE INDEX idx_wiki_pages_title ON wiki_pages(title);
+CREATE INDEX idx_wiki_pages_touched ON wiki_pages(touched); -- Index for incremental updates
 CREATE INDEX idx_wiki_pages_categories ON wiki_pages USING GIN (categories); -- GIN index for array search
 CREATE INDEX idx_page_metadata_url ON page_metadata(url);
 CREATE INDEX idx_page_metadata_hash ON page_metadata(content_hash);

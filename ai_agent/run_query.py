@@ -241,38 +241,36 @@ def test_character_disambiguation(test_cases: List[str]) -> bool:
         return False
 
 def test_log_category_filtering() -> bool:
-    """Test the new log category filtering functionality"""
+    """Test the new log category filtering functionality using actual database categories"""
     try:
-        from handlers.ai_wisdom.category_mappings import (
-            get_all_log_categories, 
-            is_log_category,
-            filter_categories_for_logs
-        )
+        controller = get_db_controller()
         
         print(f"\n📊 TESTING LOG CATEGORY FILTERING")
         print("-" * 50)
         
-        # Test log category detection
+        # Get actual log categories from database
+        print(f"Getting actual log categories from database:")
+        log_categories = controller._get_actual_log_categories_from_db()
+        
+        print(f"\nActual log categories found in database:")
+        for cat in log_categories:
+            print(f"   - {cat}")
+        
+        # Test category detection logic
         test_categories = [
             'Stardancer Log', 'Ship Information', 'Stardancer Episode Summary', 
             'Mission Log', 'Characters', 'Medical Log', 'General Information',
             'Adagio Episode Summary', 'Pilgrim Log'
         ]
         
-        print(f"Testing category filtering:")
+        print(f"\nTesting category filtering logic:")
         for cat in test_categories:
-            is_log = is_log_category(cat)
+            is_log = 'log' in cat.lower() and 'episode summary' not in cat.lower()
             print(f"   '{cat}': {'✓ LOG' if is_log else '✗ NOT LOG'}")
-        
-        # Test dynamic log categories
-        print(f"\nDynamic log categories:")
-        log_categories = get_all_log_categories()
-        for cat in log_categories:
-            print(f"   - {cat}")
         
         # Test filtering
         print(f"\nFiltering test categories:")
-        filtered = filter_categories_for_logs(test_categories)
+        filtered = [cat for cat in test_categories if 'log' in cat.lower() and 'episode summary' not in cat.lower()]
         print(f"   Original: {len(test_categories)} categories")
         print(f"   Filtered: {len(filtered)} log categories")
         for cat in filtered:
