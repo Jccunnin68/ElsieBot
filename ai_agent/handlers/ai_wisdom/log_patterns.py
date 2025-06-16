@@ -9,15 +9,14 @@ query_detection.py and log_processor.py to avoid circular imports.
 import re
 from typing import Optional, Dict, List
 
-# Ship names from the fleet
-SHIP_NAMES = [
-    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 
-    'caelian', 'enterprise', 'montagnier', 'faraday', 'cook', 'mjolnir',
-    'rendino', 'gigantes', 'banshee'
-]
-# Log indicators for query detection
+# REMOVED: SHIP_NAMES hardcoded array - replaced with dynamic category detection
+# Ship names are now detected dynamically from database categories using:
+# - get_ship_categories() which finds categories containing 'ship' or 'starship'
+# - Real MediaWiki categories instead of hardcoded lists
+# This eliminates maintenance of hardcoded ship lists and uses real data.
+# Log indicators for query detection - cleaned of hardcoded ship names
 LOG_INDICATORS = [
-    'log', 'logs', 'mission log', 'ship log', 'stardancer log', 
+    'log', 'logs', 'mission log', 'ship log', 
     'captain log', 'personal log', 'stardate', 'entry',
     'what happened', 'events', 'mission report', 'incident report',
     'summarize', 'summary', 'recap', 'tell me what',
@@ -26,14 +25,13 @@ LOG_INDICATORS = [
     'expedition', 'away mission', 'away team',
     'event log', 'event logs', 'incident', 'incident log',
     'event report', 'occurrence', 'happening',
-    # Ship-specific log patterns
-    'adagio log', 'pilgrim', 'stardancer log', 'protector log',
-    'manta ', 'sentinel', 'caelian','gigantes', 'banshee','adagio'
     # Date-based patterns
     'retrieve', 'show me', 'get the log', 'find the log',
     # Named incidents
     'incident log', 'crisis log', 'affair log', 'operation log'
 ]
+# REMOVED: Ship-specific log patterns (stardancer log, adagio log, etc.)
+# Ship detection is now handled dynamically by category-based searches
 
 # Ship-specific character mappings for disambiguation
 SHIP_SPECIFIC_CHARACTER_CORRECTIONS = {
@@ -203,33 +201,11 @@ def _resolve_ambiguous_name(name_lower: str, ship_context: Optional[str], surrou
     
     return None
 
-def extract_ship_name_from_log_content(content: str, title: str = "") -> Optional[str]:
-    """
-    Extract ship name from log content or title for context resolution.
-    
-    Args:
-        content: Log content to analyze
-        title: Log title to analyze
-        
-    Returns:
-        Ship name if detected, None otherwise
-    """
-    text_to_check = f"{title} {content}".lower()
-    
-    # Check for explicit ship mentions
-    for ship in SHIP_NAMES:
-        if ship in text_to_check:
-            return ship
-    
-    # Check for USS prefix patterns
-    uss_pattern = r'uss\s+(\w+)'
-    uss_match = re.search(uss_pattern, text_to_check)
-    if uss_match:
-        ship_candidate = uss_match.group(1)
-        if ship_candidate in SHIP_NAMES:
-            return ship_candidate
-    
-    return None
+# REMOVED: extract_ship_name_from_log_content() function
+# Ship name extraction is now handled by category-based database searches:
+# - controller.search_logs() with ship_name parameter
+# - Dynamic category filtering from database
+# - Real MediaWiki categories instead of hardcoded patterns
 
 def is_log_query(query: str) -> bool:
     """Determine if the query is asking about logs"""

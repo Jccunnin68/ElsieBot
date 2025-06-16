@@ -15,7 +15,7 @@ Usage:
 from typing import Optional, Tuple, Dict, List
 import re
 
-from ..ai_wisdom.log_patterns import is_log_query, has_log_specific_terms, SHIP_NAMES
+from ..ai_wisdom.log_patterns import is_log_query, has_log_specific_terms
 
 # Define all pattern recognition constants locally (moved from config.py)
 
@@ -287,7 +287,9 @@ def detect_log_selection_query(user_message: str) -> Tuple[bool, str, Optional[s
     
     # Extract ship name if present
     detected_ship = None
-    for ship in SHIP_NAMES:
+    # Use local ship names since SHIP_NAMES was removed in Phase 2
+    ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel']
+    for ship in ship_names:
         if ship.lower() in message:
             detected_ship = ship.lower()
             break
@@ -403,7 +405,8 @@ def extract_ship_log_query(user_message: str) -> Tuple[bool, Optional[Dict[str, 
         if match:
             ship_name = match.group('ship').lower()
             # Verify it's a known ship
-            if ship_name in [s.lower() for s in SHIP_NAMES]:
+            ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel']
+            if ship_name in [s.lower() for s in ship_names]:
                 # Extract any specific log keywords
                 log_type = None
                 for keyword in LOG_SEARCH_KEYWORDS:

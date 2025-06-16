@@ -889,6 +889,90 @@ class FleetDatabaseController:
             print(f"✗ Error getting log categories from database: {e}")
             return []
     
+    def get_character_categories(self) -> List[str]:
+        """Get all character-related categories (excluding NPC Starships)"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT unnest(categories) as category 
+                        FROM wiki_pages 
+                        WHERE categories IS NOT NULL 
+                        AND EXISTS (
+                            SELECT 1 FROM unnest(categories) cat 
+                            WHERE (LOWER(cat) LIKE '%character%' OR LOWER(cat) LIKE '%npc%')
+                            AND LOWER(cat) NOT LIKE '%npc starship%'
+                        )
+                        ORDER BY category
+                    """)
+                    categories = [row[0] for row in cur.fetchall()]
+                    print(f"   📊 Found {len(categories)} character categories in database: {categories}")
+                    return categories
+        except Exception as e:
+            print(f"✗ Error getting character categories: {e}")
+            return []
+
+    def get_ship_categories(self) -> List[str]:
+        """Get all ship-related categories"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT unnest(categories) as category 
+                        FROM wiki_pages 
+                        WHERE categories IS NOT NULL 
+                        AND EXISTS (
+                            SELECT 1 FROM unnest(categories) cat 
+                            WHERE LOWER(cat) LIKE '%ship%' OR LOWER(cat) LIKE '%starship%'
+                        )
+                        ORDER BY category
+                    """)
+                    categories = [row[0] for row in cur.fetchall()]
+                    print(f"   📊 Found {len(categories)} ship categories in database: {categories}")
+                    return categories
+        except Exception as e:
+            print(f"✗ Error getting ship categories: {e}")
+            return []
+
+    def search_characters(self, query: str, limit: int = 10) -> List[Dict]:
+        """Search character pages using category filtering"""
+        character_categories = self.get_character_categories()
+        if not character_categories:
+            print("⚠️  No character categories found, falling back to general search")
+            return self.search_pages(query, limit=limit)
+        print(f"   🧑 Searching characters with categories: {character_categories}")
+        return self.search_pages(query, categories=character_categories, limit=limit)
+
+    def search_ships(self, query: str, limit: int = 10) -> List[Dict]:
+        """Search ship pages using category filtering"""
+        ship_categories = self.get_ship_categories()
+        if not ship_categories:
+            print("⚠️  No ship categories found, falling back to general search")
+            return self.search_pages(query, limit=limit)
+        print(f"   🚢 Searching ships with categories: {ship_categories}")
+        return self.search_pages(query, categories=ship_categories, limit=limit)
+
+    def search_logs(self, query: str, ship_name: Optional[str] = None, limit: int = 10) -> List[Dict]:
+        """Search log pages using category filtering"""
+        log_categories = self._get_actual_log_categories_from_db()  # ✅ Already exists
+        if not log_categories:
+            print("⚠️  No log categories found, using force_mission_logs_only fallback")
+            return self.search_pages(query, ship_name=ship_name, limit=limit, force_mission_logs_only=True)
+        
+        if ship_name:
+            # Filter to specific ship logs
+            ship_log_categories = [cat for cat in log_categories 
+                                  if ship_name.lower() in cat.lower()]
+            if ship_log_categories:
+                print(f"   📋 Searching {ship_name} logs with categories: {ship_log_categories}")
+                return self.search_pages(query, categories=ship_log_categories, ship_name=ship_name, limit=limit)
+            else:
+                print(f"   ⚠️  No specific log categories found for ship '{ship_name}', searching all logs")
+        
+        # Search all logs with category filtering
+        print(f"   📋 Searching all logs with categories: {log_categories}")
+        return self.search_pages(query, categories=log_categories, ship_name=ship_name, limit=limit)
+    
     def search_by_categories(self, query: str, categories: List[str], limit: int = 10) -> List[Dict]:
         """Search pages by specific categories"""
         return self.search_pages(query, categories=categories, limit=limit)

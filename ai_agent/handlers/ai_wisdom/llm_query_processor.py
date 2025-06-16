@@ -171,15 +171,17 @@ class LLMQueryProcessor:
     def _extract_character_context(self, raw_data: str, user_query: str) -> CharacterContext:
         """Extract character context from raw data for processing"""
         try:
-            from .log_patterns import extract_ship_name_from_log_content
+            # REMOVED: extract_ship_name_from_log_content import - function was removed in Phase 3
+# Ship context is now handled by category-based database searches
             from ..ai_attention.dgm_handler import check_dgm_post
             from ..ai_attention.exit_conditions import detect_roleplay_exit_conditions
             from ..ai_attention.state_manager import get_roleplay_state
             
             context = CharacterContext()
             
-            # Extract ship context from content
-            context.ship_context = extract_ship_name_from_log_content(raw_data, user_query)
+            # REMOVED: Ship context extraction - now handled by category-based database searches
+            # The ship context is passed by the caller who gets it from category-based searches
+            context.ship_context = None
             
             # Check for DGM accounts and designations
             dgm_accounts = ['liorexus', 'isis', 'cygnus', 'illuice', 'captain_rien', 'captain_riens']

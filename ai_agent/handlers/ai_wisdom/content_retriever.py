@@ -7,9 +7,7 @@ from urllib.parse import quote
 import re
 from .log_patterns import (
     CHARACTER_CORRECTIONS, 
-    SHIP_NAMES,
-    resolve_character_name_with_context,
-    extract_ship_name_from_log_content
+    resolve_character_name_with_context
 )
 from .llm_query_processor import get_llm_processor, should_process_data, is_fallback_response
 
@@ -99,86 +97,35 @@ def is_episode_summary(result: dict) -> bool:
     
     return False
 
-def is_ship_log_title(title: str) -> bool:
-    """Enhanced ship log title detection supporting multiple formats:
-    - Ship Name Date
-    - Date Ship Name Log  
-    - Date Ship Name
-    - Ship Name Date Log
-    - Something like 'The Anevian Incident' Log
-    """
-    title_lower = title.lower().strip()
+# REMOVED: is_ship_log_title() function - replaced with category-based search
+# The complex ship log detection logic has been removed in favor of using 
+# real MediaWiki categories. Log detection is now handled by:
+# - controller.search_logs() which uses _get_actual_log_categories_from_db()
+# - Category filtering: WHERE categories && log_categories
+# This eliminates ~80 lines of complex regex patterns and hardcoded ship names.
+
+def _get_log_categories() -> List[str]:
+    """Get dynamic log categories from database (Phase 3 cleanup helper)"""
+    try:
+        controller = get_db_controller()
+        return controller._get_actual_log_categories_from_db()
+    except Exception as e:
+        print(f"⚠️  Error getting dynamic log categories: {e}")
+        # Fallback to empty list - no hardcoded ship names
+        return []
+
+def _is_log_category(categories: List[str]) -> bool:
+    """Check if any category indicates log content (Phase 3 cleanup helper)"""
+    if not categories:
+        return False
     
-    # Basic log patterns for any ship name
-    for ship in SHIP_NAMES:
-        ship_lower = ship.lower()
-        
-        # Pattern 1: Ship Name Date (e.g., "Adagio 2024/01/06")
-        date_patterns = [
-            f"^{ship_lower}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}",  # ship 2024/01/06
-            f"^{ship_lower}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}",   # ship 1/6/2024
-            f"^{ship_lower}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}",   # ship 2024-01-06
-            f"^{ship_lower}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}",   # ship 1-6-2024
-        ]
-        
-        for pattern in date_patterns:
-            if re.match(pattern, title_lower):
-                return True
-        
-        # Pattern 2: Date Ship Name (e.g., "2024/01/06 Adagio")
-        date_ship_patterns = [
-            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship_lower}",   # 2024/01/06 ship
-            f"^\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+{ship_lower}",   # 1/6/2024 ship
-            f"^\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+{ship_lower}",   # 2024-01-06 ship
-            f"^\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+{ship_lower}",   # 1-6-2024 ship
-        ]
-        
-        for pattern in date_ship_patterns:
-            if re.match(pattern, title_lower):
-                return True
-        
-        # Pattern 3: Ship Name Date Log (e.g., "Adagio 2024/01/06 Log")
-        date_log_patterns = [
-            f"^{ship_lower}\\s+\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+log",
-            f"^{ship_lower}\\s+\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+log",
-            f"^{ship_lower}\\s+\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+log",
-            f"^{ship_lower}\\s+\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+log",
-        ]
-        
-        for pattern in date_log_patterns:
-            if re.match(pattern, title_lower):
-                return True
-        
-        # Pattern 4: Date Ship Name Log (e.g., "2024/01/06 Adagio Log") 
-        date_ship_log_patterns = [
-            f"^\\d{{4}}/\\d{{1,2}}/\\d{{1,2}}\\s+{ship_lower}\\s+log",
-            f"^\\d{{1,2}}/\\d{{1,2}}/\\d{{4}}\\s+{ship_lower}\\s+log",
-            f"^\\d{{4}}-\\d{{1,2}}-\\d{{1,2}}\\s+{ship_lower}\\s+log",
-            f"^\\d{{1,2}}-\\d{{1,2}}-\\d{{4}}\\s+{ship_lower}\\s+log",
-        ]
-        
-        for pattern in date_ship_log_patterns:
-            if re.match(pattern, title_lower):
-                return True
+    # Get dynamic log categories
+    log_categories = _get_log_categories()
+    if log_categories:
+        return any(cat in log_categories for cat in categories)
     
-    # Pattern 5: Named incidents/events ending with "Log" (e.g., "The Anevian Incident Log")
-    if title_lower.endswith(' log') and len(title_lower) > 4:
-        # Check if it contains words that suggest it's an event/incident
-        event_indicators = ['incident', 'event', 'mission', 'encounter', 'crisis', 'affair', 'operation']
-        if any(indicator in title_lower for indicator in event_indicators):
-            return True
-        
-        # Check if it contains "the" at the beginning, suggesting a named event
-        if title_lower.startswith('the ') and len(title_lower.split()) >= 3:
-            return True
-    
-    # Pattern 6: Any title with ship name and "log" anywhere
-    for ship in SHIP_NAMES:
-        ship_lower = ship.lower()
-        if ship_lower in title_lower and 'log' in title_lower:
-            return True
-    
-    return False
+    # Fallback: basic pattern matching for 'log' in category names
+    return any('log' in cat.lower() for cat in categories)
 
 
 def correct_character_name(name: str, ship_context: Optional[str] = None, 
@@ -522,18 +469,19 @@ def debug_schema_info():
         return {}
 
 def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
-    """Get full log content using hierarchical search with categories - NO TRUNCATION
+    """Simplified log search using categories - NO TRUNCATION
+    Uses new Phase 1 category-based database controller methods
     
     Args:
         query: Search query
-        mission_logs_only: If True, only search ship log categories, ignore other types
+        mission_logs_only: If True, only search log categories (same behavior as before)
         is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
-        print(f"🔍 HIERARCHICAL LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
+        print(f"🔍 CATEGORY-BASED LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
         
-        # Check for log selection queries first
+        # Check for log selection queries first (keep existing special handling)
         from ..ai_logic.query_detection import detect_log_selection_query
         is_selection, selection_type, ship_name = detect_log_selection_query(query)
         
@@ -541,111 +489,52 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             print(f"   🎯 LOG SELECTION DETECTED: type='{selection_type}', ship='{ship_name}'")
             
             if selection_type == 'random':
-                # Get one random log
                 return get_random_log_content(ship_name, is_roleplay)
             elif selection_type in ['latest', 'recent']:
-                # Get most recent logs - "latest" should return only 1, "recent" can return multiple
                 limit = 1 if selection_type == 'latest' else 5
                 return get_temporal_log_content(selection_type, ship_name, limit=limit, is_roleplay=is_roleplay)
             elif selection_type in ['first', 'earliest', 'oldest']:
-                # Get oldest logs - "first" should return only 1, others can return multiple  
                 limit = 1 if selection_type == 'first' else 5
                 return get_temporal_log_content(selection_type, ship_name, limit=limit, is_roleplay=is_roleplay)
             elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
-                # Get date-filtered logs
                 return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
         
-        # Use direct database query instead of artificial category mappings
-        log_categories = controller._get_actual_log_categories_from_db()
-        print(f"   📊 STANDARD LOG REQUEST: Using actual database log categories: {len(log_categories)} categories")
+        # Extract ship name for ship-specific log searches
+        ship_name_from_query = None
+        # Simple ship name extraction from query (could be enhanced)
+        ship_keywords = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta']
+        for ship in ship_keywords:
+            if ship in query.lower():
+                ship_name_from_query = ship
+                break
         
-        # Search using dynamic log categories instead of hardcoded categories
-        if mission_logs_only:
-            # Use only dynamic log categories
-            results = controller.search_by_categories(query, log_categories, limit=20)
-            print(f"   📊 Dynamic log category search returned {len(results)} results")
-        else:
-            # Use force_mission_logs_only for backward compatibility
-            results = controller.search_pages(query, limit=20, force_mission_logs_only=True)
-            print(f"   📊 Force mission logs search returned {len(results)} results")
+        # Use new Phase 1 search_logs method - MUCH SIMPLER!
+        results = controller.search_logs(query, ship_name=ship_name_from_query, limit=20)
+        print(f"   📊 Category-based log search returned {len(results)} results")
         
-        # Filter out episode summaries from the main results
-        filtered_results = []
-        for r in results:
-            if is_episode_summary(r):
-                categories = r.get('categories', [])
-                episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
-                print(f"   ❌ Filtering out episode summary from main results: '{r['title']}' Category='{episode_cat}'")
-            else:
-                filtered_results.append(r)
-        
-        unique_results = filtered_results
-        
-        if not unique_results and not mission_logs_only:
-            # Fallback: Try general hierarchical search with log keywords (only if not mission_logs_only)
-            print(f"   🔄 No category-based logs found, trying general hierarchical search...")
-            results = controller.search_pages(f"{query} log", limit=20)  # Increased limit
-            print(f"   📊 General hierarchical search returned {len(results)} results")
-            
-            # Filter to ship logs and other log-like titles using enhanced detection
-            log_results = []
-            for r in results:
-                title = r['title']
-                content_preview = r['raw_content'][:50] + "..." if len(r['raw_content']) > 50 else r['raw_content']
-                categories = r.get('categories', [])
-                
-                # Filter out episode summaries
-                if is_episode_summary(r):
-                    episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
-                    print(f"   ❌ Filtering out episode summary: '{title}' Category='{episode_cat}'")
-                    continue
-                
-                # Check if it has log categories or use enhanced ship log detection
-                if any(cat in log_categories for cat in categories):
-                    log_results.append(r)
-                    print(f"   ✓ Category-based log: '{title}' Categories={categories}")
-                elif is_ship_log_title(title):
-                    log_results.append(r)
-                    print(f"   ✓ Title-based ship log: '{title}' Content='{content_preview}'")
-                # Also check for other log indicators
-                elif any(indicator in title.lower() for indicator in ['personal', 'captain', 'stardate']):
-                    log_results.append(r)
-                    print(f"   ✓ Detected other log: '{title}' Content='{content_preview}'")
-                else:
-                    print(f"   ✗ Not a log: '{title}' Content='{content_preview}'")
-            
-            print(f"   📊 Enhanced filtering found {len(log_results)} log-like results")
-            unique_results = log_results
-        elif not unique_results and mission_logs_only:
-            print(f"   🎯 No ship log categories found for specific request: '{query}'")
-            return ""
-        
-        if not unique_results:
+        if not results:
             print(f"✗ No log content found for query: '{query}'")
             return ""
         
+        # Process results - keep existing processing logic
         log_contents = []
-        
-        for result in unique_results:
+        for result in results:
             title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
-            categories = result.get('categories', [])
-            page_type = result.get('page_type', 'unknown')
+            content = result['raw_content']
             print(f"   📄 Processing: '{title}' ({len(content)} chars)")
             
-            # Parse character speaking patterns in the log using enhanced dialogue parsing
+            # Parse character speaking patterns in the log
             parsed_content = parse_log_characters(content, result.get('ship_name'), title)
             
             # Format the log with title and parsed content
             formatted_log = f"**{title}**\n{parsed_content}"
-            
             log_contents.append(formatted_log)
             print(f"   ✓ Added: {title}")
         
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
-        print(f"✅ HIERARCHICAL LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
+        print(f"✅ CATEGORY-BASED LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
         
-        # NEW: Always process log content through secondary LLM (regardless of size)
+        # Process log content through secondary LLM
         print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
         processor = get_llm_processor()
         result = processor.process_query_results("logs", final_content, query, is_roleplay, force_processing=True)
@@ -656,91 +545,95 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
         return ""
 
 def get_relevant_wiki_context(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
-    """Get relevant wiki content using hierarchical search (titles first, then content) - NO TRUNCATION
+    """Simplified unified search strategy using categories - NO TRUNCATION
+    Uses intelligent query type detection and category-based searches
     
     Args:
         query: Search query
-        mission_logs_only: If True, only search mission_log type pages when detecting log queries
+        mission_logs_only: If True, only search log categories when detecting log queries
         is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
+        print(f"🔍 UNIFIED CATEGORY-BASED SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
         
-        # Check if this is a log query - handle with hierarchical log retrieval
-        # Inline check to avoid circular import with query_detection.py
-        log_indicators = [
-            'log', 'logs', 'mission log', 'ship log', 'stardancer log', 
-            'captain log', 'personal log', 'stardate', 'entry',
-            'what happened', 'events', 'mission report', 'incident report',
-            'summarize', 'summary', 'recap', 'tell me what',
-            'last mission', 'recent mission', 'latest log'
-        ]
-        is_log_query_result = any(indicator in query.lower() for indicator in log_indicators)
+        # Simple query type detection - category-based routing
+        query_lower = query.lower()
         
-        if is_log_query_result:
-            log_content = get_log_content(query, mission_logs_only=mission_logs_only, is_roleplay=is_roleplay)
-            if log_content:
-                log_type_msg = "mission logs only" if mission_logs_only else "all log types"
-                print(f"✓ Log query detected, retrieved {len(log_content)} chars of log content ({log_type_msg})")
-                return log_content
-            else:
-                log_type_msg = "mission logs only" if mission_logs_only else "all log types"
-                print(f"⚠️  Log query detected but no log content found ({log_type_msg})")
+        if mission_logs_only or any(indicator in query_lower for indicator in ['log', 'mission', 'stardate', 'what happened']):
+            print(f"   🚀 LOG QUERY DETECTED - routing to category-based log search")
+            return get_log_content(query, mission_logs_only, is_roleplay)
         
-        # Use hierarchical database search for better results
-        print(f"🔍 HIERARCHICAL WIKI SEARCH: '{query}' (roleplay={is_roleplay})")
-        results = controller.search_pages(query, limit=20)  # Increased limit
+        elif any(indicator in query_lower for indicator in ['who is', 'tell me about', 'character', 'person', 'crew']):
+            print(f"   👤 CHARACTER QUERY DETECTED - routing to category-based character search")
+            # Extract potential character name from query (simple approach)
+            character_name = query.replace('who is', '').replace('tell me about', '').strip()
+            return get_character_context(character_name)
         
-        if not results:
-            print(f"✗ No wiki content found for query: {query}")
-            return ""
+        elif any(indicator in query_lower for indicator in ['uss', 'ship', 'vessel', 'starship', 'specs', 'class']):
+            print(f"   🚢 SHIP QUERY DETECTED - routing to category-based ship search")
+            # Extract potential ship name from query (simple approach)
+            ship_name = query.replace('uss', '').replace('ship', '').strip()
+            return get_ship_information(ship_name)
         
-        print(f"   📊 Hierarchical search returned {len(results)} results")
-        
-        context_parts = []
-        
-        for result in results:
-            title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
+        else:
+            print(f"   🔍 GENERAL QUERY - using standard search")
+            # General search - use existing logic
+            results = controller.search_pages(query, limit=20)
+            if not results:
+                print(f"✗ No wiki content found for query: {query}")
+                return ""
             
-            page_text = f"**{title}**\n{content}"
-            context_parts.append(page_text)
-        
-        final_context = '\n\n---\n\n'.join(context_parts)
-        print(f"✅ HIERARCHICAL WIKI SEARCH COMPLETE: {len(final_context)} characters from {len(context_parts)} pages")
-        
-        # NEW: Process large content through LLM if needed
-        if should_process_data(final_context):
-            print(f"🔄 Content size ({len(final_context)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            result = processor.process_query_results("general", final_context, query, is_roleplay)
-            return result.content
-        
-        return final_context
+            print(f"   📊 General search returned {len(results)} results")
+            
+            context_parts = []
+            for result in results:
+                title = result['title']
+                content = result['raw_content']
+                page_text = f"**{title}**\n{content}"
+                context_parts.append(page_text)
+            
+            final_context = '\n\n---\n\n'.join(context_parts)
+            print(f"✅ UNIFIED SEARCH COMPLETE: {len(final_context)} characters from {len(context_parts)} pages")
+            
+            # Process large content through LLM if needed
+            if should_process_data(final_context):
+                print(f"🔄 Content size ({len(final_context)} chars) exceeds threshold, processing with LLM...")
+                processor = get_llm_processor()
+                result = processor.process_query_results("general", final_context, query, is_roleplay)
+                return result.content
+            
+            return final_context
         
     except Exception as e:
         print(f"✗ Error getting wiki context: {e}")
         return ""
 
 def get_ship_information(ship_name: str) -> str:
-    """Get detailed information about a specific ship"""
+    """Simplified ship search using categories - uses Phase 1 category-based methods"""
     try:
         controller = get_db_controller()
-        results = controller.get_ship_info(ship_name)
+        print(f"🚢 CATEGORY-BASED SHIP SEARCH: '{ship_name}'")
+        
+        # Use new Phase 1 search_ships method - MUCH SIMPLER!
+        results = controller.search_ships(ship_name, limit=10)
+        print(f"   📊 Category-based ship search returned {len(results)} results")
         
         if not results:
+            print(f"✗ No ship information found for: {ship_name}")
             return ""
         
         ship_info = []
-
         for result in results:
             title = result['title']
             content = result['raw_content']
-
+            print(f"   📄 Processing: '{title}' ({len(content)} chars)")
+            
             page_text = f"**{title}**\n{content}"
             ship_info.append(page_text)
 
         final_content = '\n\n---\n\n'.join(ship_info)
+        print(f"✅ CATEGORY-BASED SHIP SEARCH COMPLETE: {len(final_content)} characters from {len(ship_info)} pages")
         
         # Process large content through LLM if needed
         if should_process_data(final_content):
@@ -756,6 +649,45 @@ def get_ship_information(ship_name: str) -> str:
         
     except Exception as e:
         print(f"✗ Error getting ship information: {e}")
+        return ""
+
+def get_character_context(character_name: str) -> str:
+    """NEW: Simplified character search using categories - uses Phase 1 category-based methods"""
+    try:
+        controller = get_db_controller()
+        print(f"👤 CATEGORY-BASED CHARACTER SEARCH: '{character_name}'")
+        
+        # Use new Phase 1 search_characters method
+        results = controller.search_characters(character_name, limit=10)
+        print(f"   📊 Category-based character search returned {len(results)} results")
+        
+        if not results:
+            print(f"✗ No character information found for: {character_name}")
+            return ""
+        
+        character_info = []
+        for result in results:
+            title = result['title']
+            content = result['raw_content']
+            print(f"   📄 Processing: '{title}' ({len(content)} chars)")
+            
+            page_text = f"**{title}**\n{content}"
+            character_info.append(page_text)
+        
+        final_content = '\n\n---\n\n'.join(character_info)
+        print(f"✅ CATEGORY-BASED CHARACTER SEARCH COMPLETE: {len(final_content)} characters from {len(character_info)} pages")
+        
+        # Process through LLM if needed
+        if should_process_data(final_content):
+            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
+            processor = get_llm_processor()
+            result = processor.process_query_results("character", final_content, f"character information for {character_name}", _get_roleplay_context_from_caller())
+            return result.content
+        
+        return final_content
+        
+    except Exception as e:
+        print(f"✗ Error getting character context: {e}")
         return ""
 
 def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
@@ -881,8 +813,8 @@ def get_tell_me_about_content(subject: str) -> str:
             # Add category indicator for clarity
             category_indicator = ""
             if categories:
-                # Determine primary category type
-                if any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']):
+                # Determine primary category type using dynamic category detection
+                if _is_log_category(categories):
                     category_indicator = " [Mission Log]"
                 elif 'Ship Information' in categories:
                     category_indicator = " [Ship Information]"
@@ -969,7 +901,7 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
             categories = result.get('categories', [])
             
             # Skip mission logs unless no other content was found
-            is_mission_log = any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']) if categories else False
+            is_mission_log = _is_log_category(categories) if categories else False
             if is_mission_log and priority_results:
                 print(f"   ⏭️  Skipping mission log '{title}' (ship/personnel info available)")
                 continue
@@ -1111,7 +1043,7 @@ def get_log_url(search_query: str) -> str:
                 # Find the first result that has a URL and is actually a mission log
                 for result in results:
                     categories = result.get('categories', [])
-                    if result.get('url') and any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']):
+                    if result.get('url') and _is_log_category(categories):
                         best_result = result
                         best_strategy = f"most recent mission log for {ship_name}"
                         print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
@@ -1216,7 +1148,7 @@ def get_log_url(search_query: str) -> str:
             # Format response based on categories
             if categories:
                 category_type = categories[0]
-                if any(cat in categories for cat in ['Stardancer Log', 'Adagio Log', 'Pilgrim Log', 'Banshee Log', 'Gigantes Log']):
+                if _is_log_category(categories):
                     return f"**Mission Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
                 elif 'Ship Information' in categories:
                     return f"**Ship Information Found:**\n\n**{title}**\nType: Ship Information Page\n🔗 Direct Link: {url}"
