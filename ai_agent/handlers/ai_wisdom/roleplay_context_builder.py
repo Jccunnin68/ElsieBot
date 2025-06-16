@@ -676,7 +676,7 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
 
 
 def _get_roleplay_database_context(user_message: str) -> str:
-    """Get database context for roleplay scenarios with character focus"""
+    """Get database context for roleplay scenarios using Phase 1 category-based searches"""
     print(f"🎭 ROLEPLAY DATABASE CONTEXT: '{user_message}'")
     
     # Check if this is a character query
@@ -686,9 +686,48 @@ def _get_roleplay_database_context(user_message: str) -> str:
     tell_me_about_subject = extract_tell_me_about_subject(user_message)
     
     if is_char_query and character_name:
-        print(f"   🧑 CHARACTER QUERY DETECTED: '{character_name}'")
-        # Use prioritized search for character information
-        character_info = get_tell_me_about_content_prioritized(character_name, is_roleplay=True)
+        print(f"   🧑 CATEGORY-BASED CHARACTER QUERY: '{character_name}'")
+        
+        # Use Phase 1 character search method for roleplay
+        try:
+            from .content_retriever import get_db_controller
+            controller = get_db_controller()
+            
+            # Use new Phase 1 search_characters method
+            results = controller.search_characters(character_name, limit=5)
+            print(f"   📊 Category-based roleplay character search: {len(results)} results")
+            
+            if results:
+                character_parts = []
+                for result in results:
+                    title = result['title']
+                    content = result['raw_content']
+                    categories = result.get('categories', [])
+                    
+                    # Add category indicator for roleplay context
+                    category_indicator = ""
+                    if categories and 'Characters' in categories:
+                        category_indicator = " [Personnel File]"
+                    elif categories:
+                        category_indicator = f" [{categories[0]}]"
+                    
+                    page_text = f"**{title}{category_indicator}**\n{content}"
+                    character_parts.append(page_text)
+                
+                character_info = '\n\n---\n\n'.join(character_parts)
+                print(f"   ✅ Category-based character info: {len(character_info)} characters")
+            else:
+                print(f"   ❌ No category-based character results found")
+                character_info = ""
+        
+        except Exception as e:
+            print(f"   ❌ Error in category-based character search: {e}")
+            character_info = ""
+        
+        if not character_info:
+            # Fallback to prioritized search
+            print(f"   🔄 Falling back to prioritized character search")
+            character_info = get_tell_me_about_content_prioritized(character_name, is_roleplay=True)
         
         # Check if this is a fallback response
         if is_fallback_response(character_info):

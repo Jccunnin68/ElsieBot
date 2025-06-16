@@ -104,28 +104,7 @@ def is_episode_summary(result: dict) -> bool:
 # - Category filtering: WHERE categories && log_categories
 # This eliminates ~80 lines of complex regex patterns and hardcoded ship names.
 
-def _get_log_categories() -> List[str]:
-    """Get dynamic log categories from database (Phase 3 cleanup helper)"""
-    try:
-        controller = get_db_controller()
-        return controller._get_actual_log_categories_from_db()
-    except Exception as e:
-        print(f"⚠️  Error getting dynamic log categories: {e}")
-        # Fallback to empty list - no hardcoded ship names
-        return []
 
-def _is_log_category(categories: List[str]) -> bool:
-    """Check if any category indicates log content (Phase 3 cleanup helper)"""
-    if not categories:
-        return False
-    
-    # Get dynamic log categories
-    log_categories = _get_log_categories()
-    if log_categories:
-        return any(cat in log_categories for cat in categories)
-    
-    # Fallback: basic pattern matching for 'log' in category names
-    return any('log' in cat.lower() for cat in categories)
 
 
 def correct_character_name(name: str, ship_context: Optional[str] = None, 
@@ -459,14 +438,7 @@ def check_elsiebrain_connection() -> bool:
         print("   Make sure the elsiebrain database exists and is populated")
         return False
 
-def debug_schema_info():
-    """Debug function to inspect database schema"""
-    try:
-        controller = get_db_controller()
-        return controller.get_schema_info()
-    except Exception as e:
-        print(f"✗ Error getting schema info: {e}")
-        return {}
+
 
 def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
     """Simplified log search using categories - NO TRUNCATION
@@ -814,7 +786,7 @@ def get_tell_me_about_content(subject: str) -> str:
             category_indicator = ""
             if categories:
                 # Determine primary category type using dynamic category detection
-                if _is_log_category(categories):
+                if any('log' in cat.lower() for cat in categories):
                     category_indicator = " [Mission Log]"
                 elif 'Ship Information' in categories:
                     category_indicator = " [Ship Information]"
@@ -901,7 +873,7 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
             categories = result.get('categories', [])
             
             # Skip mission logs unless no other content was found
-            is_mission_log = _is_log_category(categories) if categories else False
+            is_mission_log = any('log' in cat.lower() for cat in categories) if categories else False
             if is_mission_log and priority_results:
                 print(f"   ⏭️  Skipping mission log '{title}' (ship/personnel info available)")
                 continue
@@ -938,91 +910,9 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
         print(f"✗ Error getting prioritized 'tell me about' content: {e}")
         return ""
 
-def debug_manual_query(query: str, categories: List[str] = None) -> str:
-    """Manual query function for debugging database searches - now uses categories"""
-    try:
-        controller = get_db_controller()
-        print(f"\n🔧 MANUAL DEBUG QUERY")
-        print(f"Query: '{query}'")
-        print(f"Categories Filter: {categories}")
-        print("-" * 40)
-        
-        if categories:
-            results = controller.search_by_categories(query, categories, limit=10)
-        else:
-            results = controller.search_pages(query, limit=10)
-        
-        print(f"Found {len(results)} results:")
-        for i, result in enumerate(results, 1):
-            print(f"\nResult {i}:")
-            print(f"  ID: {result['id']}")
-            print(f"  Title: '{result['title']}'")
-            print(f"  Categories: {result.get('categories', [])}")
-            print(f"  Ship Name: '{result['ship_name']}'")
-            print(f"  Content (50 chars): '{result['raw_content'][:50]}...'")
-            print(f"  Log Date: {result['log_date']}")
-        
-        print("-" * 40)
-        return f"Found {len(results)} results"
-        
-    except Exception as e:
-        print(f"✗ Error in manual query: {e}")
-        return ""
 
-def run_database_cleanup():
-    """Run all database cleanup operations"""
-    try:
-        controller = get_db_controller()
-        
-        print("🔧 STARTING DATABASE CLEANUP OPERATIONS")
-        print("=" * 60)
-        
-        # Step 1: Clean up ship names for mission logs
-        ship_results = controller.cleanup_mission_log_ship_names()
-        
-        # Step 2: Clean up seed/example data
-        seed_results = controller.cleanup_seed_data()
-        
-        # Step 3: Show final stats
-        final_stats = controller.get_stats()
-        
-        print("🎉 DATABASE CLEANUP COMPLETE!")
-        print("=" * 60)
-        print("📊 FINAL STATISTICS:")
-        print(f"  - Total pages: {final_stats.get('total_pages', 0)}")
-        print(f"  - Mission logs: {final_stats.get('mission_logs', 0)}")
-        print(f"  - Ship info: {final_stats.get('ship_info', 0)}")
-        print(f"  - Personnel: {final_stats.get('personnel', 0)}")
-        print(f"  - Unique ships: {final_stats.get('unique_ships', 0)}")
-        print("=" * 60)
-        
-        return {
-            'ship_cleanup': ship_results,
-            'seed_cleanup': seed_results,
-            'final_stats': final_stats
-        }
-        
-    except Exception as e:
-        print(f"✗ Error running database cleanup: {e}")
-        return {}
 
-def cleanup_ship_names_only():
-    """Just run the ship name cleanup"""
-    try:
-        controller = get_db_controller()
-        return controller.cleanup_mission_log_ship_names()
-    except Exception as e:
-        print(f"✗ Error cleaning up ship names: {e}")
-        return {}
 
-def cleanup_seed_data_only():
-    """Just run the seed data cleanup"""
-    try:
-        controller = get_db_controller()
-        return controller.cleanup_seed_data()
-    except Exception as e:
-        print(f"✗ Error cleaning up seed data: {e}")
-        return {}
 
 def get_log_url(search_query: str) -> str:
     """Get the URL for a page based on search query (ship name, title, date, etc.) - searches all page types"""
@@ -1043,7 +933,7 @@ def get_log_url(search_query: str) -> str:
                 # Find the first result that has a URL and is actually a mission log
                 for result in results:
                     categories = result.get('categories', [])
-                    if result.get('url') and _is_log_category(categories):
+                    if result.get('url') and any('log' in cat.lower() for cat in categories):
                         best_result = result
                         best_strategy = f"most recent mission log for {ship_name}"
                         print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
@@ -1148,7 +1038,7 @@ def get_log_url(search_query: str) -> str:
             # Format response based on categories
             if categories:
                 category_type = categories[0]
-                if _is_log_category(categories):
+                if any('log' in cat.lower() for cat in categories):
                     return f"**Mission Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
                 elif 'Ship Information' in categories:
                     return f"**Ship Information Found:**\n\n**{title}**\nType: Ship Information Page\n🔗 Direct Link: {url}"

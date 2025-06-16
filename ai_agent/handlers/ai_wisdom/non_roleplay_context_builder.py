@@ -71,7 +71,7 @@ Provide a focused, detailed response about {focus_subject} specifically. Be comp
 
 
 def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is_roleplay: bool = False) -> str:
-    """Generate context for character information queries."""
+    """Generate context for character information queries using Phase 1 category-based searches."""
     # Get character name from strategy if available, otherwise extract from message
     if strategy and 'character_name' in strategy:
         character_name = strategy['character_name']
@@ -80,13 +80,48 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is
         from ..ai_logic.query_detection import is_character_query
         is_character, character_name = is_character_query(user_message)
     
-    print(f"🧑 SEARCHING CHARACTER DATA: '{character_name}' (roleplay={is_roleplay})")
+    print(f"🧑 CATEGORY-BASED CHARACTER SEARCH: '{character_name}' (roleplay={is_roleplay})")
     
-    # First try personnel type search
-    character_info = search_by_type(character_name, 'personnel')
+    # Use Phase 1 character search method
+    try:
+        from .content_retriever import get_db_controller
+        controller = get_db_controller()
+        
+        # Use new Phase 1 search_characters method
+        results = controller.search_characters(character_name, limit=10)
+        print(f"   📊 Category-based character search returned {len(results)} results")
+        
+        if results:
+            character_parts = []
+            for result in results:
+                title = result['title']
+                content = result['raw_content']
+                categories = result.get('categories', [])
+                
+                # Add category indicator
+                category_indicator = ""
+                if categories:
+                    if 'Characters' in categories:
+                        category_indicator = " [Personnel File]"
+                    elif categories:
+                        category_indicator = f" [{categories[0]}]"
+                
+                page_text = f"**{title}{category_indicator}**\n{content}"
+                character_parts.append(page_text)
+            
+            character_info = '\n\n---\n\n'.join(character_parts)
+            print(f"   ✅ Category-based character search: {len(character_info)} characters")
+        else:
+            print(f"   ❌ No character results found via category search")
+            character_info = ""
+    
+    except Exception as e:
+        print(f"   ❌ Error in category-based character search: {e}")
+        character_info = ""
     
     if not character_info:
-        # Use optimized character search that prioritizes exact title matches
+        # Fallback to optimized search
+        print(f"   🔄 Falling back to optimized character search")
         character_info = _get_character_info_optimized(character_name, is_roleplay=is_roleplay)
     
     # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
@@ -217,22 +252,21 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any], is_roleplay: b
     elif strategy.get('ship_logs_only'):
         target_ship = strategy.get('target_ship')
         log_type = strategy.get('log_type')
-        print(f"   🚢📋 SHIP LOGS ONLY: searching logs for '{target_ship}' (log_type: {log_type})")
+        print(f"   🚢📋 CATEGORY-BASED SHIP LOGS: searching logs for '{target_ship}' (log_type: {log_type})")
         
-        # Use database controller to search ship-specific logs only
+        # Use Phase 1 category-based log search
         try:
             from .content_retriever import get_db_controller
             controller = get_db_controller()
             
-            # Search for logs that mention the target ship - FORCE MISSION LOGS ONLY
+            # Use new Phase 1 search_logs method with ship_name parameter
             search_query = f"{target_ship} {log_type}" if log_type else target_ship
-            results = controller.search_pages(search_query, page_type='mission_log', limit=10, force_mission_logs_only=True)
+            results = controller.search_logs(search_query, ship_name=target_ship, limit=10)
             
             if results:
                 wiki_info = ""
                 for result in results:
                     content = result['raw_content']
-                    page_type = result.get('page_type', 'general')
                     log_date = result.get('log_date', 'Unknown Date')
                     ship_name = result.get('ship_name', 'Unknown Ship')
                     
@@ -242,28 +276,28 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any], is_roleplay: b
                     
                     wiki_info += f"**{result['title']}{type_indicator}**\n{content}\n\n"
                 
-                print(f"   📊 Found {len(results)} ship-specific logs ({len(wiki_info)} chars)")
+                print(f"   📊 Category-based ship logs: {len(results)} results ({len(wiki_info)} chars)")
             else:
                 wiki_info = f"No logs found specifically mentioning '{target_ship}'"
                 print(f"   ❌ No ship-specific logs found for '{target_ship}'")
         
         except Exception as e:
-            print(f"   ❌ Error searching ship logs: {e}")
+            print(f"   ❌ Error in category-based ship log search: {e}")
             wiki_info = f"Error searching for {target_ship} logs: {e}"
     
     elif strategy.get('character_logs_only'):
         target_character = strategy.get('target_character')
         log_type = strategy.get('log_type')
-        print(f"   🧑📋 CHARACTER LOGS ONLY: searching logs for '{target_character}' (log_type: {log_type})")
+        print(f"   🧑📋 CATEGORY-BASED CHARACTER LOGS: searching logs for '{target_character}' (log_type: {log_type})")
         
-        # Use database controller to search character-specific logs only
+        # Use Phase 1 category-based log search for characters
         try:
             from .content_retriever import get_db_controller
             controller = get_db_controller()
             
-            # Search for logs that mention the target character - FORCE MISSION LOGS ONLY
+            # Use new Phase 1 search_logs method
             search_query = f"{target_character} {log_type}" if log_type else target_character
-            results = controller.search_pages(search_query, page_type='mission_log', limit=10, force_mission_logs_only=True)
+            results = controller.search_logs(search_query, limit=10)
             
             if results:
                 wiki_info = ""
@@ -278,13 +312,13 @@ def get_logs_context(user_message: str, strategy: Dict[str, Any], is_roleplay: b
                     
                     wiki_info += f"**{result['title']}{type_indicator}**\n{content}\n\n"
                 
-                print(f"   📊 Found {len(results)} character-specific logs ({len(wiki_info)} chars)")
+                print(f"   📊 Category-based character logs: {len(results)} results ({len(wiki_info)} chars)")
             else:
                 wiki_info = f"No logs found specifically mentioning '{target_character}'"
                 print(f"   ❌ No character-specific logs found for '{target_character}'")
         
         except Exception as e:
-            print(f"   ❌ Error searching character logs: {e}")
+            print(f"   ❌ Error in category-based character log search: {e}")
             wiki_info = f"Error searching for {target_character} logs: {e}"
     
     else:
@@ -399,6 +433,79 @@ DATABASE SEARCH RESULTS:
 NOTE: All dates are preserved in real Earth calendar format for accuracy.
 
 Provide a comprehensive and informative response about {subject} based on the database information above."""
+
+
+def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_roleplay: bool = False) -> str:
+    """Generate context for ship information queries using Phase 1 category-based searches."""
+    print(f"🚢 CATEGORY-BASED SHIP SEARCH: '{ship_name}' (roleplay={is_roleplay})")
+    
+    # Use Phase 1 ship search method
+    try:
+        from .content_retriever import get_db_controller
+        controller = get_db_controller()
+        
+        # Use new Phase 1 search_ships method
+        results = controller.search_ships(ship_name, limit=10)
+        print(f"   📊 Category-based ship search returned {len(results)} results")
+        
+        if results:
+            ship_parts = []
+            for result in results:
+                title = result['title']
+                content = result['raw_content']
+                categories = result.get('categories', [])
+                
+                # Add category indicator
+                category_indicator = ""
+                if categories:
+                    if 'Ship Information' in categories:
+                        category_indicator = " [Ship Information]"
+                    elif any('ship' in cat.lower() or 'starship' in cat.lower() for cat in categories):
+                        category_indicator = f" [Ship Data]"
+                    elif categories:
+                        category_indicator = f" [{categories[0]}]"
+                
+                page_text = f"**{title}{category_indicator}**\n{content}"
+                ship_parts.append(page_text)
+            
+            ship_info = '\n\n---\n\n'.join(ship_parts)
+            print(f"   ✅ Category-based ship search: {len(ship_info)} characters")
+        else:
+            print(f"   ❌ No ship results found via category search")
+            ship_info = ""
+    
+    except Exception as e:
+        print(f"   ❌ Error in category-based ship search: {e}")
+        ship_info = ""
+    
+    if not ship_info:
+        # Fallback to original ship information function
+        print(f"   🔄 Falling back to original ship information search")
+        ship_info = get_ship_information(ship_name)
+    
+    # NON-ROLEPLAY: Preserve real Earth dates - no conversion needed
+    converted_ship_info = ship_info
+    
+    return f"""You are Elsie, an intelligent Holographic Scientist aboard the USS Stardancer with expertise in stellar cartography and a knowedlge of music and dance.
+
+CRITICAL INSTRUCTIONS FOR SHIP QUERIES:
+- You are being asked about the ship: {ship_name}
+- ONLY use information provided in the SHIP DATABASE ACCESS section below
+- DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
+- Be informative and comprehensive in presenting ship information
+- Include specifications, class, registry, crew complement, mission history when available
+- Focus on technical details, capabilities, and significant events
+- If information comes from external sources, reference it naturally
+- If ship information is not in the database, say: "I don't have any records for {ship_name} in my database"
+- Provide a comprehensive summary and ask: "Would you like to explore any particular aspect of this vessel?"
+- Use REAL EARTH DATES - preserve all dates in actual Earth calendar format for accuracy
+
+SHIP DATABASE ACCESS:
+{converted_ship_info if converted_ship_info else f"No records found for '{ship_name}' in the database."}
+
+NOTE: All dates are preserved in real Earth calendar format for accuracy.
+
+Provide a comprehensive and informative summary of this vessel's specifications and service record."""
 
 
 def get_stardancer_info_context(user_message: str, strategy: Dict[str, Any], is_roleplay: bool = False) -> str:
