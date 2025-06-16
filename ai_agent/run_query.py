@@ -254,8 +254,9 @@ def test_log_category_filtering() -> bool:
         
         # Test log category detection
         test_categories = [
-            'Stardancer Log', 'Ship Information', 'Episode Summary', 
-            'Mission Log', 'Characters', 'Medical Log', 'General Information'
+            'Stardancer Log', 'Ship Information', 'Stardancer Episode Summary', 
+            'Mission Log', 'Characters', 'Medical Log', 'General Information',
+            'Adagio Episode Summary', 'Pilgrim Log'
         ]
         
         print(f"Testing category filtering:")

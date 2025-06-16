@@ -78,6 +78,27 @@ def _get_roleplay_context_from_caller() -> bool:
     
     return False  # Default to non-roleplay
 
+def is_episode_summary(result: dict) -> bool:
+    """
+    Check if a database result is an episode summary that should be filtered out.
+    
+    Args:
+        result: Database result dictionary with 'categories' key
+        
+    Returns:
+        True if this is an episode summary, False otherwise
+    """
+    categories = result.get('categories', [])
+    if not categories:
+        return False
+    
+    # Check for episode summary pattern in any category
+    for cat in categories:
+        if 'episode summary' in cat.lower():
+            return True
+    
+    return False
+
 def is_ship_log_title(title: str) -> bool:
     """Enhanced ship log title detection supporting multiple formats:
     - Ship Name Date
@@ -549,7 +570,17 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             results = controller.search_pages(query, limit=20, force_mission_logs_only=True)
             print(f"   📊 Force mission logs search returned {len(results)} results")
         
-        unique_results = results
+        # Filter out episode summaries from the main results
+        filtered_results = []
+        for r in results:
+            if is_episode_summary(r):
+                categories = r.get('categories', [])
+                episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
+                print(f"   ❌ Filtering out episode summary from main results: '{r['title']}' Category='{episode_cat}'")
+            else:
+                filtered_results.append(r)
+        
+        unique_results = filtered_results
         
         if not unique_results and not mission_logs_only:
             # Fallback: Try general hierarchical search with log keywords (only if not mission_logs_only)
@@ -563,6 +594,12 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
                 title = r['title']
                 content_preview = r['raw_content'][:50] + "..." if len(r['raw_content']) > 50 else r['raw_content']
                 categories = r.get('categories', [])
+                
+                # Filter out episode summaries
+                if is_episode_summary(r):
+                    episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
+                    print(f"   ❌ Filtering out episode summary: '{title}' Category='{episode_cat}'")
+                    continue
                 
                 # Check if it has log categories or use enhanced ship log detection
                 if any(cat in log_categories for cat in categories):
@@ -734,6 +771,13 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
         log_summaries = []
 
         for result in results:
+            # Filter out episode summaries
+            if is_episode_summary(result):
+                categories = result.get('categories', [])
+                episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
+                print(f"   ❌ Filtering out episode summary from recent logs: '{result['title']}' Category='{episode_cat}'")
+                continue
+            
             title = result['title']
             content = result['raw_content']
             log_date = result['log_date']
@@ -1217,6 +1261,15 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
             print(f"   ❌ No random log found{ship_msg}")
             return f"No mission logs found{ship_msg} in the database."
         
+        # Filter out episode summaries
+        if is_episode_summary(random_log):
+            categories = random_log.get('categories', [])
+            episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
+            print(f"   ❌ Random log is episode summary, skipping: '{random_log['title']}' Category='{episode_cat}'")
+            # Try to get another random log that's not an episode summary
+            print(f"   🔄 Attempting to get another random log (not episode summary)")
+            return get_random_log_content(ship_name, is_roleplay)
+        
         title = random_log['title']
         content = random_log['raw_content']
         log_date = random_log.get('log_date', 'Unknown Date')
@@ -1258,6 +1311,13 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
         log_contents = []
         
         for result in results:
+            # Filter out episode summaries
+            if is_episode_summary(result):
+                categories = result.get('categories', [])
+                episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
+                print(f"   ❌ Filtering out episode summary from temporal logs: '{result['title']}' Category='{episode_cat}'")
+                continue
+            
             title = result['title']
             content = result['raw_content']
             log_date = result.get('log_date', 'Unknown Date')

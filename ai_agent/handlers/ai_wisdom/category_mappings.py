@@ -259,9 +259,19 @@ def is_log_category(category: str) -> bool:
         category: Category name to check
         
     Returns:
-        True if category contains 'log', False otherwise
+        True if category contains 'log' but is not an episode summary, False otherwise
     """
-    return 'log' in category.lower()
+    category_lower = category.lower()
+    
+    # Must contain 'log' to be considered a log category
+    if 'log' not in category_lower:
+        return False
+    
+    # Exclude episode summaries - pattern: "*shipname* episode summary"
+    if 'episode summary' in category_lower:
+        return False
+    
+    return True
 
 def get_all_log_categories() -> List[str]:
     """
@@ -314,14 +324,14 @@ def get_ship_specific_log_categories(ship_name: Optional[str] = None) -> List[st
 
 def filter_categories_for_logs(categories: List[str]) -> List[str]:
     """
-    Filter a list of categories to only include those containing 'log'.
+    Filter a list of categories to only include those containing 'log' and excluding episode summaries.
     
     Args:
         categories: List of categories to filter
         
     Returns:
-        Filtered list containing only log categories
+        Filtered list containing only log categories (excluding episode summaries)
     """
     log_categories = [cat for cat in categories if is_log_category(cat)]
-    print(f"   🔍 Filtered {len(categories)} categories -> {len(log_categories)} log categories")
+    print(f"   🔍 Filtered {len(categories)} categories -> {len(log_categories)} log categories (excluded episode summaries)")
     return log_categories 
