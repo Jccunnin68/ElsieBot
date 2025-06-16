@@ -9,12 +9,7 @@ query_detection.py and log_processor.py to avoid circular imports.
 import re
 from typing import Optional, Dict, List
 
-# REMOVED: SHIP_NAMES hardcoded array - replaced with dynamic category detection
-# Ship names are now detected dynamically from database categories using:
-# - get_ship_categories() which finds categories containing 'ship' or 'starship'
-# - Real MediaWiki categories instead of hardcoded lists
-# This eliminates maintenance of hardcoded ship lists and uses real data.
-# Log indicators for query detection - cleaned of hardcoded ship names
+
 LOG_INDICATORS = [
     'log', 'logs', 'entry', 'entries', 'mission', 'missions', 
     'report', 'reports', 'record', 'records', 'duty log',

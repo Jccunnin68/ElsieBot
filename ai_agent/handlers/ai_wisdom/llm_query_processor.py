@@ -9,7 +9,6 @@ for roleplay vs non-roleplay scenarios with character rule integration.
 
 import time
 import random
-import re
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, List
 from datetime import datetime, timedelta
@@ -30,11 +29,7 @@ class ProcessingResult:
 
 @dataclass
 class CharacterContext:
-    """Character context information for LLM processing"""
-    ship_context: Optional[str] = None
-    dgm_accounts: List[str] = None
-    character_designations: List[str] = None
-    ooc_patterns_found: List[str] = None
+    """Minimal character context - LLM handles all character processing"""
     roleplay_active: bool = False
 
 
@@ -171,44 +166,13 @@ class LLMQueryProcessor:
             return None
             
     def _extract_character_context(self, raw_data: str, user_query: str) -> CharacterContext:
-        """Extract character context from raw data for processing"""
+        """Extract minimal character context - LLM handles all character processing"""
         try:
-            # REMOVED: extract_ship_name_from_log_content import - function was removed in Phase 3
-# Ship context is now handled by category-based database searches
-            from ..ai_attention.dgm_handler import check_dgm_post
-            from ..ai_attention.exit_conditions import detect_roleplay_exit_conditions
             from ..ai_attention.state_manager import get_roleplay_state
             
             context = CharacterContext()
             
-            # REMOVED: Ship context extraction - now handled by category-based database searches
-            # The ship context is passed by the caller who gets it from category-based searches
-            context.ship_context = None
-            
-            # Check for DGM accounts and designations
-            dgm_accounts = ['liorexus', 'isis', 'cygnus', 'illuice', 'captain_rien', 'captain_riens']
-            context.dgm_accounts = [acc for acc in dgm_accounts if acc.lower() in raw_data.lower()]
-            
-            # Look for character designation patterns
-            designation_patterns = [
-                r'\[([^\]]+)\]',  # [Character Name]
-                r'([A-Z][a-z]+):',  # Character:
-                r'\(([A-Z][a-z]+)\)'  # (Character)
-            ]
-            
-            context.character_designations = []
-            for pattern in designation_patterns:
-                matches = re.findall(pattern, raw_data)
-                context.character_designations.extend(matches)
-            
-            # Check for OOC patterns
-            ooc_patterns = [r'\(\([^)]*\)\)', r'//[^/]*', r'\[ooc[^\]]*\]', r'\booc:']
-            context.ooc_patterns_found = []
-            for pattern in ooc_patterns:
-                if re.search(pattern, raw_data, re.IGNORECASE):
-                    context.ooc_patterns_found.append(pattern)
-            
-            # Check roleplay state
+            # Only check roleplay state for logging/debugging purposes
             try:
                 rp_state = get_roleplay_state()
                 context.roleplay_active = rp_state.is_roleplaying
@@ -220,6 +184,61 @@ class LLMQueryProcessor:
         except Exception as e:
             print(f"⚠️  Error extracting character context: {e}")
             return CharacterContext()
+    
+    def _build_character_processing_rules(self, character_context: CharacterContext) -> List[str]:
+        """Build character processing rules dynamically from log_patterns.py"""
+        try:
+            # Import character corrections from log_patterns.py
+            from .log_patterns import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, FALLBACK_CHARACTER_CORRECTIONS
+            
+            character_rules = [
+                f"- Roleplay Session Active: {character_context.roleplay_active}",
+                "- Character Disambiguation Rules (APPLY THESE):"
+            ]
+            
+            # Add ship-specific corrections
+            character_rules.append("  SHIP-SPECIFIC CORRECTIONS:")
+            for ship, corrections in SHIP_SPECIFIC_CHARACTER_CORRECTIONS.items():
+                ship_corrections = []
+                for incorrect, correct in corrections.items():
+                    ship_corrections.append(f"'{incorrect}' → '{correct}'")
+                character_rules.append(f"  * {ship.title()}: {', '.join(ship_corrections)}")
+            
+            # Add general character corrections
+            character_rules.append("  GENERAL CHARACTER CORRECTIONS:")
+            for incorrect, correct in FALLBACK_CHARACTER_CORRECTIONS.items():
+                character_rules.append(f"  * '{incorrect}' → '{correct}'")
+            
+            # Add other processing rules
+            character_rules.extend([
+                "- DGM Character Control Patterns:",
+                "  * Process [Character], Character:, (Character) patterns",
+                "  * Handle DGM gamemaster accounts (liorexus, isis, cygnus, illuice, captain_rien)",
+                "- [DOIC] Channel Rules:",
+                "  * Content in [DOIC] channels is primarily narration or other character dialogue",
+                "  * Rarely will [DOIC] content be from the character@account_name speaking",
+                "  * Treat [DOIC] content as environmental/narrative description",
+                "- OOC Content Filtering:",
+                "  * Filter out ((text)), //text, [ooc text], ooc: patterns",
+                "- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION",
+                "- Apply character name corrections using ship context",
+                "- Resolve ambiguous character names with proper ranks/titles",
+                "- Use surrounding text context for ambiguous names like 'tolena' and 'blaine'"
+            ])
+            
+            return character_rules
+            
+        except Exception as e:
+            print(f"⚠️  Error building character processing rules: {e}")
+            # Fallback to basic rules if import fails
+            return [
+                f"- Roleplay Session Active: {character_context.roleplay_active}",
+                "- Character Disambiguation Rules: Apply basic character name corrections",
+                "- DGM Character Control Patterns: Process [Character], Character:, (Character) patterns",
+                "- [DOIC] Channel Rules: Treat as narration/environmental description",
+                "- OOC Content Filtering: Filter out ((text)), //text, [ooc text], ooc: patterns",
+                "- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION"
+            ]
             
     def process_query_results(self, query_type: str, raw_data: str, user_query: str, 
                             is_roleplay: bool = False, force_processing: bool = False) -> ProcessingResult:
@@ -287,13 +306,9 @@ class LLMQueryProcessor:
     def _process_with_character_rules(self, raw_data: str, user_query: str, query_type: str, 
                                     is_roleplay: bool, original_size: int) -> ProcessingResult:
         """Unified processing method with character rule integration"""
-        # Extract character context for enhanced processing
+        # Extract minimal character context (LLM handles all character processing)
         character_context = self._extract_character_context(raw_data, user_query)
-        print(f"🎭 CHARACTER CONTEXT: ship={character_context.ship_context}, "
-              f"dgm_accounts={len(character_context.dgm_accounts)}, "
-              f"designations={len(character_context.character_designations)}, "
-              f"ooc_patterns={len(character_context.ooc_patterns_found)}, "
-              f"roleplay_active={character_context.roleplay_active}")
+        print(f"🎭 CHARACTER CONTEXT: roleplay_active={character_context.roleplay_active} (LLM handles all character processing)")
             
         # Attempt processing
         try:
@@ -376,7 +391,7 @@ class LLMQueryProcessor:
         """Create optimized prompt for log processing with minimal summarization"""
         return f"""You are a mission log processor. Process the following mission logs in response to this query: "{query}"
 
-CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. Use ALL available space to preserve as much log content as possible.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 30000-33000 characters. Use ALL available space to preserve as much log content as possible.
 
 INSTRUCTIONS:
 - PRESERVE as much original log content as possible - minimize summarization
@@ -386,7 +401,7 @@ INSTRUCTIONS:
 - Include ALL significant events, decisions, and outcomes
 - Preserve character personalities through their actual words and actions
 - Keep ALL mission context, technical details, and background information
-- MINIMAL SUMMARIZATION: Only condense if absolutely necessary to fit 14000 characters
+- MINIMAL SUMMARIZATION: Only condense if absolutely necessary to fit 33000 characters
 - PRIORITY: Completeness over brevity - use every available character
 - Preserve the narrative flow and dramatic moments from the logs
 
@@ -399,44 +414,9 @@ Process these logs with minimal summarization, preserving as much original conte
                                                  character_context: CharacterContext) -> str:
         """Create character-aware prompt for log summarization with disambiguation rules"""
         
-        # Build character rule context
-        character_rules = []
-        
-        if character_context.ship_context:
-            character_rules.append(f"- Ship Context: {character_context.ship_context}")
-        
-        if character_context.dgm_accounts:
-            character_rules.append(f"- DGM Accounts Present: {', '.join(character_context.dgm_accounts)}")
-            character_rules.append("- Apply DGM character control rules: [Character], Character:, (Character) patterns")
-        
-        if character_context.character_designations:
-            character_rules.append(f"- Character Designations Found: {', '.join(set(character_context.character_designations))}")
-        
-        if character_context.ooc_patterns_found:
-            character_rules.append("- OOC Content Detected: Filter out ((text)) patterns")
-        
-        character_rules.append(f"- Roleplay Session Active: {character_context.roleplay_active}")
-        
-        # Character disambiguation rules to apply
-        character_rules.append("- Character Disambiguation Rules (APPLY THESE):")
-        character_rules.append("  * 'Tolena' → 'Ensign Maeve Blaine' (Stardancer) or 'Doctor t'Lena' (other ships)")
-        character_rules.append("  * 'Blaine' → 'Captain Marcus Blaine' (Stardancer) or 'Ensign Maeve Blaine' (context dependent)")
-        character_rules.append("  * 'Trip' → Enterprise character (avoid confusion with 'trip' as journey)")
-        character_rules.append("  * Apply ship context for character disambiguation")
-        
-        # DOIC Channel Rules
-        character_rules.append("- [DOIC] Channel Rules:")
-        character_rules.append("  * Content in [DOIC] channels is primarily narration or other character dialogue")
-        character_rules.append("  * Rarely will [DOIC] content be from the character@account_name speaking")
-        character_rules.append("  * Treat [DOIC] content as environmental/narrative description")
-        
-        # CRITICAL: Perform character processing
-        character_rules.append("- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION")
-        character_rules.append("- Apply character name corrections using ship context")
-        character_rules.append("- Resolve ambiguous character names with proper ranks/titles")
-        character_rules.append("- Filter OOC content: ((text)), //text, [ooc text], ooc:")
-        
-        character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
+        # Build character processing rules dynamically from log_patterns.py
+        character_rules = self._build_character_processing_rules(character_context)
+        character_context_text = "\n".join(character_rules)
         
         return f"""You are a mission log processor with character rule awareness. Process the following mission logs in response to this query: "{query}"
 
@@ -493,42 +473,9 @@ Provide a well-organized response that thoroughly addresses the user's query whi
                                                      character_context: CharacterContext) -> str:
         """Create character-aware prompt for general data with disambiguation rules"""
         
-        # Build character rule context
-        character_rules = []
-        
-        if character_context.ship_context:
-            character_rules.append(f"- Ship Context: {character_context.ship_context}")
-        
-        if character_context.dgm_accounts:
-            character_rules.append(f"- DGM Accounts Present: {', '.join(character_context.dgm_accounts)}")
-        
-        if character_context.character_designations:
-            character_rules.append(f"- Character Designations Found: {', '.join(set(character_context.character_designations))}")
-        
-        if character_context.ooc_patterns_found:
-            character_rules.append("- OOC Content Detected: Filter appropriately")
-        
-        character_rules.append(f"- Roleplay Session Active: {character_context.roleplay_active}")
-        
-        # Character Disambiguation Rules to apply
-        character_rules.append("- Character Disambiguation Rules (APPLY THESE):")
-        character_rules.append("  * Ship-context aware character resolution")
-        character_rules.append("  * 'Trip' → Enterprise character (avoid confusion with 'trip' as journey)")
-        character_rules.append("  * Apply proper character name formatting with context")
-        
-        # DOIC Channel Rules
-        character_rules.append("- [DOIC] Channel Rules:")
-        character_rules.append("  * Content in [DOIC] channels is primarily narration or other character dialogue")
-        character_rules.append("  * Rarely will [DOIC] content be from the character@account_name speaking")
-        character_rules.append("  * Treat [DOIC] content as environmental/narrative description")
-        
-        # CRITICAL: Perform character processing
-        character_rules.append("- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION")
-        character_rules.append("- Apply character corrections and resolve ambiguities")
-        character_rules.append("- Use ship context for proper character identification")
-        character_rules.append("- Filter OOC content appropriately")
-        
-        character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
+        # Build character processing rules dynamically from log_patterns.py
+        character_rules = self._build_character_processing_rules(character_context)
+        character_context_text = "\n".join(character_rules)
         
         return f"""You are a database analyst with character rule awareness. Process the following information in response to this query: "{query}"
 
@@ -561,44 +508,9 @@ Provide a well-organized response that thoroughly addresses the user's query whi
                                                character_context: CharacterContext) -> str:
         """Create prompt for character processing only (no summarization)"""
         
-        # Build character rule context
-        character_rules = []
-        
-        if character_context.ship_context:
-            character_rules.append(f"- Ship Context: {character_context.ship_context}")
-        
-        if character_context.dgm_accounts:
-            character_rules.append(f"- DGM Accounts Present: {', '.join(character_context.dgm_accounts)}")
-            character_rules.append("- Apply DGM character control rules: [Character], Character:, (Character) patterns")
-        
-        if character_context.character_designations:
-            character_rules.append(f"- Character Designations Found: {', '.join(set(character_context.character_designations))}")
-        
-        if character_context.ooc_patterns_found:
-            character_rules.append("- OOC Content Detected: Filter out ((text)) patterns")
-        
-        character_rules.append(f"- Roleplay Session Active: {character_context.roleplay_active}")
-        
-        # Character disambiguation rules to apply
-        character_rules.append("- Character Disambiguation Rules (APPLY THESE):")
-        character_rules.append("  * 'Tolena' → 'Ensign Maeve Blaine' (Stardancer) or 'Doctor t'Lena' (other ships)")
-        character_rules.append("  * 'Blaine' → 'Captain Marcus Blaine' (Stardancer) or 'Ensign Maeve Blaine' (context dependent)")
-        character_rules.append("  * 'Trip' → Enterprise character (avoid confusion with 'trip' as journey)")
-        character_rules.append("  * Apply ship context for character disambiguation")
-        
-        # DOIC Channel Rules
-        character_rules.append("- [DOIC] Channel Rules:")
-        character_rules.append("  * Content in [DOIC] channels is primarily narration or other character dialogue")
-        character_rules.append("  * Rarely will [DOIC] content be from the character@account_name speaking")
-        character_rules.append("  * Treat [DOIC] content as environmental/narrative description")
-        
-        # CRITICAL: Perform character processing
-        character_rules.append("- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION")
-        character_rules.append("- Apply character name corrections using ship context")
-        character_rules.append("- Resolve ambiguous character names with proper ranks/titles")
-        character_rules.append("- Filter OOC content: ((text)), //text, [ooc text], ooc:")
-        
-        character_context_text = "\n".join(character_rules) if character_rules else "- No specific character context detected"
+        # Build character processing rules dynamically from log_patterns.py
+        character_rules = self._build_character_processing_rules(character_context)
+        character_context_text = "\n".join(character_rules)
         
         return f"""You are a mission log character processor. Apply character disambiguation and formatting rules to the following content.
 
