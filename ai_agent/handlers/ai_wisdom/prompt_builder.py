@@ -32,7 +32,7 @@ INSTRUCTIONS:
 - SYNTHESIZE all provided information into a well-organized response.
 - STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
 - ACCURACY: Only use information explicitly provided in the search results.
-- DO NOT INVENT INFORMATION.
+- CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the results, state that you do not have the information.
 - You do not need to format it like an email
 - It should appear like a infomrative page.
 - Conclude by asking if there is anything else you can help with.
@@ -60,7 +60,7 @@ INSTRUCTIONS:
 - SYNTHESIZE all provided information into a well-organized long form response.
 - STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
 - ACCURACY: Only use information explicitly provided in the search results.
-- DO NOT INVENT INFORMATION.
+- CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the logs, state that you do not have that information.
 - You do not need to format it like an email
 - Conclude by asking if there is anything else you can help with.
 
@@ -85,6 +85,9 @@ Provide a concise retelling of these events.
     def build_character_with_associates_prompt(self, primary_character: Dict, associates: List[Dict]) -> str:
         """Builds a prompt that focuses on a primary character and lists associates."""
         
+        if not primary_character:
+            return "I was unable to find any information on that individual in the database."
+
         primary_content = self._format_character_results([primary_character], is_primary=True)
         associates_content = self._format_character_results(associates, is_primary=False) if associates else "None"
 
@@ -98,7 +101,7 @@ INSTRUCTIONS:
 - KNOWN ASSOCIATES: After the primary summary, create a section titled "Known Associates" and briefly list the other individuals (you do not have to indicate a lack of information past their names).
 - ACCURACY: Only use information explicitly provided in the search results.
 - CLARITY: Present information in an accessible, informative manner.
-- DO NOT INVENT INFORMATION.
+- CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the database, state that you do not have that information.
 - use bulleted lists and numbered lists when appropriate.
 - Dedicate 75 percent of your response to the primary character and 25 percent to the associates with similiar names taking precedence.
 - If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
@@ -151,6 +154,8 @@ def get_simple_chat_prompt(user_message: str, conversation_history: List[Dict]) 
 You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
 Maintain a helpful, sophisticated, and slightly formal persona.
 The user is having a simple conversation with you. Respond directly and naturally.
+
+CRITICAL: Do not invent or fabricate information. If you do not know something, say so.
 
 {history_prompt}
 

@@ -233,7 +233,10 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str, conversati
 **ROLEPLAY DATABASE CONTEXT:**
 {database_context}
 
-Use this information naturally in your roleplay response when relevant. Don't just recite facts - weave them into the conversation organically."""
+CRITICAL: You may use the information from the database context in your roleplay response.
+However, you MUST NOT invent or fabricate any details that are not explicitly present in the provided context.
+If the information is not here, you do not know it.
+Weave any used facts into the conversation organically, do not just recite them."""
 
     conversation_section = ""
     if conversation_context:

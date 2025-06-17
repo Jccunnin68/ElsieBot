@@ -50,9 +50,8 @@ CRITICAL INSTRUCTIONS:
 1.  Preserve all essential entities like character names, ship names, locations, specific dates, and technical terms from the original context.
 2.  Retain the key points and flow of the most recent conversation history.
 3.  The goal is to create a condensed version of the original context that allows the AI to respond accurately to the user's final message.
-4.  Do NOT add any new information or dialogue. Your output should be only the summarized text.
-5.  Do not include any new information or dialogue. Your output should be only the summarized text.
-6.  It should be in Narrative Style unless already a bullet point list.
+4.  Your output must be only the summarized text. You must not add, invent, or speculate on any information that is not explicitly in the provided context.
+5.  It should be in Narrative Style unless already a bullet point list.
 
 CONTEXT TO SUMMARIZE:
 ---
