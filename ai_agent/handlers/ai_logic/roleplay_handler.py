@@ -1,184 +1,61 @@
 """
-Roleplay Message Handler - Context-Aware Character Interactions
-==============================================================
+Roleplay Handler - Engine-Driven Roleplay Logic
+================================================
 
-This module handles ALL responses when Elsie is in roleplay mode.
-Provides context-aware, character-driven responses including:
-- Enhanced contextual intelligence from ai_attention
-- Emotional intelligence from ai_emotion  
-- Database queries via ai_wisdom (quick response mode)
-- Character relationship tracking
-- Cross-channel roleplay state management
-
-CRITICAL: This handler is ONLY called when in roleplay mode.
-ENHANCED: Quick database response mode for efficient roleplay flow.
+This module handles all incoming messages during an active roleplay session,
+now acting as a lightweight orchestrator for the AttentionEngine.
 """
-
-from typing import Dict, List, Optional
-
-
+from typing import List, Dict
 
 from .response_decision import ResponseDecision
-from .query_detection import detect_query_type_with_conflicts
+from ..ai_attention import (
+    get_roleplay_state,
+    check_dgm_post,
+    handle_dgm_command,
+    get_attention_engine
+)
+from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
 
+def handle_roleplay_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
+    """
+    Handles messages during a roleplay session using the new engine-driven architecture.
 
-def handle_roleplay_message(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
+    Flow:
+    1.  Check for non-LLM DGM commands first for efficiency.
+    2.  If not a DGM command, delegate to the AttentionEngine to get the response strategy.
+    3.  If the engine decides a response is needed, build the context for that strategy.
+    4.  Return the final decision.
     """
-    Enhanced roleplay handler with quick database responses and contextual intelligence.
+    rp_state = get_roleplay_state()
     
-    Roleplay mode provides:
-    - Quick database queries (single best result)
-    - Enhanced contextual and emotional intelligence
-    - Character relationship tracking
-    - Cross-channel roleplay awareness
-    - NO disambiguation (quick response flow)
-    
-    Args:
-        user_message: The user's message
-        conversation_history: Previous conversation turns
-        channel_context: Channel and context information
-        
-    Returns:
-        ResponseDecision with appropriate strategy
-    """
-    print(f"\n🎭 ROLEPLAY HANDLER - Enhanced quick response mode")
-    
-    # Handle cross-channel busy state first
-    from .response_router import is_cross_channel_message
-    if is_cross_channel_message(channel_context):
-        return handle_cross_channel_busy(None, channel_context)
-    
-    # Detect query type with conflict resolution
-    query_info = detect_query_type_with_conflicts(user_message)
-    
-    print(f"   📋 Query Analysis: {query_info['type']} - {query_info.get('subject', 'N/A')}")
-    if query_info.get('conflict_resolved'):
-        print(f"      ⚖️  Conflict Resolution: {query_info['conflict_resolved']}")
-    
-    # Route to quick response strategies for database queries
-    database_query_types = ['character', 'ship', 'ship_log', 'character_log', 'tell_me_about']
-    if query_info['type'] in database_query_types:
-        return _handle_roleplay_database_query(user_message, query_info)
-    
-    # Route to standard roleplay processing for non-database queries
-    return _handle_standard_roleplay(user_message, conversation_history, channel_context)
+    # 1. Handle DGM commands (non-LLM)
+    dgm_decision = handle_dgm_command(user_message)
+    if dgm_decision:
+        dgm_post_info = check_dgm_post(user_message)
+        if dgm_post_info and dgm_post_info.get('is_scene_end'):
+            rp_state.end_roleplay_session()
+            print("🎬 DGM has ended the scene. Roleplay session terminated.")
+        return dgm_decision
 
+    # 2. Delegate to the AttentionEngine for all other roleplay messages
+    attention_engine = get_attention_engine()
+    decision = attention_engine.determine_response_strategy(user_message, conversation_history, rp_state)
 
-def _handle_roleplay_database_query(user_message: str, query_info: Dict) -> ResponseDecision:
-    """
-    Quick database query for roleplay contexts - return single best result.
-    
-    KEY FEATURE: No disambiguation, just return the most relevant result quickly
-    to maintain roleplay flow.
-    """
-    print(f"   🚀 ROLEPLAY QUICK DATABASE: {query_info['type']}")
-    
-    strategy = {
-        'approach': 'roleplay_quick_database',
-        'needs_database': True,
-        'query_type': query_info['type'],
-        'subject': query_info.get('subject'),
-        'context_priority': 'roleplay',
-        'reasoning': f"Roleplay quick database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
-    }
-    
-    # Add specific query details
-    if query_info.get('log_type'):
-        strategy['log_type'] = query_info['log_type']
-    
-    # Add category intersection requirements
-    if query_info.get('requires_category_intersection'):
-        strategy['valid_categories'] = query_info['valid_categories']
-        strategy['requires_category_intersection'] = True
-        print(f"      📂 Category intersection required: {query_info['valid_categories']}")
-    
-    # Add conflict resolution info
-    if query_info.get('conflict_resolved'):
-        strategy['conflict_info'] = query_info['conflict_resolved']
-        print(f"      ⚖️  Conflict resolved: {query_info['conflict_resolved']}")
-    
-    return ResponseDecision(
-        needs_ai_generation=True,
-        pre_generated_response=None,
-        strategy=strategy
-    )
+    # 3. If a response is needed, build the necessary context
+    if decision.needs_ai_generation:
+        print(f"   🛠️ Building context for selected approach: {decision.strategy.get('approach')}")
+        if 'reasoning' not in decision.strategy:
+            decision.strategy['reasoning'] = f"Roleplay response determined by AttentionEngine with approach: {decision.strategy.get('approach', 'unknown')}"
+        # The context builder now receives the entire strategy dictionary
+        context_prompt = get_enhanced_roleplay_context(decision.strategy, user_message, conversation_history)
+        decision.pre_generated_response = context_prompt
 
-
-def _handle_standard_roleplay(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
-    """
-    Standard roleplay processing using enhanced contextual intelligence.
-    
-    This uses the existing enhanced roleplay system with contextual cues
-    and emotional intelligence integration.
-    """
-    print(f"   🎭 STANDARD ROLEPLAY PROCESSING")
-    
-    try:
-        # Import roleplay state management
-        from ..ai_attention.state_manager import get_roleplay_state
-        
-        # Get current roleplay session state
-        session_id = channel_context.get('channel_id', 'unknown')
-        rp_state = get_roleplay_state()
-        turn_number = len(conversation_history) + 1
-        
-        print(f"      📊 Roleplay State: {rp_state.current_mode}")
-        print(f"      🔄 Turn: {turn_number}")
-        
-        # Enhanced LLM-based routing and contextual intelligence processing
-        from ..ai_attention.conversation_memory import ConversationMemory
-        
-        # Use conversation memory for LLM-enhanced routing
-        conversation_memory = ConversationMemory()
-        
-        # Add current turn to conversation memory
-        conversation_memory.add_turn(
-            speaker="User",
-            message=user_message,
-            turn_number=turn_number,
-            message_type="standard"
-        )
-        
-        # Get LLM-enhanced routing decision
-        routing_result = conversation_memory.process_message_enhanced(
-            user_message, 
-            turn_number, 
-            conversation_history, 
-            channel_context
-        )
-        
-        print(f"      🧠 LLM Routing: {routing_result.get('processing_approach', 'unknown')}")
-        print(f"      🎯 Confidence: {routing_result.get('routing_confidence', 0.0):.2f}")
-        
-        # Convert LLM routing to response decision
-        response_decision = _convert_llm_routing_to_response_decision(routing_result, user_message)
-        
-        # Update roleplay state
-        _update_roleplay_state_from_decision(response_decision, routing_result.get('contextual_cues'), rp_state, turn_number)
-        
-        # Convert to final response decision
-        final_decision = _convert_to_final_response_decision(response_decision, routing_result.get('contextual_cues'))
-        
-        return final_decision
-        
-    except Exception as e:
-        print(f"   ❌ ERROR in standard roleplay processing: {e}")
-        # Fallback to simple roleplay response
-        return ResponseDecision(
-            needs_ai_generation=True,
-            pre_generated_response=None,
-            strategy={
-                'approach': 'roleplay_fallback',
-                'needs_database': False,
-                'reasoning': f'Roleplay processing error fallback: {e}',
-                'context_priority': 'roleplay'
-            }
-        )
+    return decision
 
 
 def handle_cross_channel_busy(rp_state, channel_context: Dict) -> ResponseDecision:
     """
-    Handle cross-channel busy state - Elsie is active in another channel.
+    Handles messages sent to a different channel while Elsie is in roleplay.
     
     Returns a pre-generated response indicating she's busy elsewhere.
     """
@@ -401,9 +278,6 @@ def _convert_llm_routing_to_response_decision(routing_result: Dict, user_message
         print(f"      ❌ Error converting LLM routing: {e}")
         # Fallback to basic response decision
         return _create_basic_response_decision(user_message)
-
-
-
 
 
 def _create_basic_response_decision(user_message: str):

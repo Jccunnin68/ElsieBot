@@ -2,7 +2,7 @@
 AI Act - Discord Bot Interface Layer
 ====================================
 
-This module serves as the interface between the Discord bot and the AI logic.
+This module serves as the interface between the Discord bot and the AI engine.
 It handles response delivery, channel context formatting, and Discord-specific operations.
 
 Key Responsibilities:

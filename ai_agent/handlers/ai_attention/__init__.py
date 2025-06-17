@@ -1,63 +1,37 @@
 """
-AI Attention - Roleplay State Management Package
-===============================================
+AI Attention - Conversational State and Strategy
+=================================================
 
-This package handles all roleplay session management and conversation tracking.
-It manages character interactions, turn-based conversation flow, and roleplay session lifecycle.
+This package is responsible for tracking the state of the conversation
+and determining the AI's response strategy, especially during roleplay.
 
-Components:
-- dgm_handler.py: Deputy Game Master post handling and scene management
-- character_tracking.py: Character name extraction and validation
-- channel_restrictions.py: Channel permission and restriction logic
-- state_manager.py: RoleplayStateManager class for session tracking
-- response_logic.py: Decision logic for when Elsie should respond
-- exit_conditions.py: Roleplay exit condition detection
+New Architecture:
+- attention_engine.py: A powerful LLM-based "Roleplay Director" that
+  analyzes the full conversational context to decide on the optimal
+  response strategy for Elsie. Replaces response_logic.py.
 
-Usage:
-    from handlers.ai_attention import RoleplayStateManager
-    
-    state_manager = RoleplayStateManager()
+Core Components:
+- state_manager.py: Manages the RoleplayStateManager.
+- character_tracking.py: Utility for extracting character names.
+- dgm_handler.py: Handles commands from the DGM (Dungeon Game Master).
 """
-
-from .dgm_handler import check_dgm_post, extract_characters_from_dgm_post
-from .character_tracking import (
-    extract_character_names_from_emotes, 
-    is_valid_character_name,
-    extract_addressed_characters,
-    extract_current_speaker
-)
-from .channel_restrictions import is_roleplay_allowed_channel
-from .state_manager import RoleplayStateManager, get_roleplay_state
-from .response_logic import (
-    check_subtle_bar_interaction,
-    check_if_other_character_addressed,
-    extract_drink_from_emote
-)
-from .exit_conditions import detect_roleplay_exit_conditions
+from .state_manager import get_roleplay_state, RoleplayStateManager
+from .character_tracking import extract_character_names_from_emotes
+from .dgm_handler import check_dgm_post, handle_dgm_command
+from .attention_engine import get_attention_engine
 
 __all__ = [
-    # DGM handling
-    'check_dgm_post',
-    'extract_characters_from_dgm_post',
-    
-    # Character tracking
-    'extract_character_names_from_emotes',
-    'is_valid_character_name', 
-    'extract_addressed_characters',
-    'extract_current_speaker',
-    
-    # Channel restrictions
-    'is_roleplay_allowed_channel',
-    
-    # State management
-    'RoleplayStateManager',
+    # New Attention Engine
+    'get_attention_engine',
+
+    # State Management
     'get_roleplay_state',
-    
-    # Response logic
-    'check_subtle_bar_interaction',
-    'check_if_other_character_addressed',
-    'extract_drink_from_emote',
-    
-    # Exit conditions
-    'detect_roleplay_exit_conditions',
+    'RoleplayStateManager',
+
+    # Utilities
+    'extract_character_names_from_emotes',
+
+    # DGM Handling (Non-LLM)
+    'check_dgm_post',
+    'handle_dgm_command'
 ] 

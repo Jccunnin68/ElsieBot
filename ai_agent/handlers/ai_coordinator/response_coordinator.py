@@ -10,7 +10,7 @@ from typing import Dict
 
 from handlers.ai_logic.response_router import route_message_to_handler
 from handlers.ai_attention import extract_character_names_from_emotes, get_roleplay_state
-from .ai_engine import generate_ai_response_with_decision
+from handlers.ai_coordinator.ai_engine import generate_ai_response_with_decision
 
 
 def coordinate_response(user_message: str, conversation_history: list, channel_context: Dict = None) -> str:

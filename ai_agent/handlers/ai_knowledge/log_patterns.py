@@ -52,6 +52,27 @@ SHIP_SPECIFIC_CHARACTER_CORRECTIONS = {
         'dr tolena': 'Doctor t\'Lena',
     }
 }
+FLEET_SHIP_NAMES = [
+    'stardancer',
+    'USS Stardancer',
+    'protector',
+    'USS Protector',
+    'manta',
+    'USS Manta',
+    'pilgrim',
+    'USS Pilgrim',
+    'gigantes',
+    'mjolnir',
+    'adagio',
+    'USS Adagio',
+    'caelian',
+    'USS Caelian',
+    'mjolnir',
+    'USS Mjolnir',
+    'gigantes',
+    'USS Gigantes',
+    
+]
 
 # Fallback character corrections when ship context is unknown or not ship-specific
 FALLBACK_CHARACTER_CORRECTIONS = {

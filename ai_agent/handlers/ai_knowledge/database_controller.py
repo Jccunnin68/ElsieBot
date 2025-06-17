@@ -65,23 +65,22 @@ class FleetDatabaseController:
                     base_query = """
                         SELECT id, title, raw_content, url, categories,
                                CASE 
-                                   WHEN to_tsvector('english', title) @@ plainto_tsquery('english', %s) THEN
-                                       ts_rank(to_tsvector('english', title), plainto_tsquery('english', %s)) + 2.0
-                                   WHEN LOWER(title) LIKE LOWER(%s) THEN 1.5
-                                   WHEN LOWER(raw_content) LIKE LOWER(%s) THEN 1.0
-                                   ELSE 0.5
+                                   WHEN to_tsvector('english', title) @@ to_tsquery('english', %s) THEN
+                                       ts_rank(to_tsvector('english', title), to_tsquery('english', %s)) + 2.0
+                                   ELSE 
+                                       ts_rank(to_tsvector('english', raw_content), to_tsquery('english', %s))
                                END as rank
                         FROM wiki_pages 
                         WHERE (
-                            to_tsvector('english', title) @@ plainto_tsquery('english', %s) OR
-                            LOWER(title) LIKE LOWER(%s) OR
-                            LOWER(raw_content) LIKE LOWER(%s)
+                            to_tsvector('english', title) @@ to_tsquery('english', %s) OR
+                            to_tsvector('english', raw_content) @@ to_tsquery('english', %s)
                         )
                     """
                     
                     # Parameters for base query
-                    like_pattern = f'%{query}%'
-                    params = [query, query, like_pattern, like_pattern, query, like_pattern, like_pattern]
+                    # Format the query for to_tsquery, looking for phrases
+                    ts_query = ' & '.join(query.split())
+                    params = [ts_query, ts_query, ts_query, ts_query, ts_query]
                     
                     # Add category filter if specified
                     if categories and len(categories) > 0:
@@ -171,7 +170,7 @@ class FleetDatabaseController:
                         WHERE categories IS NOT NULL 
                         AND EXISTS (
                             SELECT 1 FROM unnest(categories) cat 
-                            WHERE LOWER(cat) LIKE '%ship%'
+                            WHERE LOWER(cat) LIKE '%ship%' AND LOWER(cat) NOT LIKE '%log%'
                         )
                         ORDER BY category
                     """)
@@ -201,6 +200,23 @@ class FleetDatabaseController:
                     return categories
         except Exception as e:
             print(f"✗ Error getting character categories: {e}")
+            return []
+    
+    def get_all_categories(self) -> List[str]:
+        """Get all distinct categories from the database"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT unnest(categories) as category
+                        FROM wiki_pages
+                        WHERE categories IS NOT NULL AND array_length(categories, 1) > 0
+                        ORDER BY category
+                    """)
+                    categories = [row[0] for row in cur.fetchall()]
+                    return categories
+        except Exception as e:
+            print(f"✗ Error getting all categories: {e}")
             return []
     
     # ==============================================================================

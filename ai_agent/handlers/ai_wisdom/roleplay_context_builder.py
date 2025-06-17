@@ -11,28 +11,37 @@ SIMPLIFIED: Now routes all database queries through the unified search system.
 from typing import Dict, Any, List
 
 from handlers.handlers_utils import is_fallback_response
+from handlers.ai_logic.structured_query_detector import StructuredQueryDetector
+from handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
 
 
 class RoleplayContextBuilder:
     """Context builder for roleplay scenarios."""
     
-    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
+    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str, conversation_history: List[Dict]) -> str:
         """Build context for roleplay strategies."""
         approach = strategy.get('approach', 'roleplay')
         
         if approach == 'roleplay_mock_enhanced':
-            return get_enhanced_roleplay_context(strategy, user_message)
+            return get_enhanced_roleplay_context(strategy, user_message, conversation_history)
         else:
-            return get_roleplay_context(strategy, user_message)
-
-from .content_retriever import (
-    get_content
-)
+            return get_roleplay_context(strategy, user_message, conversation_history)
 
 
+def _format_history_for_prompt(conversation_history: List[Dict]) -> str:
+    """Helper to format a list of conversation history dicts into a string."""
+    if not conversation_history:
+        return ""
+    history_str = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in conversation_history])
+    return f"""
+
+**CONVERSATION MEMORY:**
+{history_str}
+
+This shows the recent flow of conversation. Use this context to maintain continuity, avoid repetition, and respond appropriately to the conversational dynamics."""
 
 
-def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
+def get_roleplay_context(strategy: Dict[str, Any], user_message: str, conversation_history: List[Dict]) -> str:
     """
     Generate context for active roleplay mode.
     
@@ -42,6 +51,7 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     Args:
         strategy: Strategy dictionary containing approach and context info
         user_message: The user's message to analyze
+        conversation_history: List of conversation history dicts
         
     Returns:
         str: Formatted context string for roleplay scenarios
@@ -103,18 +113,10 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     
     if needs_database:
         print(f"   🔍 ROLEPLAY DATABASE QUERY DETECTED")
-        database_context = _get_roleplay_database_context(user_message)
+        database_context = _get_structured_roleplay_database_context(user_message)
         print(f"   📚 Database context length: {len(database_context)} chars")
     
-    # NEW: Get conversation memory context
-    conversation_context = ""
-    if conversation_analysis:
-        # Import here to avoid circular dependency
-        from handlers.ai_attention.state_manager import get_roleplay_state 
-        rp_state = get_roleplay_state()
-        if rp_state.has_conversation_memory():
-            conversation_context = rp_state.get_conversation_context_for_prompt()
-            print(f"   💭 CONVERSATION MEMORY: {len(conversation_context)} chars")
+    conversation_context = _format_history_for_prompt(conversation_history)
     
     # Adjust response style based on why Elsie is responding
     response_style_note = ""
@@ -319,7 +321,7 @@ Detected triggers: {', '.join(triggers)}
 Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, maintain natural conversation flow when you're involved but avoid initiating new interactions." if is_dgm_session else ""}{database_section}{conversation_section}"""
 
 
-def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
+def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str, conversation_history: List[Dict]) -> str:
     """
     PRIMARY: Enhanced roleplay context generation using contextual intelligence.
     
@@ -338,7 +340,7 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
     # Fallback to original if enhanced data not available
     if not response_decision or not contextual_cues:
         print(f"   ⚠️  Enhanced context data not available, falling back to standard context")
-        return get_roleplay_context(strategy, user_message)
+        return get_roleplay_context(strategy, user_message, conversation_history)
     
     print(f"🎭 GENERATING ENHANCED ROLEPLAY CONTEXT:")
     print(f"   🎯 Response Type: {response_decision.response_type.value}")
@@ -350,8 +352,11 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
     character_context = _build_character_relationship_context(contextual_cues)
     
     # Build conversation flow context
-    conversation_context = _build_conversation_flow_context(contextual_cues, response_decision)
+    conversation_flow_context = _build_conversation_flow_context(contextual_cues, response_decision)
     
+    # NEW: Get formatted history from the passed list
+    conversation_history_context = _format_history_for_prompt(conversation_history)
+
     # Build response guidance
     response_guidance = _build_response_guidance(response_decision, contextual_cues)
     
@@ -361,7 +366,9 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
     # Database context if needed
     database_context = ""
     if strategy.get('needs_database'):
-        database_context = _get_roleplay_database_context(user_message)
+        print(f"   🔍 ENHANCED ROLEPLAY: DATABASE QUERY DETECTED")
+        database_context = _get_structured_roleplay_database_context(user_message)
+        print(f"   📚 Database context length: {len(database_context)} chars")
     
     # Personality emphasis
     personality_context = _build_personality_context(contextual_cues)
@@ -376,7 +383,8 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
 
 {character_context}
 
-{conversation_context}
+{conversation_flow_context}
+{conversation_history_context}
 
 {personality_context}
 
@@ -706,106 +714,43 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
     return any(pattern in message_lower for pattern in database_patterns)
 
 
-def _get_roleplay_database_context(user_message: str) -> str:
-    """Get database context for roleplay scenarios using unified search"""
-    print(f"🎭 ROLEPLAY DATABASE CONTEXT: '{user_message}'")
+def _get_structured_roleplay_database_context(user_message: str) -> str:
+    """
+    Gets database context for roleplay scenarios using the new structured query system.
+    This allows Elsie to answer specific questions in-character.
+    """
+    print(f"🎭 STRUCTURED ROLEPLAY DATABASE CONTEXT: '{user_message}'")
     
-    # Check if this is a character query
-    from ..ai_logic.query_detection import is_character_query, extract_tell_me_about_subject
+    detector = StructuredQueryDetector()
+    structured_query = detector.detect_query(user_message)
     
-    is_char_query, character_name = is_character_query(user_message)
-    tell_me_about_subject = extract_tell_me_about_subject(user_message)
-    
-    if is_char_query and character_name:
-        print(f"   🧑 UNIFIED CHARACTER QUERY: '{character_name}'")
-        
-        # Use unified content retriever with character content type
-        character_info = get_content(character_name, content_type='characters')
-        print(f"   ✅ Unified character info: {len(character_info)} characters")
-        
-        # Check if this is a fallback response
-        if is_fallback_response(character_info):
-            print(f"   ⚠️  Fallback response detected for character query")
-            return f"""
-ROLEPLAY DATABASE CONTEXT - CHARACTER QUERY:
-Subject: {character_name}
-Status: Processing limitations encountered
+    # Only proceed if a specific, non-general query was detected in the roleplay.
+    if structured_query.get('type') == 'general':
+        return "" # No specific query, so no database context needed.
 
-{character_info}
+    retriever = StructuredContentRetriever()
+    results = retriever.get_content(structured_query)
 
-ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing her memory banks about this person.
+    if not results:
+        return """
+ROLEPLAY INSTRUCTION: You search your memory banks but find no specific information matching that request. Respond naturally that you don't have the information.
 """
-        
-        return f"""
-ROLEPLAY DATABASE CONTEXT - CHARACTER QUERY:
-Subject: {character_name}
-Database Results: {len(character_info)} characters
 
-{character_info}
-
-ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what she knows about this person from her databases.
-"""
+    # Format the results into a readable string for the prompt
+    formatted_results = []
+    for result in results:
+        title = result.get('title', 'Untitled')
+        content = result.get('raw_content', 'No content.')
+        formatted_results.append(f"**{title}**\n{content}")
     
-    elif tell_me_about_subject:
-        print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
-        # Use unified content retriever for general subjects
-        subject_info = get_content(tell_me_about_subject, content_type='general')
-        
-        # Check if this is a fallback response
-        if is_fallback_response(subject_info):
-            print(f"   ⚠️  Fallback response detected for tell me about query")
-            return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL QUERY:
-Subject: {tell_me_about_subject}
-Status: Processing limitations encountered
+    final_content = '\n\n---\n\n'.join(formatted_results)
 
-{subject_info}
-
-ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing information about this topic.
-"""
-        
-        return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL QUERY:
-Subject: {tell_me_about_subject}
-Database Results: {len(subject_info)} characters
-
-{subject_info}
-
-ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her knowledge about this topic.
-"""
-    
-    else:
-        print(f"   📋 GENERAL ROLEPLAY CONTEXT")
-        # Use unified content retriever for other queries
-        general_info = get_content(user_message, content_type='general')
-        
-        # Check if this is a fallback response
-        if is_fallback_response(general_info):
-            print(f"   ⚠️  Fallback response detected for general query")
-            return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL:
+    return f"""
+ROLEPLAY DATABASE CONTEXT:
 Query: {user_message}
-Status: Processing limitations encountered
+Database Results:
 
-{general_info}
+{final_content}
 
-ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing her databases right now.
-"""
-        
-        if general_info:
-            return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL:
-Query: {user_message}
-Database Results: {len(general_info)} characters
-
-{general_info}
-
-ROLEPLAY INSTRUCTION: Use this information naturally in your roleplay response as Elsie's knowledge.
-"""
-        else:
-            return """
-ROLEPLAY DATABASE CONTEXT - GENERAL:
-No specific database information found for this query.
-
-ROLEPLAY INSTRUCTION: Respond naturally without specific database information, focusing on character interaction.
+ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what she knows or recalls from her databases. Weave it into the conversation, don't just recite it.
 """ 

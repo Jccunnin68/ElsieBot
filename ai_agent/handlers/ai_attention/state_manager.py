@@ -9,8 +9,7 @@ Enhanced with conversation memory for better context continuity.
 
 import time
 from typing import Dict, List, Optional
-from .character_tracking import extract_current_speaker, is_valid_character_name
-from .conversation_memory import ConversationMemory, extract_conversation_metadata
+from .character_tracking import extract_current_speaker, is_valid_character_name, extract_addressed_characters
 from .contextual_cues import SessionMode
 
 
@@ -52,10 +51,6 @@ class RoleplayStateManager:
         self.last_character_spoke = ""  # Who spoke last (not Elsie)
         self.turn_history = []  # Simple turn tracking: [(turn_number, speaker)]
         
-        # NEW: Conversation memory for enhanced context continuity
-        self.conversation_memory = ConversationMemory(max_history=5)
-        self.last_conversation_analysis = None  # Cache for last conversation analysis
-        
         # PHASE 2C: DGM scene context storage
         self.dgm_scene_context = {}  # Store scene context from DGM posts
     
@@ -90,10 +85,6 @@ class RoleplayStateManager:
         self.last_character_elsie_addressed = ""
         self.last_character_spoke = ""
         self.turn_history = []
-        
-        # Reset conversation memory
-        self.conversation_memory.clear_memory()
-        self.last_conversation_analysis = None
         
         # PHASE 2C: Reset DGM scene context
         self.dgm_scene_context = {}
@@ -305,10 +296,13 @@ class RoleplayStateManager:
         
         # ENHANCED: Check if this message is actually directed at someone else
         # This prevents false positives when characters start talking to each other
-        from .response_logic import check_if_other_character_addressed
-        other_character = check_if_other_character_addressed(user_message, self)
-        if other_character:
-            print(f"   ❌ IMPLICIT RESPONSE REJECTED: '{current_character}' is addressing '{other_character}', not Elsie")
+        other_characters_addressed = extract_addressed_characters(user_message)
+        # Filter out the current speaker, as they can't address themselves in this context
+        other_characters_addressed = [name for name in other_characters_addressed if name.lower() != current_character.lower()]
+
+        if other_characters_addressed:
+            other_character_list = ', '.join(other_characters_addressed)
+            print(f"   ❌ IMPLICIT RESPONSE REJECTED: '{current_character}' is addressing '{other_character_list}', not Elsie")
             return False
         
         # Check if the message contains other character names (redirecting conversation)
@@ -661,60 +655,6 @@ class RoleplayStateManager:
         
         # Use existing end_roleplay_session but with auto-exit reason
         self.end_roleplay_session(f"auto_exit_{reason}")
-    
-    def add_conversation_turn(self, speaker: str, message: str, turn_number: int, addressed_to: Optional[str] = None):
-        """
-        Add a conversation turn to memory for enhanced context tracking.
-        This supplements the existing turn tracking with detailed conversation memory.
-        """
-        if not self.is_roleplaying:
-            return
-        
-        # Extract message metadata
-        metadata = extract_conversation_metadata(message)
-        message_type = metadata['message_type']
-        
-        # Add to conversation memory
-        self.conversation_memory.add_turn(
-            speaker=speaker,
-            message=message,
-            turn_number=turn_number,
-            addressed_to=addressed_to,
-            message_type=message_type
-        )
-        
-        print(f"   💭 CONVERSATION TURN ADDED: {speaker} -> {message_type}")
-        if addressed_to:
-            print(f"      - Addressed to: {addressed_to}")
-    
-    def get_conversation_analysis(self, current_turn: int) -> Optional[Dict]:
-        """
-        Get conversation analysis for the current turn.
-        This provides basic conversation context without deprecated analysis functions.
-        """
-        if not self.conversation_memory.has_sufficient_context():
-            return None
-        
-        try:
-            # Return basic conversation context
-            return {
-                'conversation_themes': self.conversation_memory.conversation_themes,
-                'active_dynamics': self.conversation_memory.active_dynamics,
-                'recent_history_count': len(self.conversation_memory.get_recent_history()),
-                'analysis_available': False,  # Deprecated analysis removed
-                'context_available': True
-            }
-            
-        except Exception as e:
-            print(f"   ❌ CONVERSATION ANALYSIS ERROR: {e}")
-            return None
-    
-    def get_conversation_context_for_prompt(self) -> str:
-        """
-        Get formatted conversation context for inclusion in roleplay prompts.
-        """
-        from .conversation_memory import format_conversation_for_context
-        return format_conversation_for_context(self.conversation_memory, include_analysis=True)
     
     def has_conversation_memory(self) -> bool:
         """Check if we have conversation memory available."""

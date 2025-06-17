@@ -10,10 +10,10 @@ import json
 from datetime import datetime
 from typing import List
 
-# Add the current directory to the path so we can import our modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the project root to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from database_controller import get_db_controller
+from ai_agent.handlers.ai_knowledge.database_controller import get_db_controller
 
 def print_header():
     """Print the query tool header"""
@@ -217,7 +217,7 @@ def test_enhanced_search(query: str, debug_level: int = 2) -> bool:
 def test_character_disambiguation(test_cases: List[str]) -> bool:
     """Test character name disambiguation with different contexts"""
     try:
-        from handlers.ai_wisdom.log_patterns import resolve_character_name_with_context
+        from handlers.ai_knowledge.log_patterns import resolve_character_name_with_context
         
         print(f"\n🎭 TESTING CHARACTER DISAMBIGUATION")
         print("-" * 50)

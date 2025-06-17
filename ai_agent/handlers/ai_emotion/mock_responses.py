@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 
 # from handlers.ai_logic.query_detection import is_federation_archives_request  # Moved to local import to prevent circular dependency
 from handlers.handlers_utils import convert_earth_date_to_star_trek
-from handlers.ai_wisdom.content_retriever import search_memory_alpha
+
 
 from .personality_contexts import detect_mock_personality_context, is_simple_chat
 from .drink_menu import handle_drink_request, get_menu_response, is_menu_request
@@ -42,18 +42,7 @@ def should_use_mock_response(user_message: str, api_available: bool = False) -> 
     if handle_drink_request(user_message) or is_menu_request(user_message):
         return True
     
-    # Use mock for federation archives requests (they have their own search)
-    try:
-        from handlers.ai_logic.query_detection import is_federation_archives_request
-        if is_federation_archives_request(user_message):
-            return True
-    except ImportError:
-        # Fallback federation archives detection
-        archives_patterns = ['federation archives', 'check archives', 'search archives']
-        if any(pattern in user_message.lower() for pattern in archives_patterns):
-            return True
-    
-    return False
+  
 
 
 def get_mock_response(user_message: str, context: Dict[str, Any] = None) -> str:
@@ -73,16 +62,7 @@ def get_mock_response(user_message: str, context: Dict[str, Any] = None) -> str:
     # Check for specific response types in order of priority
     
     # 1. Federation Archives requests (special handling)
-    try:
-        from handlers.ai_logic.query_detection import is_federation_archives_request
-        if is_federation_archives_request(user_message):
-            return _handle_federation_archives_request(user_message)
-    except ImportError:
-        # Fallback federation archives detection
-        archives_patterns = ['federation archives', 'check archives', 'search archives']
-        if any(pattern in user_message.lower() for pattern in archives_patterns):
-            return _handle_federation_archives_request(user_message)
-    
+   
     # 2. Menu requests
     if is_menu_request(user_message):
         return get_menu_response()
@@ -137,15 +117,8 @@ def _handle_federation_archives_request(user_message: str) -> str:
     if not search_query:
         search_query = "general information"
     
-    # Search archives and provide response
-    archives_info = search_memory_alpha(search_query, limit=3, is_federation_archives=True)
-    
-    if archives_info:
-        converted_archives_info = convert_earth_date_to_star_trek(archives_info)
-        return f"*fingers dance across controls with quiet precision, accessing distant archives*\n\nAccessing federation archives for '{search_query}'...\n\n{converted_archives_info}\n\n*adjusts display with practiced grace* The archives yield their secrets. Would you like me to search for anything else?"
-    else:
-        return f"*attempts access with fluid motions, then pauses with subtle disappointment*\n\nI've searched the federation archives for '{search_query}', but they don't seem to have information on that topic available.\n\n*adjusts parameters thoughtfully* Perhaps try a different search term, or there may simply be no records of that particular subject."
 
+   
 
 def get_mock_personality_context(user_message: str) -> str:
     """
@@ -179,18 +152,12 @@ def is_mock_response_appropriate(user_message: str, conversation_history: list =
     # - Federation archives requests
     
     # Check federation archives with local import
-    is_archives_request = False
-    try:
-        from handlers.ai_logic.query_detection import is_federation_archives_request
-        is_archives_request = is_federation_archives_request(user_message)
-    except ImportError:
-        archives_patterns = ['federation archives', 'check archives', 'search archives']
-        is_archives_request = any(pattern in user_message.lower() for pattern in archives_patterns)
+ 
+
     
     return (is_simple_chat(user_message) or
             handle_drink_request(user_message) is not None or
             is_menu_request(user_message) or
             handle_greeting(user_message) is not None or
             handle_farewell(user_message) is not None or
-            handle_status_inquiry(user_message) is not None or
-            is_archives_request) 
+            handle_status_inquiry(user_message) is not None) 
