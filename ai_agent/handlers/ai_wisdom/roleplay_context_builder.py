@@ -4,19 +4,32 @@ Roleplay Context Builder - Enhanced Roleplay Context Generation
 
 This module handles context generation for roleplay scenarios with enhanced
 emotional intelligence integration and character relationship awareness.
+
+SIMPLIFIED: Now routes all database queries through the unified search system.
 """
 
 from typing import Dict, Any, List
 
+from handlers.handlers_utils import is_fallback_response
+
+
+class RoleplayContextBuilder:
+    """Context builder for roleplay scenarios."""
+    
+    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
+        """Build context for roleplay strategies."""
+        approach = strategy.get('approach', 'roleplay')
+        
+        if approach == 'roleplay_mock_enhanced':
+            return get_enhanced_roleplay_context(strategy, user_message)
+        else:
+            return get_roleplay_context(strategy, user_message)
+
 from .content_retriever import (
-    get_relevant_wiki_context, 
-    search_by_type,
-    get_tell_me_about_content_prioritized,
-    get_ship_information,
-    is_fallback_response
+    get_content
 )
-# Note: Using local imports to avoid circular dependency with query_detection
-from ..handlers_utils import convert_earth_date_to_star_trek
+
+
 
 
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
@@ -51,6 +64,10 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     # Check if this is a DGM-initiated session
     is_dgm_session = 'dgm_scene_setting' in triggers
     
+    # Check if this is DGM-controlled Elsie content
+    is_dgm_controlled = strategy.get('dgm_controlled', False)
+    dgm_content = strategy.get('original_dgm_content', '')
+    
     participants_list = ', '.join(participants) if participants else "none identified yet"
     new_chars_note = f" (New characters this turn: {', '.join(new_characters)})" if new_characters else ""
     addressed_note = f" (Characters being addressed: {', '.join(addressed_characters)})" if addressed_characters else ""
@@ -63,6 +80,19 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     print(f"   💬 Response Reason: {response_reason}")
     print(f"   🏷️ Elsie Mentioned: {elsie_mentioned}")
     print(f"   🎬 DGM Session: {is_dgm_session}")
+    print(f"   🎭 DGM Controlled: {is_dgm_controlled}")
+    
+    # Special handling for DGM-controlled content
+    dgm_controlled_note = ""
+    if is_dgm_controlled:
+        dgm_controlled_note = f"""
+🎬 **DGM CONTROLLED CONTENT AWARENESS**:
+- The DGM has made you say: "{dgm_content}"
+- You need to process and remember this content for conversation continuity
+- This was YOUR response in the roleplay - acknowledge and remember it
+- Future responses should build on this as if you naturally said it
+- Do not mention that it was DGM controlled - it's part of your natural roleplay flow
+"""
     
     # Detect what type of expertise should be emphasized
     personality_context = detect_roleplay_personality_context(user_message)
@@ -284,6 +314,7 @@ Detected triggers: {', '.join(triggers)}
 {addressed_note}
 {"Direct mention detected - engage fully!" if elsie_mentioned else ""}
 {"DGM SELECTIVE PASSIVE MODE: Respond when directly addressed, following up on conversations you started, or clear service requests. Do not respond to general bar actions or characters talking to each other unless you're part of the conversation." if is_dgm_session else ""}
+{dgm_controlled_note}
 
 Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, maintain natural conversation flow when you're involved but avoid initiating new interactions." if is_dgm_session else ""}{database_section}{conversation_section}"""
 
@@ -676,7 +707,7 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
 
 
 def _get_roleplay_database_context(user_message: str) -> str:
-    """Get database context for roleplay scenarios with character focus"""
+    """Get database context for roleplay scenarios using unified search"""
     print(f"🎭 ROLEPLAY DATABASE CONTEXT: '{user_message}'")
     
     # Check if this is a character query
@@ -686,9 +717,11 @@ def _get_roleplay_database_context(user_message: str) -> str:
     tell_me_about_subject = extract_tell_me_about_subject(user_message)
     
     if is_char_query and character_name:
-        print(f"   🧑 CHARACTER QUERY DETECTED: '{character_name}'")
-        # Use prioritized search for character information
-        character_info = get_tell_me_about_content_prioritized(character_name, is_roleplay=True)
+        print(f"   🧑 UNIFIED CHARACTER QUERY: '{character_name}'")
+        
+        # Use unified content retriever with character content type
+        character_info = get_content(character_name, content_type='characters')
+        print(f"   ✅ Unified character info: {len(character_info)} characters")
         
         # Check if this is a fallback response
         if is_fallback_response(character_info):
@@ -715,8 +748,8 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what s
     
     elif tell_me_about_subject:
         print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
-        # Use prioritized search for general subjects
-        subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject, is_roleplay=True)
+        # Use unified content retriever for general subjects
+        subject_info = get_content(tell_me_about_subject, content_type='general')
         
         # Check if this is a fallback response
         if is_fallback_response(subject_info):
@@ -743,8 +776,8 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her kn
     
     else:
         print(f"   📋 GENERAL ROLEPLAY CONTEXT")
-        # Use general wiki context for other queries
-        general_info = get_relevant_wiki_context(user_message, is_roleplay=True)
+        # Use unified content retriever for other queries
+        general_info = get_content(user_message, content_type='general')
         
         # Check if this is a fallback response
         if is_fallback_response(general_info):

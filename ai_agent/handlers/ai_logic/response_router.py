@@ -1,71 +1,186 @@
 """
-Response Router - Main Entry Point for Message Handling
-=====================================================
+Response Router - Message Routing and Decision Coordination
+==========================================================
 
-This module provides the single entry point for all message handling.
-It checks roleplay mode and routes to the appropriate handler.
+This module routes incoming messages to the appropriate handler based on:
+- Roleplay vs non-roleplay context
+- Enhanced query detection with conflict prevention
+- Cross-channel message coordination
 
-CRITICAL FLOW:
-1. Message comes in
-2. Check: Am I in roleplay mode?
-3. Route to roleplay_handler OR non_roleplay_handler
-4. Return ResponseDecision
+ENHANCED: Uses enhanced query detection to prevent conflicts and provide
+appropriate routing for different query types.
 """
 
 from typing import Dict, List, Optional
+import traceback
 
 from .response_decision import ResponseDecision
-from handlers.ai_attention.state_manager import get_roleplay_state
-from handlers.ai_attention.dgm_handler import check_dgm_post
-import re
+from .query_detection import detect_query_type_with_conflicts
+from ..ai_attention.state_manager import get_roleplay_state
+from ..ai_attention.dgm_handler import check_dgm_post
 
 # Import the specialized handlers
 from .roleplay_handler import handle_roleplay_message, handle_cross_channel_busy
-from .non_roleplay_handler import handle_non_roleplay_message
+from .standard_handler import handle_standard_message
 
 
 def route_message_to_handler(user_message: str, conversation_history: List, channel_context: Optional[Dict] = None) -> ResponseDecision:
     """
-    Main entry point for all message handling. Routes to appropriate handler based on roleplay state.
+    Enhanced message routing with conflict prevention and context awareness.
     
-    ENHANCED: Now uses the new response decision engine for roleplay scenarios.
+    Routes messages to appropriate handlers based on:
+    1. Roleplay vs non-roleplay context detection
+    2. Enhanced query type detection with conflict resolution
+    3. Cross-channel message coordination
     
     Args:
-        user_message: The user's message content
-        conversation_history: List of previous messages
-        channel_context: Channel information (ID, name, type, etc.)
+        user_message: The user's input message
+        conversation_history: List of previous conversation turns
+        channel_context: Optional channel and context information
         
     Returns:
-        ResponseDecision: Decision about how to respond
+        ResponseDecision with routing decision and strategy
     """
-    print(f"🎯 RESPONSE ROUTER - Processing message")
+    print(f"\n🚦 RESPONSE ROUTER - Enhanced message routing")
     print(f"   📝 Message: '{user_message[:100]}{'...' if len(user_message) > 100 else ''}'")
     
-    # Get current roleplay state
-    rp_state = get_roleplay_state()
-    turn_number = len(conversation_history) + 1
+    try:
+        # Step 1: Enhanced query detection with conflict prevention
+        query_info = detect_query_type_with_conflicts(user_message)
+        
+        print(f"   📋 Enhanced Query Detection:")
+        print(f"      Type: {query_info['type']}")
+        print(f"      Subject: {query_info.get('subject', 'N/A')}")
+        print(f"      Priority: {query_info.get('priority', 'N/A')}")
+        
+        if query_info.get('conflict_resolved'):
+            print(f"      ⚖️  Conflict Resolution: {query_info['conflict_resolved']}")
+        
+        # Step 2: Check for DGM actions (takes precedence)
+        dgm_result = check_dgm_post(user_message)
+        if dgm_result['is_dgm']:
+            print(f"   🎬 DGM Action detected: {dgm_result['action']}")
+            return _process_dgm_action(dgm_result, user_message, len(conversation_history) + 1, channel_context)
+        
+        # Step 3: Determine routing context (roleplay vs non-roleplay)
+        routing_context = _determine_routing_context(channel_context, conversation_history, query_info)
+        
+        print(f"   🎯 Routing Context: {routing_context['mode']}")
+        if routing_context.get('reasoning'):
+            print(f"      Reasoning: {routing_context['reasoning']}")
+        
+        # Step 4: Check for cross-channel messages if in roleplay
+        rp_state = get_roleplay_state()
+        
+        # CLEANUP: Check for auto-exit conditions before routing
+        if rp_state.is_roleplaying and rp_state.should_auto_exit_roleplay():
+            print(f"   🧹 AUTO-CLEANUP: Ending inactive roleplay session")
+            rp_state.auto_exit_roleplay("auto_cleanup_on_query")
+            # Re-determine routing context after cleanup
+            routing_context = _determine_routing_context(channel_context, conversation_history, query_info)
+            print(f"   🎯 UPDATED Routing Context: {routing_context['mode']}")
+        
+        if rp_state.is_roleplaying and routing_context['mode'] == 'roleplay':
+            if not rp_state.is_message_from_roleplay_channel(channel_context):
+                print(f"   🚫 Cross-channel message detected - returning busy response")
+                return handle_cross_channel_busy(rp_state, channel_context)
+        
+        # Step 5: Route to appropriate handler
+        if routing_context['mode'] == 'roleplay':
+            return _route_to_roleplay_handler(user_message, conversation_history, channel_context, query_info)
+        else:
+            return _route_to_standard_handler(user_message, conversation_history, query_info)
+            
+    except Exception as e:
+        print(f"   ❌ CRITICAL ERROR in response router: {e}")
+        print(f"   📋 Traceback: {traceback.format_exc()}")
+        
+        # Safe fallback
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="I'm having difficulty processing that request right now. Please try again in a moment.",
+            strategy={
+                'approach': 'general',
+                'needs_database': False,
+                'reasoning': f'Router error fallback: {str(e)}',
+                'context_priority': 'safety'
+            }
+        )
+
+
+def _determine_routing_context(channel_context: Optional[Dict], conversation_history: List, query_info: Dict) -> Dict:
+    """
+    Determine whether to route to roleplay or standard handler.
     
-    print(f"   🎭 Roleplay State: {'ACTIVE' if rp_state.is_roleplaying else 'INACTIVE'}")
-    
-    # Check for cross-channel messages if in roleplay
-    if rp_state.is_roleplaying:
-        if not rp_state.is_message_from_roleplay_channel(channel_context):
-            print(f"   🚫 Cross-channel message detected - returning busy response")
-            return handle_cross_channel_busy(rp_state, channel_context)
-    
-    # Check for DGM actions regardless of roleplay state
-    dgm_result = check_dgm_post(user_message)
-    if dgm_result['is_dgm']:
-        print(f"   🎬 DGM Action detected: {dgm_result['action']}")
-        return _process_dgm_action(dgm_result, user_message, turn_number, channel_context)
-    
-    # Route based on roleplay state
-    if rp_state.is_roleplaying:
+    SIMPLIFIED LOGIC: Only route to roleplay when actively in a roleplay state.
+    """
+    try:
+        # Get current roleplay state
+        rp_state = get_roleplay_state()
+        
+        # SIMPLIFIED: Only route to roleplay if actively in roleplay state
+        if rp_state.is_roleplaying:
+            return {
+                'mode': 'roleplay',
+                'reasoning': 'Active roleplay state detected'
+            }
+        
+        # All other cases go to standard handler
+        return {
+            'mode': 'standard',
+            'reasoning': 'Not in active roleplay - using standard handler'
+        }
+        
+    except Exception as e:
+        print(f"      ⚠️  Error determining routing context: {e}")
+        return {
+            'mode': 'standard',
+            'reasoning': f'Error fallback - using standard: {e}'
+        }
+
+
+def _route_to_roleplay_handler(user_message: str, conversation_history: List, channel_context: Dict, query_info: Dict) -> ResponseDecision:
+    """Route to roleplay handler with enhanced query information."""
+    try:
         print(f"   🎭 ROUTING TO ROLEPLAY HANDLER")
-        return handle_roleplay_message(user_message, conversation_history, channel_context)
-    else:
-        print(f"   📝 ROUTING TO NON-ROLEPLAY HANDLER")
-        return handle_non_roleplay_message(user_message, conversation_history)
+        print(f"      Mode: Quick response for roleplay flow")
+        
+        return handle_roleplay_message(user_message, conversation_history, channel_context or {})
+        
+    except Exception as e:
+        print(f"   ❌ ERROR routing to roleplay handler: {e}")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="I'm having difficulty with roleplay processing right now.",
+            strategy={
+                'approach': 'roleplay_fallback',
+                'needs_database': False,
+                'reasoning': f'Roleplay handler error: {e}',
+                'context_priority': 'safety'
+            }
+        )
+
+
+def _route_to_standard_handler(user_message: str, conversation_history: List, query_info: Dict) -> ResponseDecision:
+    """Route to standard handler with enhanced query information."""
+    try:
+        print(f"   💬 ROUTING TO STANDARD HANDLER")
+        print(f"      Mode: Comprehensive response with disambiguation")
+        
+        return handle_standard_message(user_message, conversation_history)
+        
+    except Exception as e:
+        print(f"   ❌ ERROR routing to standard handler: {e}")
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="I'm having difficulty processing that request right now.",
+            strategy={
+                'approach': 'general',
+                'needs_database': False,
+                'reasoning': f'Standard handler error: {e}',
+                'context_priority': 'safety'
+            }
+        )
 
 
 
@@ -125,7 +240,7 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
         )
     
     elif dgm_action == 'control_elsie':
-        print(f"   🎭 DGM Controlled Elsie - Adding to context")
+        print(f"   🎭 DGM Controlled Elsie - Processing DGM content for Elsie awareness")
         
         # Ensure roleplay session is active
         rp_state = get_roleplay_state()
@@ -141,15 +256,36 @@ def _process_dgm_action(dgm_result: Dict, user_message: str, turn_number: int, c
         if scene_context:
             rp_state.store_dgm_scene_context(scene_context)
         
+        # Extract the DGM content that Elsie "said"
+        elsie_content = dgm_result.get('elsie_content', '')
+        
+        if not elsie_content:
+            print(f"   ⚠️  No DGM content provided - using NO_RESPONSE")
+            return ResponseDecision(
+                needs_ai_generation=False,
+                pre_generated_response="NO_RESPONSE",
+                strategy={
+                    'approach': 'dgm_controlled_elsie',
+                    'needs_database': False,
+                    'reasoning': 'DGM controlled Elsie - no content provided',
+                    'context_priority': 'none'
+                }
+            )
+        
+        print(f"   📝 DGM Content for Elsie: '{elsie_content}'")
+        
+        # Return the DGM content as Elsie's response so she's aware of it
+        # Use roleplay approach so it goes through roleplay context pipeline
         return ResponseDecision(
             needs_ai_generation=False,
-            pre_generated_response="NO_RESPONSE",
+            pre_generated_response=elsie_content,
             strategy={
-                'approach': 'dgm_controlled_elsie',
+                'approach': 'roleplay_dgm_controlled',
                 'needs_database': False,
-                'reasoning': f'DGM controlled Elsie - content: "{dgm_result.get("elsie_content", "")}"',
-                'context_priority': 'dgm_elsie_context',
-                'elsie_content': dgm_result.get('elsie_content', '')
+                'reasoning': f'DGM controlled Elsie - content processed for awareness',
+                'context_priority': 'roleplay',
+                'dgm_controlled': True,
+                'original_dgm_content': elsie_content
             }
         )
     

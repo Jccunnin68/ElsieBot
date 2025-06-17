@@ -233,7 +233,7 @@ class ResponseFormatter:
     """
     
     @staticmethod
-    def split_long_message(message: str, max_length: int = 2000) -> List[str]:
+    def split_long_message(message: str, max_length: int = 1900) -> List[str]:
         """
         Split long messages into Discord-compatible chunks.
         

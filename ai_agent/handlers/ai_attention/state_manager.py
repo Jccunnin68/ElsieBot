@@ -10,7 +10,8 @@ Enhanced with conversation memory for better context continuity.
 import time
 from typing import Dict, List, Optional
 from .character_tracking import extract_current_speaker, is_valid_character_name
-from .conversation_memory import ConversationMemory, getNextResponse, extract_conversation_metadata
+from .conversation_memory import ConversationMemory, extract_conversation_metadata
+from .contextual_cues import SessionMode
 
 
 class RoleplayStateManager:
@@ -689,50 +690,19 @@ class RoleplayStateManager:
     def get_conversation_analysis(self, current_turn: int) -> Optional[Dict]:
         """
         Get conversation analysis for the current turn.
-        This uses the getNextResponse subroutine to analyze conversation flow.
+        This provides basic conversation context without deprecated analysis functions.
         """
         if not self.conversation_memory.has_sufficient_context():
             return None
         
         try:
-            # Prepare conversation history for analysis
-            conversation_history = []
-            for turn in self.conversation_memory.get_recent_history():
-                conversation_history.append({
-                    'speaker': turn.speaker,
-                    'message': turn.message,
-                    'turn_number': turn.turn_number,
-                    'message_type': turn.message_type,
-                    'addressed_to': turn.addressed_to
-                })
-            
-            # Get character context
-            character_context = {
-                'dgm_session': self.dgm_initiated,
-                'thread_session': self.is_thread_session,
-                'participants': self.get_participant_names(),
-                'listening_mode': self.listening_mode
-            }
-            
-            # Analyze conversation
-            suggestion, analyzed = getNextResponse(
-                conversation_history=conversation_history,
-                memory_store=self.conversation_memory,
-                character_context=character_context
-            )
-            
-            if analyzed:
-                self.last_conversation_analysis = {
-                    'suggestion': suggestion,
-                    'analysis_turn': current_turn,
-                    'timestamp': time.time()
-                }
-            
+            # Return basic conversation context
             return {
-                'suggestion': suggestion,
-                'analyzed': analyzed,
                 'conversation_themes': self.conversation_memory.conversation_themes,
-                'active_dynamics': self.conversation_memory.active_dynamics
+                'active_dynamics': self.conversation_memory.active_dynamics,
+                'recent_history_count': len(self.conversation_memory.get_recent_history()),
+                'analysis_available': False,  # Deprecated analysis removed
+                'context_available': True
             }
             
         except Exception as e:
@@ -749,6 +719,19 @@ class RoleplayStateManager:
     def has_conversation_memory(self) -> bool:
         """Check if we have conversation memory available."""
         return self.conversation_memory.has_sufficient_context()
+    
+    @property
+    def current_mode(self) -> SessionMode:
+        """Get the current session mode based on roleplay state."""
+        
+        if not self.is_roleplaying:
+            return SessionMode.LISTENING
+        elif self.is_dgm_session():
+            return SessionMode.DGM_ROLEPLAY
+        elif self.is_thread_based():
+            return SessionMode.THREAD_ROLEPLAY
+        else:
+            return SessionMode.REGULAR_ROLEPLAY
 
 
 # Global roleplay state manager instance

@@ -64,9 +64,8 @@ def create_schema():
                     raw_content TEXT NOT NULL,
                     url VARCHAR(500),
                     crawl_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    page_type VARCHAR(50),
-                    ship_name VARCHAR(100),
-                    log_date DATE,
+                    touched TIMESTAMP,
+                    categories TEXT[] NOT NULL,
                     content_accessed INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -89,16 +88,16 @@ def create_schema():
                 );
             """)
             
-            # Create indexes
+            # Create indexes for clean schema
             cur.execute("CREATE INDEX idx_wiki_pages_title ON wiki_pages(title);")
-            cur.execute("CREATE INDEX idx_wiki_pages_type ON wiki_pages(page_type);")
-            cur.execute("CREATE INDEX idx_wiki_pages_ship ON wiki_pages(ship_name);")
+            cur.execute("CREATE INDEX idx_wiki_pages_touched ON wiki_pages(touched);")
+            cur.execute("CREATE INDEX idx_wiki_pages_categories ON wiki_pages USING GIN (categories);")
             cur.execute("CREATE INDEX idx_page_metadata_title ON page_metadata(title);")
             cur.execute("CREATE INDEX idx_page_metadata_status ON page_metadata(status);")
             cur.execute("CREATE INDEX idx_page_metadata_last_crawled ON page_metadata(last_crawled);")
             
             # Create full-text search index
-            cur.execute("CREATE INDEX idx_wiki_pages_content_search ON wiki_pages USING gin(to_tsvector('english', title || ' ' || raw_content));")
+            cur.execute("CREATE INDEX idx_wiki_pages_content_search ON wiki_pages USING GIN (to_tsvector('english', title || ' ' || raw_content));");
             
             conn.commit()
             print("✅ Database schema created successfully")
@@ -125,116 +124,104 @@ def populate_sample_data():
             password="elsie123"
         )
         
-        # Comprehensive sample data covering various categories
+        # Comprehensive sample data with categories instead of legacy fields
         sample_data = [
-            # Ships
+            # Ships - use Ship Information category
             (
                 "USS Enterprise (NCC-1701)",
                 "The USS Enterprise (NCC-1701) was a Constitution-class starship that served as the flagship of Starfleet in the 23rd century.",
                 "https://memory-alpha.fandom.com/wiki/USS_Enterprise_(NCC-1701)",
-                "ship_info",
-                "enterprise"
+                ["Ship Information"]
             ),
             (
                 "USS Enterprise (NCC-1701-D)",
                 "The USS Enterprise (NCC-1701-D) was a Galaxy-class starship that served as the flagship of Starfleet in the 24th century.",
                 "https://memory-alpha.fandom.com/wiki/USS_Enterprise_(NCC-1701-D)",
-                "ship_info",
-                "enterprise"
+                ["Ship Information"]
             ),
             (
                 "USS Voyager (NCC-74656)",
                 "The USS Voyager was an Intrepid-class starship that became stranded in the Delta Quadrant.",
                 "https://memory-alpha.fandom.com/wiki/USS_Voyager_(NCC-74656)",
-                "ship_info",
-                "voyager"
+                ["Ship Information"]
             ),
             
-            # Personnel
+            # Personnel - use Characters category
             (
                 "James T. Kirk",
                 "James Tiberius Kirk was a renowned Starfleet captain who commanded the USS Enterprise.",
                 "https://memory-alpha.fandom.com/wiki/James_T._Kirk",
-                "personnel",
-                "enterprise"
+                ["Characters"]
             ),
             (
                 "Spock",
                 "Spock was a Vulcan-Human hybrid who served as first officer and science officer aboard the USS Enterprise.",
                 "https://memory-alpha.fandom.com/wiki/Spock",
-                "personnel",
-                "enterprise"
+                ["Characters"]
             ),
             (
                 "Jean-Luc Picard",
                 "Jean-Luc Picard was a celebrated Starfleet captain who commanded the USS Enterprise-D.",
                 "https://memory-alpha.fandom.com/wiki/Jean-Luc_Picard",
-                "personnel",
-                "enterprise"
+                ["Characters"]
             ),
             (
                 "Kathryn Janeway",
                 "Kathryn Janeway was the captain of USS Voyager, stranded in the Delta Quadrant.",
                 "https://memory-alpha.fandom.com/wiki/Kathryn_Janeway",
-                "personnel",
-                "voyager"
+                ["Characters"]
             ),
             
-            # Technology
+            # Technology - use Technology category
             (
                 "Warp Drive",
                 "Warp drive is a faster-than-light propulsion system used by Starfleet vessels.",
                 "https://memory-alpha.fandom.com/wiki/Warp_drive",
-                "technology",
-                None
+                ["Technology"]
             ),
             (
                 "Transporter",
                 "The transporter converts matter into energy for instantaneous transportation.",
                 "https://memory-alpha.fandom.com/wiki/Transporter",
-                "technology",
-                None
+                ["Technology"]
             ),
             
-            # Organizations
+            # Organizations - use General Information category
             (
                 "Starfleet",
                 "Starfleet is the exploratory and peacekeeping armada of the United Federation of Planets.",
                 "https://memory-alpha.fandom.com/wiki/Starfleet",
-                "general",
-                None
+                ["General Information"]
             ),
             (
                 "United Federation of Planets",
                 "The United Federation of Planets is an interstellar government promoting peace and cooperation.",
                 "https://memory-alpha.fandom.com/wiki/United_Federation_of_Planets",
-                "general",
-                None
+                ["General Information"]
             ),
             
-            # Mission Logs
+            # Mission Logs - use ship-specific log categories
             (
                 "Captain's Log, Stardate 1513.1",
                 "Mission log entry for routine medical examination mission to M-113.",
                 "https://memory-alpha.fandom.com/wiki/The_Man_Trap",
-                "mission_log",
-                "enterprise"
+                ["Enterprise Log"]
             )
         ]
         
         with conn.cursor() as cur:
             inserted_count = 0
             
-            for title, raw_content, url, page_type, ship_name in sample_data:
+            for title, raw_content, url, categories in sample_data:
                 try:
                     # Generate content hash
                     content_hash = hashlib.sha256(raw_content.encode('utf-8')).hexdigest()
                     
-                    # Insert into wiki_pages
+                    # Insert into wiki_pages with categories only
                     cur.execute("""
-                        INSERT INTO wiki_pages (title, raw_content, url, page_type, ship_name)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (title, raw_content, url, page_type, ship_name))
+                        INSERT INTO wiki_pages (title, raw_content, url, categories)
+                        VALUES (%s, %s, %s, %s)
+                    """, (title, raw_content, url, categories))
                     
                     # Insert into page_metadata
                     cur.execute("""
@@ -243,18 +230,23 @@ def populate_sample_data():
                     """, (url, title, content_hash))
                     
                     inserted_count += 1
-                    print(f"   ✅ Inserted: {title} ({page_type})")
+                    print(f"   ✅ Inserted: {title} (categories: {categories})")
                     
                 except Exception as e:
                     print(f"   ❌ Error inserting {title}: {e}")
                     continue
             
-            # Get statistics
+            # Get statistics with categories
             cur.execute("SELECT COUNT(*) FROM wiki_pages;")
             total_count = cur.fetchone()[0]
             
-            cur.execute("SELECT page_type, COUNT(*) FROM wiki_pages GROUP BY page_type ORDER BY page_type;")
-            type_counts = cur.fetchall()
+            cur.execute("""
+                SELECT unnest(categories) as category, COUNT(*) as count 
+                FROM wiki_pages 
+                GROUP BY unnest(categories) 
+                ORDER BY count DESC;
+            """)
+            category_counts = cur.fetchall()
             
             conn.commit()
             
@@ -264,8 +256,9 @@ def populate_sample_data():
         print(f"   📊 Total pages: {total_count}")
         print(f"   📝 Pages inserted this run: {inserted_count}")
         
-        for page_type, count in type_counts:
-            print(f"   📄 {page_type}: {count}")
+        print(f"\n📋 Category Distribution:")
+        for category, count in category_counts:
+            print(f"   📄 {category}: {count}")
             
         return True
         

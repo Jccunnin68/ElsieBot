@@ -13,8 +13,8 @@ import re
 from typing import Dict, List, Optional, Tuple
 import traceback
 
-from handlers.ai_logic.response_decision import ResponseDecision
-from ..ai_wisdom.llm_query_processor import is_fallback_response
+from .response_decision import ResponseDecision
+from ..handlers_utils import is_fallback_response
 
 
 class ResponseDecisionEngine:
@@ -435,25 +435,25 @@ class ResponseDecisionEngine:
             if primary_decision == 'individual_addressing':
                 should_respond = True
                 response_type = ResponseType.ACTIVE_DIALOGUE
-                approach = "responsive"
+                approach = "roleplay_active"
                 tone = "friendly"
                 
             elif primary_decision == 'emotional_support':
                 should_respond = True
                 response_type = ResponseType.SUPPORTIVE_LISTEN
-                approach = "empathetic"
+                approach = "roleplay_supportive"
                 tone = "gentle"
                 
             elif primary_decision == 'group_addressing':
                 should_respond = True
                 response_type = ResponseType.GROUP_ACKNOWLEDGMENT
-                approach = "welcoming"
+                approach = "roleplay_group"
                 tone = "friendly"
                 
             elif primary_decision == 'service_request':
                 should_respond = True
                 response_type = ResponseType.SUBTLE_SERVICE
-                approach = "service-oriented"
+                approach = "roleplay_service"
                 tone = "professional"
                 
             elif primary_decision == 'character_to_character':
@@ -469,7 +469,7 @@ class ResponseDecisionEngine:
                 if technical_expertise_detected:
                     should_respond = True
                     response_type = ResponseType.TECHNICAL_EXPERTISE
-                    approach = "knowledgeable"
+                    approach = "roleplay_technical"
                     tone = "professional"
                     reasoning = "Technical expertise opportunity detected"
                     confidence = 0.8
@@ -477,7 +477,7 @@ class ResponseDecisionEngine:
                     # Standard response - check other conditions from contextual cues
                     should_respond = self._should_respond_standard(contextual_cues)
                     response_type = ResponseType.ACTIVE_DIALOGUE if should_respond else ResponseType.NONE
-                    approach = "responsive"
+                    approach = "roleplay_active"
                     tone = "natural"
             
             # Build comprehensive ResponseDecision
@@ -805,7 +805,7 @@ class ResponseDecisionEngine:
         
         if is_roleplay_context:
             # For roleplay contexts, adjust to handle the fallback naturally
-            response_decision.approach = "fallback_roleplay"
+            response_decision.approach = "roleplay_fallback"
             response_decision.tone = "apologetic_but_natural"
             
             # Add fallback handling instructions
@@ -827,7 +827,7 @@ class ResponseDecisionEngine:
             
         else:
             # For non-roleplay contexts, be direct about the limitation
-            response_decision.approach = "fallback_direct"
+            response_decision.approach = "general"
             response_decision.tone = "informative"
             
             # Add direct fallback instructions
@@ -1047,7 +1047,7 @@ class ResponseDecisionEngine:
         
         # Modify tone and approach for accuracy
         response_decision.tone = "honest_and_accurate"
-        response_decision.approach = "fact_based"
+        response_decision.approach = "general"
         
         # Add accuracy themes
         if not response_decision.suggested_themes:

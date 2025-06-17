@@ -152,15 +152,43 @@ def show_stats():
     """Show database statistics using Docker"""
     print("🐳 Database statistics:")
     
+    # Category-based statistics (primary)
     cmd = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
         SELECT 
             COUNT(*) as total_pages,
-            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
-            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
-            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel
+            COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
+            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories,
+            COUNT(touched) as pages_with_touched,
+            COUNT(*) - COUNT(touched) as pages_without_touched
         FROM wiki_pages;"'''
     
+    print("\n📊 Content & Metadata Coverage:")
     result = run_docker_command(cmd, capture_output=False)
+    
+    # Category distribution
+    cmd2 = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
+        SELECT unnest(categories) as category, COUNT(*) as count 
+        FROM wiki_pages 
+        WHERE categories IS NOT NULL 
+        GROUP BY unnest(categories) 
+        ORDER BY count DESC 
+        LIMIT 10;"'''
+    
+    print("\n📈 Top Categories:")
+    result2 = run_docker_command(cmd2, capture_output=False)
+    
+    # Touched timestamp statistics
+    cmd3 = '''docker exec elsiebrain_postgres psql -U elsie -d elsiebrain -c "
+        SELECT 
+            MIN(touched) as oldest_touched,
+            MAX(touched) as newest_touched,
+            COUNT(touched) as pages_with_touched
+        FROM wiki_pages 
+        WHERE touched IS NOT NULL;"'''
+    
+    print("\n🕒 MediaWiki Touched Timestamps:")
+    result3 = run_docker_command(cmd3, capture_output=False)
+    
     return result
 
 

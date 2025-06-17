@@ -45,13 +45,10 @@ class DatabaseCleanup:
                     cur.execute("""
                         SELECT 
                             COUNT(*) as total_pages,
-                            COUNT(CASE WHEN page_type = 'mission_log' THEN 1 END) as mission_logs,
-                            COUNT(CASE WHEN page_type = 'ship_info' THEN 1 END) as ship_info,
-                            COUNT(CASE WHEN page_type = 'personnel' THEN 1 END) as personnel,
-                            COUNT(CASE WHEN page_type = 'general' THEN 1 END) as general,
-                            COUNT(CASE WHEN page_type = 'location' THEN 1 END) as location,
-                            COUNT(CASE WHEN page_type = 'technology' THEN 1 END) as technology,
-                            COUNT(DISTINCT ship_name) as unique_ships,
+                            COUNT(CASE WHEN categories IS NOT NULL AND array_length(categories, 1) > 0 THEN 1 END) as pages_with_categories,
+                            COUNT(CASE WHEN categories IS NULL OR array_length(categories, 1) IS NULL THEN 1 END) as pages_without_categories,
+                            COUNT(touched) as pages_with_touched,
+                            COUNT(*) - COUNT(touched) as pages_without_touched,
                             AVG(LENGTH(raw_content)) as avg_content_length,
                             MAX(LENGTH(raw_content)) as max_content_length
                         FROM wiki_pages
@@ -80,7 +77,7 @@ class DatabaseCleanup:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     # Find entries with part patterns
                     cur.execute("""
-                        SELECT id, title, page_type, ship_name, log_date, 
+                        SELECT id, title, categories, 
                                LENGTH(raw_content) as content_length
                         FROM wiki_pages 
                         WHERE title ~ '\\(Part \\d+/\\d+\\)$'
@@ -147,15 +144,19 @@ class DatabaseCleanup:
         if len(groups) > 5:
             print(f"   ... and {len(groups) - 5} more split entries")
         
-        # Show page type distribution
-        type_counts = {}
+        # Show category distribution
+        category_counts = {}
         for entry in split_entries:
-            page_type = entry.get('page_type', 'unknown')
-            type_counts[page_type] = type_counts.get(page_type, 0) + 1
+            categories = entry.get('categories', [])
+            if categories:
+                for category in categories:
+                    category_counts[category] = category_counts.get(category, 0) + 1
+            else:
+                category_counts['No Categories'] = category_counts.get('No Categories', 0) + 1
         
-        print(f"\n📋 Split entries by page type:")
-        for page_type, count in sorted(type_counts.items()):
-            print(f"   {page_type}: {count}")
+        print(f"\n📋 Split entries by category:")
+        for category, count in sorted(category_counts.items()):
+            print(f"   {category}: {count}")
     
     def remove_split_entries(self, confirm: bool = False) -> int:
         """Remove all split entries from the database"""
@@ -243,13 +244,32 @@ class DatabaseCleanup:
         
         print(f"📊 Content Statistics:")
         print(f"   Total Pages: {stats.get('total_pages', 0):,}")
-        print(f"   Mission Logs: {stats.get('mission_logs', 0):,}")
-        print(f"   Ship Info: {stats.get('ship_info', 0):,}")
-        print(f"   Personnel: {stats.get('personnel', 0):,}")
-        print(f"   General: {stats.get('general', 0):,}")
-        print(f"   Location: {stats.get('location', 0):,}")
-        print(f"   Technology: {stats.get('technology', 0):,}")
-        print(f"   Unique Ships: {stats.get('unique_ships', 0):,}")
+        
+        # Add category coverage if available
+        pages_with_categories = stats.get('pages_with_categories', 0)
+        pages_without_categories = stats.get('pages_without_categories', 0)
+        if pages_with_categories > 0 or pages_without_categories > 0:
+            total_pages = stats.get('total_pages', 0)
+            if total_pages > 0:
+                coverage_percent = (pages_with_categories / total_pages) * 100
+                print(f"   Pages with Categories: {pages_with_categories:,} ({coverage_percent:.1f}%)")
+                print(f"   Pages without Categories: {pages_without_categories:,}")
+        
+        # Add touched timestamp coverage if available
+        pages_with_touched = stats.get('pages_with_touched', 0)
+        pages_without_touched = stats.get('pages_without_touched', 0)
+        if pages_with_touched > 0 or pages_without_touched > 0:
+            total_pages = stats.get('total_pages', 0)
+            if total_pages > 0:
+                touched_percent = (pages_with_touched / total_pages) * 100
+                print(f"   Pages with MediaWiki Touched: {pages_with_touched:,} ({touched_percent:.1f}%)")
+                print(f"   Pages without MediaWiki Touched: {pages_without_touched:,}")
+                if pages_without_touched > 0:
+                    print(f"      💡 Run: python incremental_import.py update # to populate missing timestamps")
+        
+        print(f"\n📋 Categories (use categories instead of legacy page types)")
+        print(f"   Use 'SELECT unnest(categories) as category, COUNT(*) FROM wiki_pages GROUP BY category ORDER BY count DESC;'")
+        print(f"   to view current category distribution.")
         
         print(f"\n📋 Metadata Statistics:")
         print(f"   Tracked Pages: {stats.get('total_tracked_pages', 0):,}")

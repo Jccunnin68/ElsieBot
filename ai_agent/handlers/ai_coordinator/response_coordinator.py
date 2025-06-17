@@ -52,6 +52,22 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     # Make the decision using existing logic
     decision = route_message_to_handler(user_message, conversation_history, channel_context)
     
+    # Extract handler and approach info for debugging
+    approach = decision.strategy.get('approach', 'unknown')
+    reasoning = decision.strategy.get('reasoning', 'no reasoning provided')
+    
+    # Determine which handler was used based on approach
+    if approach.startswith('roleplay_'):
+        handler_type = "ROLEPLAY_HANDLER"
+    elif approach in ['comprehensive', 'ship_info', 'character_info', 'logs', 'tell_me_about', 'federation_archives', 'url_request', 'general', 'continuation']:
+        handler_type = "STANDARD_HANDLER"
+    elif approach.startswith('mock_'):
+        handler_type = "MOCK_RESPONSE"
+    elif approach == 'dgm_scene_setting':
+        handler_type = "DGM_HANDLER"
+    else:
+        handler_type = "UNKNOWN_HANDLER"
+    
     # If no AI needed, return the pre-generated response
     if not decision.needs_ai_generation:
         print(f"✅ Pre-generated response: {decision.strategy['reasoning']}")
@@ -85,4 +101,6 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     
     # Otherwise, do the expensive AI generation
     print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")
-    return generate_ai_response_with_decision(decision, user_message, conversation_history, channel_context) 
+    ai_response = generate_ai_response_with_decision(decision, user_message, conversation_history)
+    
+    return ai_response 

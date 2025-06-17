@@ -12,7 +12,7 @@ import re
 
 from config import GEMMA_API_KEY
 from handlers.handlers_utils import estimate_token_count
-from handlers.ai_logic import ResponseDecision, detect_general_personality_context, detect_who_elsie_addressed
+from handlers.ai_logic import ResponseDecision, detect_who_elsie_addressed
 from handlers.handlers_utils import (
     filter_meeting_info,
     convert_earth_date_to_star_trek,
@@ -230,10 +230,11 @@ def strip_discord_emojis(response_text: str) -> str:
     
     return response_text
 
-def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
+def generate_ai_response_with_decision(decision: ResponseDecision, user_message: str, conversation_history: list) -> str:
     """
     AI response generation using a pre-made decision.
     Contains only the expensive operations (AI calls, database searches).
+    SIMPLIFIED: Always uses context builders, no manual context generation.
     """
     
     try:
@@ -244,98 +245,53 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         
         # Create the model
         model = genai.GenerativeModel('gemma-3-27b-it')
+        #model = genai.GenerativeModel('gemini-2.0-flash')
+
         
         # Detect topic changes for conversation flow
-        is_topic_change = detect_topic_change(user_message, conversation_history)
         
-        # Initialize context variables
-        context = ""
-        wiki_info = ""
         
-        # Generate context based on strategy
-        if strategy['approach'] == 'roleplay_active':
-            # ALL roleplay_active responses should use enhanced roleplay context
-            print(f"🎭 ROLEPLAY ACTIVE - Using enhanced roleplay context generation")
+        # SIMPLIFIED CONTEXT GENERATION - Always use context builders
+        print(f"🔍 GENERATING CONTEXT for {strategy['approach']} strategy...")
+        
+        # SIMPLIFIED APPROACH DETECTION: Check for roleplay_ prefix
+        if strategy['approach'].startswith('roleplay_'):
+            # ALL roleplay responses use enhanced roleplay context
+            print(f"🎭 ROLEPLAY MODE - Using enhanced roleplay context generation")
             from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
             context = get_enhanced_roleplay_context(strategy, user_message)
-        
-        elif strategy['approach'] == 'roleplay_mock_enhanced':
-            # Roleplay mock enhanced responses also use enhanced roleplay context
-            mock_type = strategy.get('mock_response_type', 'unknown')
-            print(f"🎭 ROLEPLAY MOCK ENHANCED - {mock_type.upper()} using AI generation with enhanced roleplay context")
-            from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
-            context = get_enhanced_roleplay_context(strategy, user_message)
-        
-        elif strategy['needs_database']:
-            print(f"🔍 PERFORMING DATABASE SEARCH for {strategy['approach']} strategy...")
-            context = get_context_for_strategy(strategy, user_message)
-            # general_with_context from get_context_for_strategy returns just the wiki info
-            if strategy['approach'] == 'general_with_context':
-                wiki_info = context 
-                context = "" # Reset context to be built in the default block
-        
-        # Generate context for simple chat (no database search needed)
         else:
-            print(f"💬 SIMPLE CHAT MODE - No database search needed")
+            # ALL non-roleplay responses use context coordinator
+            print(f"💬 STANDARD MODE - Using context coordinator")
+            context = get_context_for_strategy(strategy, user_message)
         
-        # Set default context for simple chats and cases without specific context
-        if not context:
-            # Detect personality context for non-roleplay conversations
-            personality_context = detect_general_personality_context(user_message)
-            
-            context = f"""You are Elsie, an intelligent, knowledgeable AI assistant aboard the USS Stardancer. You have expertise in stellar cartography, ship operations, and access to comprehensive databases.
-
-PERSONALITY CONTEXT: {personality_context}
-
-PERSONALITY TRAITS:
-- Matter-of-fact and informative when providing information
-- Casual and conversational in your communication style
-- Intelligent and perceptive, able to understand what users are really asking for
-- Genuinely helpful and thorough in your responses
-- Professional but approachable - not overly formal or stilted
-- Draw on your expertise areas naturally when relevant
-
-EXPERTISE AREAS:
-- Stellar cartography and navigation
-- Ship operations and fleet information
-- Database research and information retrieval
-- When drinks are specifically mentioned, you can discuss your bartending experience
-- Access to Federation archives for canonical information
-
-COMMUNICATION STYLE:
-- Present tense actions without first person: *checks database* not "I check the database"
-- Wrap actions in *asterisks* for formatting
-- Speak naturally and conversationally
-- Be thorough and informative, especially when providing database information
-- Don't artificially limit your responses - provide comprehensive information when requested
-- Use "I" naturally in conversation - you're not avoiding first person speech
-- Keep the holographic bartender roleplay elements minimal unless specifically relevant
-
-CURRENT SETTING: You're aboard the USS Stardancer with access to ship databases and Federation archives. When users ask for information, you can provide detailed, comprehensive responses without artificial length restrictions.
-
-{f"AVAILABLE INFORMATION: {wiki_info}" if wiki_info else ""}
-
-Stay helpful and informative. When providing database information, be thorough and comprehensive. Keep responses natural and conversational while being as detailed as needed to fully answer the user's question."""
+        print(f"📋 CONTEXT GENERATED: {len(context)} characters")
         
         # Format conversation history with topic change awareness
         # Special handling for DGM-controlled Elsie content
-        chat_history = format_conversation_history_with_dgm_elsie(conversation_history, is_topic_change)
+        chat_history = format_conversation_history_with_dgm_elsie(conversation_history)
         
         # Add topic change instruction if needed
         topic_instruction = ""
-        if is_topic_change:
-            topic_instruction = "\n\nIMPORTANT: The customer has asked a NEW QUESTION. Do not continue or elaborate on previous topics. Focus ONLY on answering this specific new question directly and concisely."
-        
+      
         # Build the full prompt
         prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
         
 
         # With increased context window, use full context without chunking
         estimated_tokens = estimate_token_count(prompt)
-        print(f"🧮 Estimated token count: {estimated_tokens} (using full context - no chunking)")
+        print(f"Estimated token count: {estimated_tokens} (using full context - no chunking)")
         
+        # Generate response with explicit output limit to avoid excessive verbosity
+        from google.generativeai.types import GenerationConfig
+
+        generation_config = GenerationConfig(
+            max_output_tokens=6000,  # Allow up to ~24k characters, within new 6k-token limit
+            temperature=0.7  # Maintain creativity balance
+        )
+
         # Generate response
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config=generation_config)
         response_text = response.text.strip()
         
         # Filter out AI-generated conversation continuations (hallucinated customer dialogue)
@@ -352,7 +308,7 @@ Stay helpful and informative. When providing database information, be thorough a
                 break
         
         # Determine if this is a roleplay response (should use Star Trek dates)
-        is_roleplay_response = strategy.get('approach', '').startswith('roleplay')
+        is_roleplay_response = strategy.get('approach', '').startswith('roleplay_')
         
         # Filter meeting information unless it's a non-roleplay schedule query
         schedule_terms = ['schedule', 'meeting', 'time', 'when', 'gm', 'game master']
@@ -366,7 +322,7 @@ Stay helpful and informative. When providing database information, be thorough a
             response_text = convert_earth_date_to_star_trek(response_text)
         
         # Check for poetic short circuit during casual dialogue
-        if strategy['approach'] in ['simple_chat', 'general_with_context'] and should_trigger_poetic_circuit(user_message, conversation_history):
+        if strategy['approach'] in ['simple_chat', 'general'] and should_trigger_poetic_circuit(user_message, conversation_history):
             print(f"🎭 POETIC SHORT CIRCUIT TRIGGERED - Replacing casual response with esoteric poetry")
             response_text = get_poetic_response(user_message, response_text)
         
@@ -432,9 +388,8 @@ Stay helpful and informative. When providing database information, be thorough a
                 rp_state.mark_response_turn(turn_number)
                 print(f"   📝 ENSURED: Elsie's response turn tracked (AI-enhanced {mock_type})")
         
-        print(f"✅ Response generated successfully ({len(response_text)} characters)")
         return response_text
         
     except Exception as e:
-        print(f"Gemma API error: {e}")
+        print(f"❌ Error in AI response generation: {e}")
         return get_mock_response(user_message) 

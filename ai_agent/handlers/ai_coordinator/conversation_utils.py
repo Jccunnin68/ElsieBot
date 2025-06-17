@@ -145,19 +145,14 @@ def format_conversation_history(conversation_history: list, is_topic_change: boo
     return chat_history
 
 
-def format_conversation_history_with_dgm_elsie(conversation_history: list, is_topic_change: bool) -> str:
+def format_conversation_history_with_dgm_elsie(conversation_history: list) -> str:
     """
     Format conversation history with special handling for DGM-controlled Elsie posts.
     DGM-controlled Elsie content ([DGM][Elsie] posts) should appear as if Elsie said them.
     """
-    if is_topic_change:
-        # For topic changes, only include the last exchange to avoid confusion
-        recent_messages = conversation_history[-2:] if len(conversation_history) >= 2 else conversation_history
-        print("🔄 Topic change detected - limiting conversation history to prevent continuity issues")
-    else:
-        # For continuing conversations, include more context to allow better follow-ups
-        recent_messages = conversation_history[-6:]  # Increased from 4 to 6 for better follow-up support
-        print("🔗 Maintaining conversation context - including extended history for follow-ups")
+
+    recent_messages = conversation_history[-6:]  # Increased from 4 to 6 for better follow-up support
+    print("🔗 Maintaining conversation context - including extended history for follow-ups")
     
     chat_history = ""
     for msg in recent_messages:

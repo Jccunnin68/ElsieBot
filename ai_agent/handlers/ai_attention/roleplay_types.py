@@ -118,32 +118,52 @@ TRIGGER_TYPES = {
     'thread_channel_monitoring': 'thread_channel_monitoring'
 }
 
-# Roleplay approach types
-APPROACH_TYPES = {
+# Roleplay approach types - ALL must be prefixed with roleplay_
+ROLEPLAY_APPROACHES = {
     'roleplay_active': 'roleplay_active',
     'roleplay_listening': 'roleplay_listening',
+    'roleplay_supportive': 'roleplay_supportive',
+    'roleplay_group': 'roleplay_group',
+    'roleplay_service': 'roleplay_service',
+    'roleplay_technical': 'roleplay_technical',
     'roleplay_mock_enhanced': 'roleplay_mock_enhanced',
-    'roleplay_exit': 'roleplay_exit',
-    'roleplay_auto_exit': 'roleplay_auto_exit',
-    'cross_channel_busy': 'cross_channel_busy',
-    'dgm_dm_blocked': 'dgm_dm_blocked',
+    'roleplay_fallback': 'roleplay_fallback',
+    'roleplay_dgm_controlled': 'roleplay_dgm_controlled',
+    'roleplay_cross_channel_busy': 'roleplay_cross_channel_busy',
+    'roleplay_quick_database': 'roleplay_quick_database'
+}
+
+# Standard approach types - Clean, simple names only
+STANDARD_APPROACHES = {
+    'character_info': 'character_info',
+    'ship_info': 'ship_info',
+    'logs': 'logs',
+    'tell_me_about': 'tell_me_about',
+    'federation_archives': 'federation_archives',
+    'url_request': 'url_request',
+    'general': 'general',
+    'comprehensive': 'comprehensive',
+    'continuation': 'continuation',
+    'simple_chat': 'simple_chat',
+    'menu': 'menu',
+    'reset': 'reset'
+}
+
+# DGM approach types (special system approaches)
+DGM_APPROACHES = {
     'dgm_scene_setting': 'dgm_scene_setting',
     'dgm_scene_end': 'dgm_scene_end',
-    'dgm_controlled_elsie': 'dgm_controlled_elsie',
-    'general': 'general',
-    'continuation': 'continuation',
-    'log_url': 'log_url',
-    'character_info': 'character_info',
-    'specific_log': 'specific_log',
-    'tell_me_about': 'tell_me_about',
-    'stardancer_info': 'stardancer_info',
-    'stardancer_command': 'stardancer_command',
-    'ship_log': 'ship_log',
-    'ooc': 'ooc',
-    'log_query': 'log_query',
-    'federation_archives': 'federation_archives',
-    'ship_log_combined': 'ship_log_combined',
-    'character_log_combined': 'character_log_combined'
+    'dgm_controlled_elsie': 'dgm_controlled_elsie'
+}
+
+# DEPRECATED: Combined approach types - Use specific categories above
+APPROACH_TYPES = {
+    # Roleplay approaches
+    **ROLEPLAY_APPROACHES,
+    # Standard approaches  
+    **STANDARD_APPROACHES,
+    # DGM approaches
+    **DGM_APPROACHES
 }
 
 # Roleplay exit conditions

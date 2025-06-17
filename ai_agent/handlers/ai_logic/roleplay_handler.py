@@ -1,235 +1,433 @@
 """
-Roleplay Handler - Enhanced Intelligence Processing
-===================================================
+Roleplay Message Handler - Context-Aware Character Interactions
+==============================================================
 
-This module handles messages when the agent is in roleplay mode, using an
-enhanced decision-making process that integrates emotional intelligence,
-contextual cues, and strategic response planning.
+This module handles ALL responses when Elsie is in roleplay mode.
+Provides context-aware, character-driven responses including:
+- Enhanced contextual intelligence from ai_attention
+- Emotional intelligence from ai_emotion  
+- Database queries via ai_wisdom (quick response mode)
+- Character relationship tracking
+- Cross-channel roleplay state management
 
-CRITICAL FLOW:
-1. Receives message and context from the response_router
-2. Builds comprehensive contextual cues for the current turn
-3. Uses the response_decision_engine to determine the optimal response
-4. Updates the roleplay state based on the decision
-5. Converts the engine's decision into a final ResponseDecision for the generator
+CRITICAL: This handler is ONLY called when in roleplay mode.
+ENHANCED: Quick database response mode for efficient roleplay flow.
 """
 
 from typing import Dict, List, Optional
-import traceback
+
+
 
 from .response_decision import ResponseDecision
-from handlers.ai_attention.state_manager import get_roleplay_state
-from .response_decision_engine import create_response_decision_engine
+from .query_detection import detect_query_type_with_conflicts
 
 
 def handle_roleplay_message(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
     """
-    ENHANCED: Handle roleplay messages using the new emotional intelligence system.
+    Enhanced roleplay handler with quick database responses and contextual intelligence.
     
-    This integrates:
-    - ai_attention: Context gathering and roleplay state management
-    - ai_emotion: Emotional intelligence and priority resolution
-    - ai_logic: Decision engine and response strategy
+    Roleplay mode provides:
+    - Quick database queries (single best result)
+    - Enhanced contextual and emotional intelligence
+    - Character relationship tracking
+    - Cross-channel roleplay awareness
+    - NO disambiguation (quick response flow)
+    
+    Args:
+        user_message: The user's message
+        conversation_history: Previous conversation turns
+        channel_context: Channel and context information
+        
+    Returns:
+        ResponseDecision with appropriate strategy
     """
-    print(f"   🧠 ENHANCED ROLEPLAY PROCESSING")
+    print(f"\n🎭 ROLEPLAY HANDLER - Enhanced quick response mode")
+    
+    # Handle cross-channel busy state first
+    from .response_router import is_cross_channel_message
+    if is_cross_channel_message(channel_context):
+        return handle_cross_channel_busy(None, channel_context)
+    
+    # Detect query type with conflict resolution
+    query_info = detect_query_type_with_conflicts(user_message)
+    
+    print(f"   📋 Query Analysis: {query_info['type']} - {query_info.get('subject', 'N/A')}")
+    if query_info.get('conflict_resolved'):
+        print(f"      ⚖️  Conflict Resolution: {query_info['conflict_resolved']}")
+    
+    # Route to quick response strategies for database queries
+    database_query_types = ['character', 'ship', 'ship_log', 'character_log', 'tell_me_about']
+    if query_info['type'] in database_query_types:
+        return _handle_roleplay_database_query(user_message, query_info)
+    
+    # Route to standard roleplay processing for non-database queries
+    return _handle_standard_roleplay(user_message, conversation_history, channel_context)
+
+
+def _handle_roleplay_database_query(user_message: str, query_info: Dict) -> ResponseDecision:
+    """
+    Quick database query for roleplay contexts - return single best result.
+    
+    KEY FEATURE: No disambiguation, just return the most relevant result quickly
+    to maintain roleplay flow.
+    """
+    print(f"   🚀 ROLEPLAY QUICK DATABASE: {query_info['type']}")
+    
+    strategy = {
+        'approach': 'roleplay_quick_database',
+        'needs_database': True,
+        'query_type': query_info['type'],
+        'subject': query_info.get('subject'),
+        'context_priority': 'roleplay',
+        'reasoning': f"Roleplay quick database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
+    }
+    
+    # Add specific query details
+    if query_info.get('log_type'):
+        strategy['log_type'] = query_info['log_type']
+    
+    # Add category intersection requirements
+    if query_info.get('requires_category_intersection'):
+        strategy['valid_categories'] = query_info['valid_categories']
+        strategy['requires_category_intersection'] = True
+        print(f"      📂 Category intersection required: {query_info['valid_categories']}")
+    
+    # Add conflict resolution info
+    if query_info.get('conflict_resolved'):
+        strategy['conflict_info'] = query_info['conflict_resolved']
+        print(f"      ⚖️  Conflict resolved: {query_info['conflict_resolved']}")
+    
+    return ResponseDecision(
+        needs_ai_generation=True,
+        pre_generated_response=None,
+        strategy=strategy
+    )
+
+
+def _handle_standard_roleplay(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
+    """
+    Standard roleplay processing using enhanced contextual intelligence.
+    
+    This uses the existing enhanced roleplay system with contextual cues
+    and emotional intelligence integration.
+    """
+    print(f"   🎭 STANDARD ROLEPLAY PROCESSING")
     
     try:
-        # Get roleplay state
+        # Import roleplay state management
+        from ..ai_attention.state_manager import get_roleplay_state
+        
+        # Get current roleplay session state
+        session_id = channel_context.get('channel_id', 'unknown')
         rp_state = get_roleplay_state()
         turn_number = len(conversation_history) + 1
         
-        # Step 1: Build comprehensive contextual cues
-        from handlers.ai_attention.context_gatherer import build_contextual_cues
-        contextual_cues = build_contextual_cues(user_message, rp_state, turn_number)
+        print(f"      📊 Roleplay State: {rp_state.current_mode}")
+        print(f"      🔄 Turn: {turn_number}")
         
-        # Add the original message to contextual cues for emotional analysis
-        contextual_cues.current_message = user_message
+        # Enhanced LLM-based routing and contextual intelligence processing
+        from ..ai_attention.conversation_memory import ConversationMemory
         
-        print(f"   📊 Contextual cues built:")
-        print(f"      - Session mode: {contextual_cues.session_mode.value}")
-        print(f"      - Current speaker: {contextual_cues.current_speaker}")
-        print(f"      - Known characters: {list(contextual_cues.known_characters.keys())}")
+        # Use conversation memory for LLM-enhanced routing
+        conversation_memory = ConversationMemory()
         
-        # Step 2: Use the enhanced decision engine
-        decision_engine = create_response_decision_engine()
-        response_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
+        # Add current turn to conversation memory
+        conversation_memory.add_turn(
+            speaker="User",
+            message=user_message,
+            turn_number=turn_number,
+            message_type="standard"
+        )
         
-        # Step 3: Update roleplay state based on decision
-        _update_roleplay_state_from_decision(response_decision, contextual_cues, rp_state, turn_number)
+        # Get LLM-enhanced routing decision
+        routing_result = conversation_memory.process_message_enhanced(
+            user_message, 
+            turn_number, 
+            conversation_history, 
+            channel_context
+        )
         
-        # Step 4: Convert to final ResponseDecision format
-        final_decision = _convert_to_final_response_decision(response_decision, contextual_cues)
+        print(f"      🧠 LLM Routing: {routing_result.get('processing_approach', 'unknown')}")
+        print(f"      🎯 Confidence: {routing_result.get('routing_confidence', 0.0):.2f}")
         
-        print(f"   ✅ ENHANCED ROLEPLAY DECISION COMPLETE:")
-        print(f"      - Should respond: {final_decision.needs_ai_generation}")
-        print(f"      - Strategy approach: {final_decision.strategy.get('approach', 'unknown')}")
-        print(f"      - Reasoning: {final_decision.strategy.get('reasoning', 'No reasoning provided')}")
+        # Convert LLM routing to response decision
+        response_decision = _convert_llm_routing_to_response_decision(routing_result, user_message)
+        
+        # Update roleplay state
+        _update_roleplay_state_from_decision(response_decision, routing_result.get('contextual_cues'), rp_state, turn_number)
+        
+        # Convert to final response decision
+        final_decision = _convert_to_final_response_decision(response_decision, routing_result.get('contextual_cues'))
         
         return final_decision
         
     except Exception as e:
-        print(f"   ❌ CRITICAL ERROR in enhanced roleplay processing: {e}")
-        print(f"   📋 Traceback: {traceback.format_exc()}")
-        
-        # PHASE 3E: DO NOT fallback to old system - return safe default instead
-        print(f"   🛡️ FABRICATION PROTECTION: Using safe default instead of old system fallback")
-        
+        print(f"   ❌ ERROR in standard roleplay processing: {e}")
+        # Fallback to simple roleplay response
         return ResponseDecision(
-            needs_ai_generation=False,
-            pre_generated_response="I'm having difficulty processing that request right now. Please try again in a moment.",
+            needs_ai_generation=True,
+            pre_generated_response=None,
             strategy={
-                'approach': 'safe_fallback',
+                'approach': 'roleplay_fallback',
                 'needs_database': False,
-                'reasoning': f'Enhanced decision engine error - safe fallback applied: {str(e)}',
-                'context_priority': 'safety',
-                'fabrication_controls_applied': True,
-                'error_protection': True
+                'reasoning': f'Roleplay processing error fallback: {e}',
+                'context_priority': 'roleplay'
             }
         )
 
 
 def handle_cross_channel_busy(rp_state, channel_context: Dict) -> ResponseDecision:
-    """Handle messages from different channels when in roleplay mode."""
-    channel_info = rp_state.get_roleplay_channel_info()
+    """
+    Handle cross-channel busy state - Elsie is active in another channel.
     
-    # Check if this is a DM
-    is_dm = channel_context and channel_context.get('type', '').lower() in ['dm', 'group_dm']
+    Returns a pre-generated response indicating she's busy elsewhere.
+    """
+    print(f"   🚫 CROSS-CHANNEL BUSY STATE")
     
-    if is_dm:
-        busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. DM interactions are paused during roleplay sessions."
-    else:
-        busy_message = f"I am currently roleplaying in {channel_info['channel_name']}. Please try again later or join that thread."
+    # Get channel info for context
+    current_channel = channel_context.get('channel_name', 'this channel')
+    
+    busy_responses = [
+        f"*[Elsie seems focused on something happening in another part of the station]*",
+        f"*[Elsie appears to be handling something urgent elsewhere and doesn't notice the activity in {current_channel}]*",
+        f"*[Elsie is clearly engaged with patrons in another area of the ship]*"
+    ]
+    
+    import random
+    busy_response = random.choice(busy_responses)
+    
+    strategy = {
+        'approach': 'roleplay_cross_channel_busy',
+        'needs_database': False,
+        'reasoning': f'Cross-channel busy - roleplay active in {rp_state.roleplay_channel}',
+        'context_priority': 'minimal'
+    }
     
     return ResponseDecision(
         needs_ai_generation=False,
-        pre_generated_response=busy_message,
-        strategy={
-            'approach': 'cross_channel_busy',
-            'needs_database': False,
-            'reasoning': f'Cross-channel message while roleplaying in {channel_info["channel_name"]}',
-            'context_priority': 'none',
-            'roleplay_channel': channel_info['channel_name']
-        }
+        pre_generated_response=f"*is busy with patrons in another area*",
+        strategy=strategy
     )
 
 
 def _update_roleplay_state_from_decision(response_decision, contextual_cues, rp_state, turn_number: int):
     """
-    Update roleplay state based on the enhanced decision.
+    Update roleplay state based on response decision.
+    
+    This maintains continuity across roleplay sessions and tracks
+    character relationships and conversation dynamics.
     """
-    # Update conversation memory if available
-    if hasattr(rp_state, 'add_conversation_turn'):
-        current_speaker = contextual_cues.current_speaker or "User"
-        addressed_to = response_decision.address_character
+    try:
+        if not contextual_cues:
+            return
         
-        rp_state.add_conversation_turn(
-            speaker=current_speaker,
-            message=getattr(contextual_cues, 'current_message', ''),
-            turn_number=turn_number,
-            addressed_to=addressed_to
-        )
-    
-    # Update who Elsie might address in response
-    if response_decision.should_respond and response_decision.address_character:
-        rp_state.set_last_character_addressed(response_decision.address_character)
-    
-    # Update listening mode
-    rp_state.set_listening_mode(
-        not response_decision.should_respond,
-        response_decision.reasoning
-    )
-    
-    # Mark response turn if responding
-    if response_decision.should_respond:
-        rp_state.mark_response_turn(turn_number)
+        # Update last activity tracking
+        current_speaker = getattr(contextual_cues, 'current_speaker', None)
+        if current_speaker:
+            rp_state.last_speaker = current_speaker
+            rp_state.last_turn_number = turn_number
+        
+        # Update character relationship tracking if response involves characters
+        if hasattr(contextual_cues, 'known_characters') and contextual_cues.known_characters:
+            for character, info in contextual_cues.known_characters.items():
+                if character not in rp_state.character_relationships:
+                    rp_state.character_relationships[character] = {
+                        'first_interaction': turn_number,
+                        'interaction_count': 1,
+                        'last_interaction': turn_number
+                    }
+                else:
+                    rp_state.character_relationships[character]['interaction_count'] += 1
+                    rp_state.character_relationships[character]['last_interaction'] = turn_number
+        
+        print(f"      📊 Roleplay state updated: speaker={current_speaker}, turn={turn_number}")
+        
+    except Exception as e:
+        print(f"      ⚠️  Error updating roleplay state: {e}")
 
 
 def _convert_to_final_response_decision(response_decision, contextual_cues) -> ResponseDecision:
     """
-    Convert the enhanced ResponseDecision to the final ResponseDecision format.
+    Convert enhanced response decision to final ResponseDecision format.
+    
+    This bridges the enhanced contextual intelligence system with the
+    final response decision format expected by the coordinator.
     """
-    from handlers.ai_attention.contextual_cues import ResponseType
-    
-    # Determine if AI generation is needed
-    needs_ai_generation = response_decision.should_respond
-    
-    # Build strategy dictionary
-    strategy = {
-        'approach': _convert_response_type_to_approach(response_decision.response_type),
-        'needs_database': _should_use_database(response_decision, contextual_cues),
-        'reasoning': response_decision.reasoning,
-        'context_priority': 'roleplay',
-        'response_style': response_decision.response_style,
-        'tone': response_decision.tone,
-        'approach_style': response_decision.approach,
-        'address_character': response_decision.address_character,
-        'relationship_tone': response_decision.relationship_tone,
-        'suggested_themes': response_decision.suggested_themes,
-        'continuation_cues': response_decision.continuation_cues,
-        'estimated_length': response_decision.estimated_length,
-        'confidence': response_decision.confidence,
-        'scene_impact': response_decision.scene_impact,
+    try:
+        # Convert response type to approach
+        approach = _convert_response_type_to_approach(response_decision.response_type)
         
-        # PHASE 3D: Fabrication control information
-        'knowledge_to_use': getattr(response_decision, 'knowledge_to_use', []),
-        'avoid_topics': getattr(response_decision, 'avoid_topics', []),
+        # Determine if database context is needed
+        needs_database = _should_use_database(response_decision, contextual_cues)
         
-        # Contextual information
-        'session_mode': contextual_cues.session_mode.value,
-        'current_speaker': contextual_cues.current_speaker,
-        'known_characters': list(contextual_cues.known_characters.keys()),
-        'conversation_themes': contextual_cues.conversation_dynamics.themes,
-        'emotional_tone': contextual_cues.conversation_dynamics.emotional_tone,
-        'turn_number': contextual_cues.turn_number,
+        # Build comprehensive strategy
+        strategy = {
+            'approach': approach,
+            'needs_database': needs_database,
+            'reasoning': response_decision.reasoning,
+            'context_priority': 'roleplay',
+            'response_style': getattr(response_decision, 'response_style', 'natural'),
+            'tone': getattr(response_decision, 'tone', 'friendly'),
+            'confidence': getattr(response_decision, 'confidence', 0.8)
+        }
         
-        # Enhanced decision information
-        'enhanced_decision': True,
-        'emotional_intelligence_used': True,
-        'priority_resolution_used': True,
-        'fabrication_controls_applied': True  # PHASE 3D: Mark that fabrication controls were used
-    }
-    
-    return ResponseDecision(
-        needs_ai_generation=needs_ai_generation,
-        pre_generated_response=None,  # Enhanced decisions always need AI generation
-        strategy=strategy
-    )
+        # Add character addressing if available
+        if hasattr(response_decision, 'address_character') and response_decision.address_character:
+            strategy['address_character'] = response_decision.address_character
+        
+        # Add knowledge context if available
+        if hasattr(response_decision, 'knowledge_to_use') and response_decision.knowledge_to_use:
+            strategy['knowledge_context'] = response_decision.knowledge_to_use
+        
+        return ResponseDecision(
+            needs_ai_generation=response_decision.should_respond,
+            pre_generated_response=None,
+            strategy=strategy
+        )
+        
+    except Exception as e:
+        print(f"      ❌ Error converting to final response decision: {e}")
+        # Safe fallback
+        return ResponseDecision(
+            needs_ai_generation=True,
+            pre_generated_response=None,
+            strategy={
+                'approach': 'roleplay_active',
+                'needs_database': False,
+                'reasoning': f'Conversion error fallback: {e}',
+                'context_priority': 'roleplay'
+            }
+        )
 
 
 def _convert_response_type_to_approach(response_type) -> str:
-    """Convert ResponseType to strategy approach string."""
-    from handlers.ai_attention.contextual_cues import ResponseType
-    
-    type_to_approach = {
-        ResponseType.ACTIVE_DIALOGUE: 'roleplay_active',
-        ResponseType.SUPPORTIVE_LISTEN: 'roleplay_supportive',
-        ResponseType.SUBTLE_SERVICE: 'roleplay_subtle_service',
-        ResponseType.GROUP_ACKNOWLEDGMENT: 'roleplay_group_response',
-        ResponseType.IMPLICIT_RESPONSE: 'roleplay_implicit',
-        ResponseType.TECHNICAL_EXPERTISE: 'roleplay_technical',
-        ResponseType.NONE: 'roleplay_listening'
-    }
-    
-    return type_to_approach.get(response_type, 'roleplay_active')
+    """Convert ResponseType enum to approach string."""
+    try:
+        response_type_str = str(response_type).lower()
+        
+        if 'active_dialogue' in response_type_str:
+            return 'roleplay_active'
+        elif 'supportive_listen' in response_type_str:
+            return 'roleplay_supportive'
+        elif 'group_acknowledgment' in response_type_str:
+            return 'roleplay_group'
+        elif 'subtle_service' in response_type_str:
+            return 'roleplay_service'
+        elif 'technical_expertise' in response_type_str:
+            return 'roleplay_technical'
+        else:
+            return 'roleplay_active'
+    except:
+        return 'roleplay_active'
 
 
 def _should_use_database(response_decision, contextual_cues) -> bool:
-    """Determine if database access is needed for this response."""
-    from handlers.ai_attention.contextual_cues import ResponseType
+    """
+    Determine if database context is needed for roleplay response.
     
-    # Always use database for technical expertise
-    if response_decision.response_type == ResponseType.TECHNICAL_EXPERTISE:
-        return True
+    Enhanced to use database context for technical expertise and character knowledge.
+    """
+    try:
+        # Check if response involves technical expertise
+        if hasattr(response_decision, 'response_type'):
+            response_type_str = str(response_decision.response_type).lower()
+            if 'technical_expertise' in response_type_str:
+                return True
+        
+        # Check if there are known characters to enhance
+        if contextual_cues and hasattr(contextual_cues, 'known_characters'):
+            if contextual_cues.known_characters and len(contextual_cues.known_characters) > 0:
+                return True
+        
+        # Check for conversation themes that would benefit from database context
+        if contextual_cues and hasattr(contextual_cues, 'conversation_dynamics'):
+            dynamics = contextual_cues.conversation_dynamics
+            if hasattr(dynamics, 'themes'):
+                database_themes = ['stellar_cartography', 'navigation', 'exploration', 'technology', 'starfleet']
+                if any(theme in dynamics.themes for theme in database_themes):
+                    return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"      ⚠️  Error determining database usage: {e}")
+        return False
+
+
+def _convert_llm_routing_to_response_decision(routing_result: Dict, user_message: str):
+    """
+    Convert LLM routing result to response decision format.
     
-    # Use database if character knowledge is needed
-    if response_decision.address_character and contextual_cues.known_characters:
-        return True
-    
-    # Use database if conversation themes suggest it
-    themes = contextual_cues.conversation_dynamics.themes
-    database_themes = ['ship_operations', 'stellar_cartography', 'crew_information', 'mission_logs']
-    if any(theme in database_themes for theme in themes):
-        return True
-    
-    # Default to not using database for simple responses
-    return False 
+    This bridges the new LLM routing system with the existing response decision system.
+    """
+    try:
+        from ..ai_attention.contextual_cues import create_response_decision, ResponseType
+        
+        # Get routing information
+        approach = routing_result.get('processing_approach', 'roleplay_active')
+        confidence = routing_result.get('routing_confidence', 0.7)
+        reasoning = routing_result.get('reasoning', 'LLM routing decision')
+        response_type_str = routing_result.get('suggested_response_type', 'active_dialogue')
+        
+        # Convert response type string to enum
+        response_type_map = {
+            'active_dialogue': ResponseType.ACTIVE_DIALOGUE,
+            'supportive_listen': ResponseType.SUPPORTIVE_LISTEN,
+            'subtle_service': ResponseType.SUBTLE_SERVICE,
+            'technical_expertise': ResponseType.TECHNICAL_EXPERTISE,
+            'group_acknowledgment': ResponseType.GROUP_ACKNOWLEDGMENT,
+            'none': ResponseType.NONE
+        }
+        
+        response_type = response_type_map.get(response_type_str, ResponseType.ACTIVE_DIALOGUE)
+        
+        # Create response decision
+        response_decision = create_response_decision(
+            should_respond=True,
+            response_type=response_type,
+            reasoning=reasoning
+        )
+        
+        # Add additional attributes
+        response_decision.confidence = confidence
+        response_decision.approach = approach
+        response_decision.response_style = routing_result.get('response_style', 'natural')
+        response_decision.tone = routing_result.get('tone', 'friendly')
+        
+        print(f"      ✅ LLM routing converted to response decision: {approach}")
+        return response_decision
+        
+    except Exception as e:
+        print(f"      ❌ Error converting LLM routing: {e}")
+        # Fallback to basic response decision
+        return _create_basic_response_decision(user_message)
+
+
+
+
+
+def _create_basic_response_decision(user_message: str):
+    """Create a basic response decision as fallback."""
+    try:
+        from ..ai_attention.contextual_cues import create_response_decision, ResponseType
+        
+        return create_response_decision(
+            should_respond=True,
+            response_type=ResponseType.ACTIVE_DIALOGUE,
+            reasoning="Basic roleplay response fallback"
+        )
+    except:
+        # Ultimate fallback - create minimal response decision structure
+        class BasicResponseDecision:
+            def __init__(self):
+                self.should_respond = True
+                self.response_type = type('ResponseType', (), {'value': 'active_dialogue'})()
+                self.reasoning = "Minimal fallback response"
+                self.confidence = 0.7
+                self.response_style = 'natural'
+                self.tone = 'friendly'
+        
+        return BasicResponseDecision()
+
+
+ 

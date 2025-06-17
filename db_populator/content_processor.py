@@ -6,227 +6,28 @@ Handles content formatting, classification, and text processing.
 
 import re
 import hashlib
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-# Ship names for classification - Updated with actual 22nd Mobile Fleet ships
-SHIP_NAMES = [
-    # 22nd Mobile Daedalus Fleet Ships
-    'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel',
-    'caelian', 'montagnier', 'faraday', 'manta', 'mjolnir', 'rendino', 
-    'gigantes', 'banshee',
-    
-    # Classic Star Trek Ships (for reference/comparison)
-    'voyager', 'defiant', 'enterprise', 'discovery', 'reliant', 'excelsior',
-    'constitution', 'intrepid', 'sovereign', 'galaxy', 'miranda', 'oberth',
-    'akira', 'steam runner', 'saber', 'norway', 'prometheus'
-]
+
 
 
 class ContentProcessor:
     """Handles content processing, classification, and formatting"""
     
-    def classify_page_type(self, title: str, content: str) -> Tuple[str, Optional[str], Optional[str]]:
-        """
-        Classify page type and extract metadata with enhanced character detection.
-        Now automatically detects character pages to prevent manual tagging issues.
-        """
-        title_lower = title.lower()
-        content_lower = content.lower() if content else ""
+    def get_categories_from_page_data(self, page_data: Dict) -> List[str]:
+        """Extract categories from page data (no classification)"""
+        categories = page_data.get('categories', [])
         
-        # Check if it's a ship log (date pattern)
-        date_pattern = r'(\d{4}/\d{1,2}/\d{1,2})|(\d{1,2}/\d{1,2}/\d{4})'
-        if re.search(date_pattern, title):
-            # Enhanced ship name extraction for mission logs
-            ship_name = self.extract_ship_name_from_title(title)
-            
-            # Extract date
-            log_date = self.extract_log_date(title)
-            
-            print(f"   🚢 Classified as mission_log: '{title}' -> ship: '{ship_name}', date: '{log_date}'")
-            return "mission_log", ship_name, log_date
+        if not categories:
+            print(f"  ⚠️  No categories found for page, using fallback")
+            return ['General Information']  # Minimal fallback only
         
-        # Check if it's a ship info page
-        ship_pattern = r'uss\s+(\w+)|(\w+)\s+\(ncc-\d+\)'
-        if re.search(ship_pattern, title_lower):
-            ship_name = self.extract_ship_name_from_title(title)
-            print(f"   🚢 Classified as ship_info: '{title}' -> ship: '{ship_name}'")
-            return "ship_info", ship_name, None
-        
-        # ENHANCED CHARACTER/PERSONNEL DETECTION
-        is_character = self._detect_character_page(title, content_lower)
-        if is_character:
-            print(f"   👤 Classified as personnel: '{title}' (auto-detected character)")
-            return "personnel", None, None
-        
-        # Check if it's a location/system page
-        if any(keyword in title_lower for keyword in ['system', 'planet', 'station', 'starbase']):
-            print(f"   🌍 Classified as location: '{title}'")
-            return "location", None, None
-        
-        # Check if it's technology
-        if any(keyword in title_lower for keyword in ['class', 'drive', 'system', 'matrix', 'interface']) and 'system' not in title_lower:
-            print(f"   🔧 Classified as technology: '{title}'")
-            return "technology", None, None
-        
-        # Default to general article
-        print(f"   📄 Classified as general: '{title}'")
-        return "general", None, None
+        print(f"  ✓ Using real wiki categories: {categories}")
+        return categories
     
-    def _detect_character_page(self, title: str, content_lower: str) -> bool:
-        """
-        Enhanced character page detection using multiple indicators.
-        Returns True if this appears to be a character/personnel page.
-        """
-        title_lower = title.lower()
-        
-        # Pattern 1: Title contains rank keywords (check this first)
-        rank_keywords = [
-            'captain', 'commander', 'lieutenant', 'ensign', 'admiral', 
-            'doctor', 'dr.', 'chief', 'sergeant', 'corporal', 'major',
-            'colonel', 'general', 'rear admiral', 'vice admiral', 'fleet admiral',
-            'lieutenant commander', 'lieutenant junior grade', 'subcommander',
-            'sublieutenant', 'subadmiral'
-        ]
-        if any(keyword in title_lower for keyword in rank_keywords):
-            print(f"      ✓ Character detected: Rank keyword in title")
-            return True
-        
-        # Pattern 2: Special character types (EMH, AI, Hologram, etc.)
-        # Check this BEFORE exclusion list since these are definitely characters
-        special_char_patterns = [
-            r' \(emh\)$', r' \(ai\)$', r' \(android\)$', r' \(hologram\)$'
-        ]
-        for pattern in special_char_patterns:
-            if re.search(pattern, title_lower):
-                print(f"      ✓ Character detected: Special character type")
-                return True
-        
-        # Pattern 3: Early exclusion - Skip obvious non-character pages
-        exclude_words = [
-            'class', 'system', 'drive', 'matrix', 'interface', 'project', 'program', 
-            'station', 'base', 'fleet', 'timeline', 'log', 'part', 'personnel', 
-            'episode', 'campaign', 'operation', 'mission', 'incident', 'war', 
-            'battle', 'page', 'engine', 'core', 'gate', 'portal', 'network',
-            'protocol', 'algorithm', 'procedure', 'manual', 'handbook', 'guide'
-        ]
-        
-        # If title contains technology/system words, it's very likely NOT a character
-        if any(word in title_lower for word in exclude_words):
-            return False
-        
-        # Pattern 4: Title looks like a person's name (First Last or First Middle Last)
-        # Match patterns like "Marcus Blaine", "Jackson Riens", "Valerie Chalons"
-        # Include comprehensive Unicode support for international characters
-        unicode_chars = r'a-zþÞðßáéíóúàèìòùâêîôûäëïöüåæøýñçāēīōūăĕĭŏŭąęįųćłńśźżĉĝĥĵŝŭėįų'
-        
-        name_patterns = [
-            r'^[A-Z][a-z]+ [A-Z][a-z]+$',                           # First Last
-            r'^[A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+$',             # First Middle Last  
-            r'^[A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+$', # First Middle Middle Last
-            rf'^[A-Z][{unicode_chars}]+ [A-Z][{unicode_chars}]+ [A-Z][a-z]+$',  # First Special Last
-            rf'^[A-Z][{unicode_chars}]+ [A-Z][a-z]+$',                           # First Last with special chars
-            rf'^[A-Z][a-z]+ [A-Z][{unicode_chars}]+ [A-Z][a-z]+$',              # First Special Last
-            rf'^[A-Z][{unicode_chars}]+ [A-Z][{unicode_chars}]+ [A-Z][{unicode_chars}]+$'  # All special
-        ]
-        
-        for pattern in name_patterns:
-            if re.match(pattern, title):
-                print(f"      ✓ Character detected: Name pattern match")
-                return True
-        
-        # Pattern 5: Names with specific character-related words
-        # "Talyse of House Avelle", "Niaev i'Sahan t'Lena"
-        character_name_indicators = [
-            r'^[A-Z][a-z]+ of [A-Z]',           # "Name of Something"
-            r'[A-Z][a-z]+\'[A-Z]',              # "Name'Something" (Vulcan/Romulan names)
-            r'^[A-Z][a-z]+ [a-z]\'[A-Z]',      # "Name i'Something" 
-            r'^[A-Z][a-z]+ [A-Z]h\'[A-Z]',     # "Name Th'Something" (Andorian)
-            r'^[A-Z][a-z]+ [A-Z]h\'[a-z]',     # "Name Th'something" (Andorian)
-            r'^[A-Z][a-z]+ [A-Z][a-z]\'[A-Z]', # "Name So'Something" 
-        ]
-        
-        for pattern in character_name_indicators:
-            if re.search(pattern, title):
-                print(f"      ✓ Character detected: Character name pattern")
-                return True
-        
-        # Pattern 6: Content contains character-specific information
-        character_content_indicators = [
-            'rank:', 'position:', 'species:', 'assignment:', 'affiliation:',
-            'date of birth', 'homeworld:', 'gender:', 'age:', 'biography',
-            'background', 'starfleet', 'personnel file', 'service record',
-            'status:active', 'status:deceased', 'status: active', 'status: deceased'
-        ]
-        
-        content_score = 0
-        for indicator in character_content_indicators:
-            if indicator in content_lower:
-                content_score += 1
-        
-        if content_score >= 2:  # At least 2 character indicators in content
-            print(f"      ✓ Character detected: Content indicators (score: {content_score})")
-            return True
-        
-        return False
-    
-    def extract_ship_name_from_title(self, title: str) -> Optional[str]:
-        """Enhanced ship name extraction with multiple patterns"""
-        title_lower = title.lower()
-        
-        # Pattern 1: Direct ship name match in known ships list
-        for ship in SHIP_NAMES:
-            if ship in title_lower:
-                print(f"      ✓ Found ship '{ship}' in title")
-                return ship
-        
-        # Pattern 2: Extract from "USS [ShipName]" format
-        uss_pattern = r'uss\s+(\w+)'
-        uss_match = re.search(uss_pattern, title_lower)
-        if uss_match:
-            ship_candidate = uss_match.group(1)
-            # Check if it's a known ship
-            if ship_candidate in SHIP_NAMES:
-                print(f"      ✓ Found USS ship '{ship_candidate}' in title")
-                return ship_candidate
-        
-        # Pattern 3: Extract from ship name at start of title (e.g., "Stardancer 4/23/2022")
-        ship_start_pattern = r'^(\w+)\s+\d'
-        ship_start_match = re.search(ship_start_pattern, title_lower)
-        if ship_start_match:
-            ship_candidate = ship_start_match.group(1)
-            if ship_candidate in SHIP_NAMES:
-                print(f"      ✓ Found ship '{ship_candidate}' at start of title")
-                return ship_candidate
-        
-        # Pattern 4: Extract from "Date Ship Log" format (e.g., "2024/09/29 Adagio Log")
-        date_ship_pattern = r'\d+[/-]\d+[/-]\d+\s+(\w+)'
-        date_ship_match = re.search(date_ship_pattern, title_lower)
-        if date_ship_match:
-            ship_candidate = date_ship_match.group(1)
-            if ship_candidate in SHIP_NAMES:
-                print(f"      ✓ Found ship '{ship_candidate}' after date")
-                return ship_candidate
-        
-        print(f"      ⚠️  No ship name found in title: '{title}'")
-        return None
-    
-    def extract_log_date(self, title: str) -> Optional[str]:
-        """Extract and normalize log date from title"""
-        # Pattern: YYYY/M/D or YYYY/MM/DD
-        date_match = re.search(r'(\d{4})/(\d{1,2})/(\d{1,2})', title)
-        if date_match:
-            year, month, day = date_match.groups()
-            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        
-        # Pattern: M/D/YYYY or MM/DD/YYYY
-        date_match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', title)
-        if date_match:
-            month, day, year = date_match.groups()
-            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        
-        return None
+
     
     def calculate_content_hash(self, content: str) -> str:
         """Calculate SHA-256 hash of content for change detection"""

@@ -16,21 +16,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from handlers.ai_logic.query_detection import (
     is_continuation_request,
     is_federation_archives_request,
-    is_specific_log_request,
-    is_stardancer_query,
     extract_url_request,
     extract_tell_me_about_subject,
-    extract_ship_log_query,
     is_character_query,
     get_query_type
 )
 from handlers.handlers_utils import convert_earth_date_to_star_trek
 from handlers.ai_attention import (
-    is_roleplay_allowed_channel,
-    extract_addressed_characters,
-    is_valid_character_name,
-    extract_character_names_from_emotes,
-    detect_roleplay_exit_conditions,
+    
     RoleplayStateManager
 )
 
@@ -65,15 +58,7 @@ class TestIntentDetection:
         assert is_federation_archives_request("search federation archives")
         assert not is_federation_archives_request("tell me about ships")
         
-    def test_specific_log_request(self):
-        assert is_specific_log_request("show me the log")
-        assert is_specific_log_request("mission log")
-        assert not is_specific_log_request("tell me about ships")
-        
-    def test_stardancer_query(self):
-        assert is_stardancer_query("tell me about the stardancer")
-        assert is_stardancer_query("our ship")
-        assert not is_stardancer_query("tell me about the enterprise")
+
         
     def test_character_query(self):
         is_char, name = is_character_query("tell me about Captain Smith")
