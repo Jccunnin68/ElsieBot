@@ -43,15 +43,16 @@ def handle_standard_message(user_message: str, conversation_history: List) -> Re
     """
     print(f"\n💬 STANDARD HANDLER - Comprehensive response mode")
     
-    # Use enhanced query detection with conflict resolution
+    # PRIORITY 1: Check for simple mock responses first (before query detection)
+    # This handles greetings, farewells, simple chat, etc.
+    simple_mock_response = _check_for_simple_mock_response(user_message)
+    if simple_mock_response:
+        return simple_mock_response
+    
+    # PRIORITY 2: Use enhanced query detection for database queries
     query_info = detect_query_type_with_conflicts(user_message)
     
     print(f"   📋 Query Analysis: {query_info['type']} - {query_info.get('subject', 'N/A')}")
-    
-    # Handle simple mock responses first
-    simple_query_types = ['simple_greeting', 'simple_farewell', 'simple_status', 'simple_conversational']
-    if query_info.get('type') in simple_query_types:
-        return _handle_simple_mock_response(user_message, query_info['type'])
     
     # Handle special standard cases
     if query_info.get('type') == 'menu_request':
@@ -61,7 +62,7 @@ def handle_standard_message(user_message: str, conversation_history: List) -> Re
         return _handle_reset_request()
     
     # Handle comprehensive database queries
-    database_query_types = ['log', 'general']
+    database_query_types = ['log', 'general', 'temporal_log']
     if query_info['type'] in database_query_types:
         return _handle_comprehensive_database_query(user_message, query_info)
     
@@ -77,7 +78,12 @@ def _handle_comprehensive_database_query(user_message: str, query_info: Dict) ->
     query_type = query_info['type']
     
     # Map simple types to approaches
-    approach = 'logs' if query_type == 'log' else 'comprehensive'
+    if query_type == 'temporal_log':
+        approach = 'temporal_logs'
+    elif query_type == 'log':
+        approach = 'logs'
+    else:
+        approach = 'comprehensive'
     
     print(f"   📚 COMPREHENSIVE DATABASE QUERY: {query_type} -> Approach: {approach}")
     
@@ -89,6 +95,12 @@ def _handle_comprehensive_database_query(user_message: str, query_info: Dict) ->
         'context_priority': 'factual',
         'reasoning': f"Standard comprehensive database query: {query_type} - {query_info.get('subject', 'N/A')}"
     }
+    
+    # Add temporal-specific parameters
+    if query_type == 'temporal_log':
+        strategy['temporal_type'] = query_info.get('temporal_type')
+        strategy['ship_name'] = query_info.get('ship_name')
+        print(f"      ⏰ Temporal parameters: type={strategy['temporal_type']}, ship={strategy['ship_name']}")
     
     # Add disambiguation requirements for "general" queries that act like "tell_me_about"
     if query_type == 'general':
@@ -104,27 +116,7 @@ def _handle_comprehensive_database_query(user_message: str, query_info: Dict) ->
     )
 
 
-def _handle_simple_mock_response(user_message: str, query_type: str) -> ResponseDecision:
-    """Handle simple mock responses for basic interactions."""
-    from handlers.ai_emotion.mock_responses import get_mock_response
-    
-    print(f"   🤖 SIMPLE MOCK: {query_type}")
-    
-    # Get appropriate mock response
-    mock_response = get_mock_response(user_message)
-    
-    strategy = {
-        'approach': f'mock_{query_type}',
-        'needs_database': False,
-        'reasoning': f'Simple mock response for {query_type}',
-        'context_priority': 'none'
-    }
-    
-    return ResponseDecision(
-        needs_ai_generation=False,
-        pre_generated_response=mock_response,
-        strategy=strategy
-    )
+
 
 
 def _handle_menu_request() -> ResponseDecision:
@@ -206,5 +198,58 @@ def _handle_default_conversational(user_message: str) -> ResponseDecision:
             pre_generated_response=None,
             strategy=strategy
         )
+
+
+def _check_for_simple_mock_response(user_message: str) -> Optional[ResponseDecision]:
+    """
+    Check if this message should get a simple mock response.
+    Returns ResponseDecision if it should use mock, None otherwise.
+    
+    This handles:
+    - Greetings (hello, hi, etc.)
+    - Farewells (bye, goodbye, etc.)
+    - Status inquiries (how are you, etc.)
+    - Simple chat (yes, no, thanks, etc.)
+    - Menu requests
+    - Drink orders
+    - Federation archives requests
+    """
+    from handlers.ai_emotion.mock_responses import is_mock_response_appropriate, get_mock_response
+    from handlers.ai_emotion.personality_contexts import is_simple_chat
+    from handlers.ai_emotion.drink_menu import is_menu_request
+    from handlers.ai_logic.query_detection import is_federation_archives_request
+    
+    # Check if any mock response is appropriate
+    if is_mock_response_appropriate(user_message):
+        print(f"   🤖 SIMPLE MOCK RESPONSE DETECTED")
+        
+        # Determine the specific type for better logging
+        mock_type = "unknown"
+        if is_simple_chat(user_message):
+            mock_type = "simple_chat"
+        elif is_menu_request(user_message):
+            mock_type = "menu_request"
+        elif is_federation_archives_request(user_message):
+            mock_type = "federation_archives"
+        
+        print(f"      Type: {mock_type}")
+        
+        # Get the mock response
+        mock_response = get_mock_response(user_message)
+        
+        strategy = {
+            'approach': f'mock_{mock_type}',
+            'needs_database': False,
+            'reasoning': f'Simple mock response for {mock_type}',
+            'context_priority': 'none'
+        }
+        
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=mock_response,
+            strategy=strategy
+        )
+    
+    return None
 
 

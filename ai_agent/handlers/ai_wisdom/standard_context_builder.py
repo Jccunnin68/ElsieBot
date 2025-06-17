@@ -26,9 +26,13 @@ class StandardContextBuilder:
             result = self._get_logs_context(strategy, user_message) 
             print(f"         📚 Logs context generated: {len(result)} characters")
             
+        elif approach == 'temporal_logs':
+            result = self._get_temporal_logs_context(strategy, user_message)
+            print(f"         ⏰ Temporal logs context generated: {len(result)} characters")
+            
         elif approach == 'comprehensive':
             result = self._get_unified_context(strategy, user_message)
-            print(f"         🔍 Comprehensive context generated: {len(result)} characters")
+            print(f"         📖 Unified context generated: {len(result)} characters")
             
         elif approach == 'simple_chat':
             result = "Simple conversational response - no additional context needed."
@@ -47,122 +51,105 @@ class StandardContextBuilder:
             print(f"         🔄 Continuation context generated: {len(result)} characters")
             
         else:
-            print(f"         ⚠️ Unknown approach '{approach}' - using comprehensive context")
-            result = self._get_unified_context(strategy, user_message)
+            print(f"         ❌ Unknown approach: {approach}")
+            result = f"Unknown context approach: {approach}"
         
         return result
 
     def _get_unified_context(self, strategy: Dict, user_message: str) -> str:
-        """Get context using the unified search system."""
-        subject = strategy.get('subject', user_message)
+        """Get unified context using simplified content retriever."""
+        print(f"📖 UNIFIED CONTEXT SEARCH")
         
-        # This logic was previously in the standalone get_tell_me_about_context function.
-        # Inlining it here fixes a bug where the subject was being re-parsed incorrectly.
-        print(f"🔍 TELL ME ABOUT: '{subject}'")
-    
-        # Use unified search system
-        wiki_info = get_tell_me_about_content_prioritized(subject)
-        print(f"   - Retrieved tell me about content length: {len(wiki_info)} chars")
-    
-        # Check if this is a fallback response and adjust instructions accordingly
-        is_fallback = is_fallback_response(wiki_info)
-        fallback_instructions = ""
+        # Extract subject from strategy
+        subject = strategy.get('subject', user_message)
+        print(f"   - Subject: '{subject}'")
+        
+        # Use simplified content retriever for general content
+        from .content_retriever import get_content
+        result = get_content(subject, content_type='general')
+        
+        print(f"   - Retrieved unified content length: {len(result)} chars")
+        
+        # Check if this is a fallback response
+        is_fallback = is_fallback_response(result)
         if is_fallback:
-            fallback_instructions = """
-IMPORTANT: The database search encountered processing limitations. The response below indicates this limitation.
-Present this information naturally and suggest the user try again later or rephrase their query to be more specific.
+            print(f"   - Fallback response detected - using direct response")
+            return result
+        
+        # Enhanced instructions for general content
+        total_found = result.count("**") if result else 0
+        
+        instructions = f"""
+COMPREHENSIVE INFORMATION SYNTHESIS:
+Create a detailed informative response about: {subject}
+
+INSTRUCTIONS:
+- SYNTHESIZE all provided information into a comprehensive, well-organized response
+- STRUCTURE: Use clear sections and logical flow to present the information
+- COMPLETENESS: Include all relevant details from the database search results
+- ACCURACY: Only use information explicitly provided in the search results
+- CLARITY: Present information in an accessible, informative manner
+- CONTEXT: Provide background and connections between different pieces of information
+- COMPREHENSIVE SCOPE: Use up to 28,000 characters to provide thorough coverage
+- MAINTAIN FACTUAL ACCURACY: All information must come from the provided database content
+
+Transform the database information into a comprehensive, informative response that fully addresses the query.
+
+DATABASE SEARCH RESULTS ({total_found} entries found):
+{result}
 """
-    
-        return f"""CRITICAL INSTRUCTIONS FOR INFORMATION QUERIES:
-- Create a comprehensive technical summary about: {subject}
-- ONLY use information provided in the DATABASE SEARCH RESULTS section below
-- This search PRIORITIZED ship information and personnel records over mission logs
-- If no information is found, say: "I don't have any information about '{subject}' in my database"
-- PROVIDE UP TO 30000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
-- SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
-- Focus on key details, specifications, background, and significance in a cohesive story
-- Connect different pieces of information to provide comprehensive understanding
-- If information comes from external sources, reference it naturally
-- End with: "Would you like to explore any particular aspect of {subject}?"
-- Present information as a flowing narrative summary, not raw data or bullet points
-- use all 30000 characters of the response space unless the original content is less than 30000 characters
-- format the response into sections and sub-sections as needed with titles and sub-titles
-- OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
-- when removing sentences remove the whole sentence not just a part of it
+        
+        return instructions.strip()
 
-{fallback_instructions}
-DATABASE SEARCH RESULTS:
-{wiki_info if wiki_info else f"No information found for '{subject}' in the database."}
-
-
-
-Transform the database information into a comprehensive informative prose that tells the complete story of {subject}."""
-    
     def _extract_subject_from_strategy(self, strategy: Dict, user_message: str, context_type: str) -> str:
         """DEPRECATED: Subject is now extracted directly in the handler."""
         return strategy.get('subject', user_message)
     
     def _get_logs_context(self, strategy: Dict, user_message: str) -> str:
-        """Get logs context."""
+        """Get logs context using simplified content retriever."""
         print(f"📋 SEARCHING LOG DATA")
         
         # The subject from the strategy is the best candidate for ship_name
         ship_name = strategy.get('subject')
 
-        # Use unified log search
-        wiki_info = get_log_content(user_message, mission_logs_only=True, ship_name=ship_name)
-        print(f"   - Retrieved LOG content length: {len(wiki_info)} chars")
+        # Use simplified content retriever
+        from .content_retriever import get_content
+        result = get_content(user_message, content_type='logs', ship_name=ship_name)
         
-        total_found = wiki_info.count("**") if wiki_info else 0
+        print(f"   - Retrieved LOG content length: {len(result)} chars")
         
         # Check if this is a fallback response and adjust instructions accordingly
-        is_fallback = is_fallback_response(wiki_info)
-        fallback_instructions = ""
+        is_fallback = is_fallback_response(result)
+        
         if is_fallback:
-            fallback_instructions = """
-IMPORTANT: The database search encountered processing limitations. The response below indicates this limitation.
-Present this information naturally and suggest the user try again later or rephrase their query to be more specific.
+            print(f"   - Fallback response detected - using direct response")
+            return result
+        
+        # Enhanced narrative storytelling instructions for logs
+        total_found = result.count("**") if result else 0
+        
+        instructions = f"""
+LOG NARRATIVE STORYTELLING:
+Transform the following log information into a compelling NARRATIVE STORY format.
+
+INSTRUCTIONS:
+- READ THE ENTIRE LOG CONTENT and determine the best way to convert it into a cohesive story
+- Create a NARRATIVE STRUCTURE with beginning, middle, and end
+- STORY FLOW: Connect events chronologically and thematically 
+- CHARACTER DEVELOPMENT: Highlight key characters and their roles in the story
+- DRAMATIC ELEMENTS: Emphasize tension, conflict resolution, and significant moments
+- IMMERSIVE DETAILS: Use the rich details from the logs to paint vivid scenes
+- MAINTAIN ACCURACY: Only use information explicitly provided in the logs
+- COMPREHENSIVE SCOPE: Use up to 28,000 characters (7600 tokens) to tell the complete story
+- NARRATIVE VOICE: Write in an engaging, story-telling style that brings the events to life
+
+Transform the log data into a compelling narrative that captures the full scope and drama of the events described.
+
+DATABASE SEARCH RESULTS ({total_found} entries found):
+{result}
 """
         
-        # Determine log type description
-        log_type_description = "mission logs matching your query"
-        
-        return f"""CRITICAL INSTRUCTIONS FOR LOG NARRATIVE STORYTELLING:
-- Transform the log information into a compelling NARRATIVE STORY about: {log_type_description}
-- READ THE ENTIRE LOG CONTENT and determine the best way to convert it into a cohesive story
-- PROVIDE UP TO 28000 CHARACTERS (7600 tokens) in your response - use the full space to tell the complete story
-- NARRATIVE STRUCTURE: Create a flowing story with beginning, middle, and end that captures all key events
-- STORYTELLING FOCUS: Present as an engaging narrative that reads like a story, not a report or summary
-- PRESERVE ALL IMPORTANT DETAILS: Include WHO did WHAT and WHEN, character names, actions, dialogue, and decisions
-- CHRONOLOGICAL FLOW: Organize events in story order, connecting related incidents into narrative arcs
-- CHARACTER DEVELOPMENT: Show how characters evolved and made decisions throughout the events
-- DRAMATIC TENSION: Highlight conflicts, challenges, and resolutions that drive the story forward
-- IMMERSIVE EXPERIENCE: Write as if telling an engaging story to someone who wants to experience the events
-- COMPLETE STORY ARC: Ensure the narrative has proper story structure with setup, conflict, and resolution
-- USE FULL CHARACTER LIMIT: Expand the story to use all 28000 characters unless source material is shorter
-- MAINTAIN ACCURACY: All story elements must come from the provided log content - no invention or speculation
-{fallback_instructions}
-DATABASE QUERY: "{user_message}"
-SEARCH STRATEGY: {strategy.get('reasoning', 'Standard log search')}
-TOTAL LOG ENTRIES FOUND: {total_found}
-SEARCH RESULTS SIZE: {len(wiki_info)} characters
-
-STRICT DATABASE ADHERENCE FOR STORYTELLING:
-- ONLY use the log content provided in the DATABASE SEARCH RESULTS section below
-- DO NOT invent, create, or add any story elements not explicitly provided
-- If no logs are found, state clearly: "I searched the database but found no logs matching your query"
-- TRANSFORM raw log data into compelling narrative prose while preserving all factual content
-- Connect separate log entries into a unified story arc when multiple entries are present
-- Show cause and effect relationships between events to create narrative flow
-- Include emotional context and character motivations when evident in the logs
-- End with: "For more information about this topic, please check the wiki."
-
-DATABASE SEARCH RESULTS:
-{wiki_info}
-
-NOTE: All dates after the log title are converted to a Star Trek Gregorian date format of +404 years for dates prior to June 2024 and +430 year for all dates after June 2024
-
-STORYTELLING DIRECTIVE: Transform this log content into a rich, immersive narrative story that brings the events to life. Read the entire content, understand the full scope of events, and craft a compelling story that uses the full 28000 character space to tell the complete tale with proper narrative structure, character development, and dramatic flow."""
+        return instructions.strip()
 
     def _get_federation_archives_context(self, strategy: Dict, user_message: str) -> str:
         """Get federation archives context."""
@@ -185,6 +172,7 @@ STORYTELLING DIRECTIVE: Transform this log content into a rich, immersive narrat
 - Connect different pieces of archive data to tell a complete story
 - If no archives information is found, say: "The federation archives don't have any information on that topic"
 - End with: "Would you like me to search for anything else in the archives?"
+- PROVIDE UP TO 28,000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - Present information as a flowing narrative summary, not raw data or bullet points
 
 FEDERATION ARCHIVES ACCESS:
@@ -201,11 +189,56 @@ Transform the archives information into a comprehensive narrative summary and re
         """Get continuation context."""
         return get_focused_continuation_context(strategy)
 
+    def _get_temporal_logs_context(self, strategy: Dict, user_message: str) -> str:
+        """Get temporal logs context using simplified content retriever."""
+        temporal_type = strategy.get('temporal_type', 'latest')
+        ship_name = strategy.get('ship_name')
+        
+        print(f"⏰ TEMPORAL LOG SEARCH: type='{temporal_type}', ship='{ship_name}'")
+        
+        # Use simplified content retriever with temporal selector
+        from .content_retriever import get_content
+        result = get_content(user_message, content_type='logs', temporal_selector=temporal_type, ship_name=ship_name)
+        
+        print(f"   [DATA] Retrieved temporal log content: {len(result)} characters")
+        
+        # Check if this is a fallback response
+        is_fallback = is_fallback_response(result)
+        if is_fallback:
+            print(f"   - Fallback response detected - using direct response")
+            return result
+        
+        # Enhanced narrative storytelling instructions for temporal logs
+        total_found = result.count("**") if result else 0
+        
+        instructions = f"""
+TEMPORAL LOG NARRATIVE STORYTELLING:
+Transform the following {temporal_type} log information into a compelling NARRATIVE STORY format.
+
+INSTRUCTIONS:
+- READ THE ENTIRE LOG CONTENT and determine the best way to convert it into a cohesive story
+- Create a NARRATIVE STRUCTURE with beginning, middle, and end
+- TEMPORAL CONTEXT: Emphasize the significance of this being the {temporal_type} log entry
+- STORY FLOW: Connect events chronologically and thematically 
+- CHARACTER DEVELOPMENT: Highlight key characters and their roles in the story
+- DRAMATIC ELEMENTS: Emphasize tension, conflict resolution, and significant moments
+- IMMERSIVE DETAILS: Use the rich details from the logs to paint vivid scenes
+- MAINTAIN ACCURACY: Only use information explicitly provided in the logs
+- COMPREHENSIVE SCOPE: Use up to 28,000 characters (7600 tokens) to tell the complete story
+- NARRATIVE VOICE: Write in an engaging, story-telling style that brings the events to life
+
+Transform the log data into a compelling narrative that captures the full scope and drama of the events described.
+
+DATABASE SEARCH RESULTS ({total_found} {temporal_type} entries found):
+{result}
+"""
+        
+        return instructions.strip()
+
 from .content_retriever import (
-    get_log_content,
-    get_tell_me_about_content_prioritized,
-    search_memory_alpha,
-    get_log_url,
+    get_content,
+    check_elsiebrain_connection,
+    search_memory_alpha
 )
 from .llm_query_processor import get_llm_processor, should_process_data
 from ..handlers_utils import is_fallback_response
@@ -222,15 +255,16 @@ def get_focused_continuation_context(strategy: Dict[str, Any]) -> str:
     
     print(f"🎯 FOCUSED CONTINUATION: Searching for '{focus_subject}' in {context_type} context")
     
-    # Use unified search for all continuation contexts
-    wiki_info = get_tell_me_about_content_prioritized(focus_subject)
+    # Use unified content retriever
+    from .content_retriever import get_content
+    wiki_info = get_content(focus_subject, content_type='general')
     print(f"   - Retrieved focused content length: {len(wiki_info)} chars")
     
     return f"""CRITICAL INSTRUCTIONS FOR FOCUSED INFORMATION QUERIES:
 - Create a focused, comprehensive narrative about: {focus_subject}
 - Context type: {context_type}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
-- PROVIDE UP TO 13000 CHARACTERS in your response - be detailed and comprehensive
+- PROVIDE UP TO 28000 CHARACTERS in your response - be detailed and comprehensive
 - SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
 - If no specific information is found, provide a thoughtful general response
 - Connect different aspects of the information to tell a complete story
@@ -255,15 +289,16 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None) ->
     
     print(f"🧑 UNIFIED CHARACTER SEARCH: '{character_name}'")
     
-    # Use unified search system
-    character_info = get_tell_me_about_content_prioritized(character_name)
+    # Use unified content retriever
+    from .content_retriever import get_content
+    character_info = get_content(character_name, content_type='characters')
     print(f"   ✅ Unified character search: {len(character_info)} characters")
     
     return f"""CRITICAL INSTRUCTIONS FOR CHARACTER INFORMATION QUERIES:
 - Create a comprehensive narrative biography about: {character_name}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
-- PROVIDE UP TO 13000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- PROVIDE UP TO 28000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - SYNTHESIZE the information into flowing, narrative paragraphs that tell their story
 - Include rank, position, ship assignment, achievements, and personal background when available
 - Focus on their role, personality, relationships, and what made them special to their crew
@@ -273,7 +308,7 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None) ->
 - End with: "Was that all you wanted to know about {character_name}?"
 - DO NOT include meeting times, GM names, or session schedule information
 - Present information as a flowing biographical narrative, not raw data or bullet points
-- use all 13000 characters of the response space unless the original content is less than 13000 characters
+- use all 28000 characters of the response space unless the original content is less than 28000 characters
 - Always end in a complete thought and not a partial thought.
 
 DATABASE SEARCH RESULTS:
@@ -320,8 +355,9 @@ def get_tell_me_about_context(user_message: str) -> str:
     subject = extract_tell_me_about_subject(user_message)
     print(f"🔍 TELL ME ABOUT: '{subject}'")
     
-    # Use unified search system
-    wiki_info = get_tell_me_about_content_prioritized(subject)
+    # Use unified content retriever
+    from .content_retriever import get_content
+    wiki_info = get_content(subject, content_type='general')
     print(f"   - Retrieved tell me about content length: {len(wiki_info)} chars")
     
     # Check if this is a fallback response and adjust instructions accordingly
@@ -338,14 +374,14 @@ Present this information naturally and suggest the user try again later or rephr
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - This search PRIORITIZED ship information and personnel records over mission logs
 - If no information is found, say: "I don't have any information about '{subject}' in my database"
-- PROVIDE UP TO 30000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- PROVIDE UP TO 28000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
 - Focus on key details, specifications, background, and significance in a cohesive story
 - Connect different pieces of information to provide comprehensive understanding
 - If information comes from external sources, reference it naturally
 - End with: "Would you like to explore any particular aspect of {subject}?"
 - Present information as a flowing narrative summary, not raw data or bullet points
-- use all 30000 characters of the response space unless the original content is less than 30000 characters
+- use all 28000 characters of the response space unless the original content is less than 28000 characters
 - format the response into sections and sub-sections as needed with titles and sub-titles
 - OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
 - when removing sentences remove the whole sentence not just a part of it
@@ -363,22 +399,23 @@ def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None) -> str:
     """Generate context for ship information queries using unified search."""
     print(f"🚢 UNIFIED SHIP SEARCH: '{ship_name}'")
     
-    # Use unified search system
-    ship_info = get_tell_me_about_content_prioritized(ship_name)
+    # Use unified content retriever
+    from .content_retriever import get_content
+    ship_info = get_content(ship_name, content_type='ships')
     print(f"   ✅ Unified ship search: {len(ship_info)} characters")
     
     return f"""CRITICAL INSTRUCTIONS FOR SHIP INFORMATION QUERIES:
 - Create a comprehensive informative prose summary about: {ship_name}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
-- PROVIDE UP TO 13000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- PROVIDE UP TO 28000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - SYNTHESIZE the information into flowing, informative prose paragraphs rather than bullet points
 - Include specifications, class, registry, crew complement, mission history when available
 - Focus on technical details, capabilities, and significant events in a cohesive story
 - Connect different pieces of information to paint a complete picture of the vessel
 - If information comes from external sources, reference it naturally
 - If ship information is not in the database, say: "I don't have any records for {ship_name} in my database"
-- use all 30000 characters of the response space unless the original content is less than 13000 characters
+- use all 28000 characters of the response space unless the original content is less than 28000 characters
 - format the response into sections and sub-sections as needed with titles and sub-titles
 - OOC information (DGM and Meeting times) is allowed but should be seperated from the rest of the response
 - when removing sentences remove the whole sentence not just a part of it
@@ -400,7 +437,9 @@ def handle_url_request(user_message: str) -> str:
     
     print(f"🔗 URL REQUEST: Searching for '{search_query}'")
     
-    url_info = get_log_url(search_query)
+    # Use unified content retriever to search for URL information
+    from .content_retriever import get_content
+    url_info = get_content(search_query, content_type='general')
     print(f"   - Retrieved URL info length: {len(url_info)} chars")
     
     return f"""CRITICAL INSTRUCTIONS FOR URL REQUESTS:

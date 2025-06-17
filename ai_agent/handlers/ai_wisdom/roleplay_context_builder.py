@@ -26,7 +26,7 @@ class RoleplayContextBuilder:
             return get_roleplay_context(strategy, user_message)
 
 from .content_retriever import (
-    get_tell_me_about_content_prioritized
+    get_content
 )
 
 
@@ -719,8 +719,8 @@ def _get_roleplay_database_context(user_message: str) -> str:
     if is_char_query and character_name:
         print(f"   🧑 UNIFIED CHARACTER QUERY: '{character_name}'")
         
-        # Use unified search system
-        character_info = get_tell_me_about_content_prioritized(character_name)
+        # Use unified content retriever with character content type
+        character_info = get_content(character_name, content_type='characters')
         print(f"   ✅ Unified character info: {len(character_info)} characters")
         
         # Check if this is a fallback response
@@ -748,8 +748,8 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what s
     
     elif tell_me_about_subject:
         print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
-        # Use unified search for general subjects
-        subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject)
+        # Use unified content retriever for general subjects
+        subject_info = get_content(tell_me_about_subject, content_type='general')
         
         # Check if this is a fallback response
         if is_fallback_response(subject_info):
@@ -776,8 +776,8 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her kn
     
     else:
         print(f"   📋 GENERAL ROLEPLAY CONTEXT")
-        # Use unified search for other queries
-        general_info = get_tell_me_about_content_prioritized(user_message)
+        # Use unified content retriever for other queries
+        general_info = get_content(user_message, content_type='general')
         
         # Check if this is a fallback response
         if is_fallback_response(general_info):
