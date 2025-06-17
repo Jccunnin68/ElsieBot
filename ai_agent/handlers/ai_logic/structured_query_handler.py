@@ -9,10 +9,10 @@ context-building process for structured and general queries.
 
 from typing import List, Dict, Any
 
-from ai_agent.handlers.ai_logic.response_decision import ResponseDecision
-from ai_agent.handlers.ai_logic.structured_query_detector import StructuredQueryDetector
-from ai_agent.handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
-from ai_agent.handlers.ai_wisdom.wisdom_engine import WisdomEngine
+from handlers.ai_logic.response_decision import ResponseDecision
+from handlers.ai_logic.structured_query_detector import StructuredQueryDetector
+from handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
+from handlers.ai_wisdom.wisdom_engine import WisdomEngine
 
 def handle_structured_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
     """

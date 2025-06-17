@@ -16,8 +16,6 @@ Core Components:
 - personality_contexts.py: Provides personality information (mostly deprecated).
 """
 
-from .greetings import get_greeting
-from .drink_menu import get_drink_order_response
 from .poetic_responses import should_trigger_poetic_circuit, get_poetic_response
 from .mock_responses import get_mock_response
 from .emotion_engine import get_emotion_engine
@@ -27,8 +25,6 @@ __all__ = [
     'get_emotion_engine',
     
     # Existing Response Generators
-    'get_greeting',
-    'get_drink_order_response',
     'should_trigger_poetic_circuit',
     'get_poetic_response',
     'get_mock_response',

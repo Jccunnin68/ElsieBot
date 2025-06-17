@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Install system dependencies for PostgreSQL and health checks
 RUN apt-get update && apt-get install -y \
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
 # Set PostgreSQL environment
 ENV PATH="/usr/lib/postgresql/15/bin:$PATH"
 ENV PGDATA="/var/lib/postgresql/data"
+ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 WORKDIR /app
 

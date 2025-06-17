@@ -15,12 +15,11 @@ from typing import Dict, List, Optional
 import traceback
 
 from .response_decision import ResponseDecision
-from ..ai_attention import get_roleplay_state, is_roleplay_allowed_channel
-from ..ai_attention.dgm_handler import check_dgm_post
+from ..ai_attention import get_roleplay_state
 
 # Import the specialized handlers
-from .roleplay_handler import handle_roleplay_message, handle_cross_channel_busy
-from .structured_query_handler import handle_structured_query
+from .roleplay_handler import handle_roleplay_message
+from .structured_query_handler import handle_structured_message
 
 
 
@@ -45,7 +44,7 @@ def route_message_to_handler(user_message: str, conversation_history: list, chan
         
     # 3. Default to the standard query handler for all other requests
     print("🚦 ROUTER: Defaulting to Structured Query Handler.")
-    return handle_structured_query(user_message, conversation_history)
+    return handle_structured_message(user_message, conversation_history)
 
 
 def _determine_routing_context(channel_context: Optional[Dict]) -> Dict:
@@ -107,7 +106,7 @@ def _route_to_standard_handler(user_message: str, conversation_history: List) ->
         print(f"   💬 ROUTING TO STRUCTURED QUERY HANDLER")
         print(f"      Mode: Comprehensive response with agentic reasoning")
         
-        return handle_structured_query(user_message, conversation_history)
+        return handle_structured_message(user_message, conversation_history)
         
     except Exception as e:
         print(f"   ❌ ERROR routing to standard handler: {e}")

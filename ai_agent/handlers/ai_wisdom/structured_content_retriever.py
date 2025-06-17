@@ -9,8 +9,8 @@ LLMInterface when necessary for general queries.
 """
 
 from typing import Dict, Any, List
-from ai_agent.handlers.ai_knowledge.database_controller import get_db_controller
-from ai_agent.handlers.ai_logic.logic_engine import get_logic_engine
+from handlers.ai_knowledge.database_controller import get_db_controller
+from handlers.ai_logic.logic_engine import get_logic_engine
 
 class StructuredContentRetriever:
     """

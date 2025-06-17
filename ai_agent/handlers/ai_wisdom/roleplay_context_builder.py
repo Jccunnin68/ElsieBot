@@ -11,8 +11,8 @@ SIMPLIFIED: Now routes all database queries through the unified search system.
 from typing import Dict, Any, List
 
 from handlers.handlers_utils import is_fallback_response
-from ..ai_logic.structured_query_detector import StructuredQueryDetector
-from .structured_content_retriever import StructuredContentRetriever
+from handlers.ai_logic.structured_query_detector import StructuredQueryDetector
+from handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
 
 
 class RoleplayContextBuilder:

@@ -11,12 +11,12 @@ from typing import Dict, List
 import re
 
 from config import GEMMA_API_KEY
-from ..handlers_utils import estimate_token_count, filter_meeting_info, convert_earth_date_to_star_trek
-from ..ai_logic.response_decision import ResponseDecision
-from ..ai_attention.state_manager import get_roleplay_state
-from ..ai_logic.context_detection import detect_who_elsie_addressed
-from ..ai_emotion import get_mock_response, should_trigger_poetic_circuit, get_poetic_response
-from .conversation_utils import convert_to_third_person_emotes, strip_discord_emojis
+from handlers.handlers_utils import estimate_token_count, filter_meeting_info, convert_earth_date_to_star_trek
+from handlers.ai_logic.response_decision import ResponseDecision
+from handlers.ai_attention.state_manager import get_roleplay_state
+from handlers.ai_logic.context_detection import detect_who_elsie_addressed
+from handlers.ai_emotion import get_mock_response, should_trigger_poetic_circuit, get_poetic_response
+from handlers.ai_coordinator.conversation_utils import convert_to_third_person_emotes, strip_discord_emojis
 
 # Constants
 MAX_PROMPT_CHARS = 26000  # Approx. 8000 tokens as a safe upper limit

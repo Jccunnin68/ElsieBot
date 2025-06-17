@@ -9,7 +9,7 @@ structured_query_handler.
 """
 
 from typing import Dict, Any
-from .prompt_builder import PromptLibrary
+from handlers.ai_wisdom.prompt_builder import PromptLibrary
 
 class WisdomEngine:
     """Orchestrates prompt generation using a strategy and the PromptLibrary."""

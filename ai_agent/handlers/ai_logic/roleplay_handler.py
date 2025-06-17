@@ -7,14 +7,14 @@ now acting as a lightweight orchestrator for the AttentionEngine.
 """
 from typing import List, Dict
 
-from . import (
-    ResponseDecision,
+from .response_decision import ResponseDecision
+from ..ai_attention import (
     get_roleplay_state,
     check_dgm_post,
     handle_dgm_command,
     get_attention_engine
 )
-from ..ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
+from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
 
 def handle_roleplay_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
     """
