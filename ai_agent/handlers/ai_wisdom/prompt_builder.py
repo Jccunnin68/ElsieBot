@@ -14,7 +14,7 @@ class PromptLibrary:
     """A library of methods for building specialized LLM prompts."""
 
     def build_comprehensive_prompt(self, subject: str, results: List[Dict]) -> str:
-        """Builds a prompt for a standard, in-universe information synthesis."""
+        """Builds a prompt for a main computer information panel."""
         if not results:
             return f"""
 You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
@@ -24,17 +24,18 @@ Politely inform the user that you couldn't find any information on the subject.
 """
         result_content = self._format_results(results)
         return f"""
-You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
+You are a main computer aboard the starship USS Stardancer.
 A user has asked you for information about "{subject}". Synthesize the provided data into a comprehensive, in-universe response.
 
 INSTRUCTIONS:
+- You do not need to greet the user.
 - SYNTHESIZE all provided information into a well-organized response.
 - STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
 - ACCURACY: Only use information explicitly provided in the search results.
-- Do not act as a writer's assistant. Present the information in a comprehensive manner and concise manner.
-- Conclude by asking if there is anything else you can help with.
+- DO NOT INVENT INFORMATION.
 - You do not need to format it like an email
 - It should appear like a infomrative page.
+- Conclude by asking if there is anything else you can help with.
 
 DATABASE SEARCH RESULTS ({len(results)} entries found):
 {result_content}
@@ -50,22 +51,25 @@ DATABASE SEARCH RESULTS ({len(results)} entries found):
         result_content = "\\n".join(log_content_list)
 
         return f"""
-You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
-A user has asked you for a summary of mission logs regarding '{subject}'. You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
+Log Summarization:
+You are a main computer aboard the starship USS Stardancer. Summarize logs regarding '{subject}'. You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
 
 INSTRUCTIONS:
-1.  **Maintain Persona:** Respond as Elsie, a helpful and sophisticated AI.
-2.  **Factual Summary:** Create a direct, factual summary of the events. Do not embellish, create a narrative, or add information not present in the logs.
-3.  **Key Information:** Identify and include the most important information: key characters involved, significant actions taken, locations, and the outcome of the events.
-4.  **Concise and Clear:** The summary should be easy to understand and get straight to the point. Avoid overly descriptive or story-like language.
-5.  **Chronological Order:** Present the events in the order they occurred.
+- You do not need to greet the user.
+- You do not need to format it like an email
+- SYNTHESIZE all provided information into a well-organized long form response.
+- STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
+- ACCURACY: Only use information explicitly provided in the search results.
+- DO NOT INVENT INFORMATION.
+- You do not need to format it like an email
+- Conclude by asking if there is anything else you can help with.
 
 CLEANED LOG DATA:
 ---
 {result_content}
 ---
 
-Provide a concise summary of these events.
+Provide a concise retelling of these events.
 """
 
     def _format_results(self, results: List[Dict]) -> str:
@@ -94,11 +98,13 @@ INSTRUCTIONS:
 - KNOWN ASSOCIATES: After the primary summary, create a section titled "Known Associates" and briefly list the other individuals (you do not have to indicate a lack of information past their names).
 - ACCURACY: Only use information explicitly provided in the search results.
 - CLARITY: Present information in an accessible, informative manner.
+- DO NOT INVENT INFORMATION.
 - use bulleted lists and numbered lists when appropriate.
 - Dedicate 75 percent of your response to the primary character and 25 percent to the associates with similiar names taking precedence.
 - If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
 - You do not need to format it like an email
 - It should appear like a informative page.
+- You do not need to end with a summary of what was just performed instead you should ask the user if there is anything else you can help them with.
 
 **PRIMARY CHARACTER:**
 {primary_content}

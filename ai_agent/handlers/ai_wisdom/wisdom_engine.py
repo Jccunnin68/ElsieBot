@@ -42,9 +42,13 @@ class WisdomEngine:
         if is_character_query and results:
             # If the top result is a character, use the specialized prompt.
             return self._build_character_prompt(subject, results)
-        else:
-            # For everything else (logs, general info, etc.), use the comprehensive prompt.
-            return self.prompt_library.build_comprehensive_prompt(subject, results)
+        
+        if strategy.get('approach') == 'logs':
+            temporal_type = strategy.get('temporal_type', 'latest')
+            return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
+
+        # For everything else, use the comprehensive prompt.
+        return self.prompt_library.build_comprehensive_prompt(subject, results)
 
     def _build_character_prompt(self, subject: str, results: list) -> str:
         """

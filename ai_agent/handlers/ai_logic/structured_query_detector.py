@@ -9,6 +9,7 @@ of the new agentic architecture, allowing for fast-pathing of explicit user comm
 
 import re
 from typing import Dict, Optional, Any
+from handlers.ai_knowledge.log_patterns import FLEET_SHIP_NAMES
 
 class StructuredQueryDetector:
     """
@@ -27,20 +28,20 @@ class StructuredQueryDetector:
         """
         # The order of these checks is important, from most specific to most general.
         
-        # 1. "Tell me about <term>"
+        # 1. Log search: "logs for <ship/character> [latest|first|recent]" (most specific keywords)
+        log_search = self._detect_log_search(user_message)
+        if log_search:
+            return log_search
+
+        # 2. "Tell me about <term>"
         tell_me_about = self._detect_tell_me_about(user_message)
         if tell_me_about:
             return tell_me_about
             
-        # 2. Explicit search: "search for 'term' in 'category'"
+        # 3. Explicit search: "search for 'term' in 'category'"
         explicit_search = self._detect_explicit_search(user_message)
         if explicit_search:
             return explicit_search
-
-        # 3. Log search: "logs for <ship/character> [latest|first|recent]"
-        log_search = self._detect_log_search(user_message)
-        if log_search:
-            return log_search
 
         # 4. Typed search: "ship <name>", "character <name>", etc.
         typed_search = self._detect_typed_search(user_message)
@@ -61,8 +62,8 @@ class StructuredQueryDetector:
             term = match.group(1).strip()
             
             # Specific check for ship names or the word "ship"
-            known_ships = ['stardancer'] # This could be expanded
-            if 'ship' in term.lower() or any(ship in term.lower() for ship in known_ships):
+            # Use the fleet list from log_patterns for comprehensive detection.
+            if 'ship' in term.lower() or any(ship.lower() in term.lower() for ship in FLEET_SHIP_NAMES):
                 return {'type': 'ship', 'term': term}
                 
             # This is a general query, but we've identified the core subject.
@@ -87,6 +88,7 @@ class StructuredQueryDetector:
         Handles two patterns:
         1. logs for <subject> [modifier]
         2. [summarize] [the] <modifier> <subject> log
+        3. tell me about the <modifier> <subject> log
         """
         # Pattern 1: "logs for <subject> [modifier]"
         pattern1 = re.compile(r'logs? for\s+([A-Za-z0-9\s\'-]+?)(?:\s+(latest|first|recent))?$', re.IGNORECASE)
@@ -102,11 +104,11 @@ class StructuredQueryDetector:
                 'modifier': modifier
             }
 
-        # Pattern 2: "[summarize] [the] <modifier> <subject> log[s]"
-        pattern2 = re.compile(r'(?:summarize\s+)?(?:the\s+)?(latest|last|first|recent)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
-        match2 = pattern2.search(user_message)
-        if match2:
-            modifier, subject = match2.groups()
+        # Pattern 3: "tell me about the <modifier> <subject> log"
+        pattern3 = re.compile(r'tell me about\s+(?:the\s+)?(latest|last|first|recent)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
+        match3 = pattern3.search(user_message)
+        if match3:
+            modifier, subject = match3.groups()
             modifier = modifier.lower()
             if modifier == 'last':
                 modifier = 'latest'
@@ -116,7 +118,7 @@ class StructuredQueryDetector:
                 'subject': subject.strip(),
                 'modifier': modifier
             }
-            
+
         return None
 
     def _detect_typed_search(self, user_message: str) -> Optional[Dict[str, str]]:

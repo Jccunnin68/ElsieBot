@@ -64,6 +64,13 @@ def handle_structured_message(user_message: str, conversation_history: List[Dict
         # Clean the logs using the KnowledgeEngine
         cleaned_content = knowledge_engine.process_logs(raw_log_content)
 
+        # --- DEBUGGING: Print the output from the KnowledgeEngine ---
+        print("   - KNOWLEDGE ENGINE OUTPUT START ---")
+        print(f"   - Cleaned content length: {len(cleaned_content)} chars")
+        print(cleaned_content) # Uncomment for full content view
+        print("   - KNOWLEDGE ENGINE OUTPUT END ---")
+        # ---------------------------------------------------------
+
         # Replace the original results with a single entry containing the cleaned content
         results = [{
             'title': f"Cleaned Log for '{structured_query.get('subject')}'",
