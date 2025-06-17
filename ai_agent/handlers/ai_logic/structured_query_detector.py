@@ -53,23 +53,31 @@ class StructuredQueryDetector:
 
     def _detect_tell_me_about(self, user_message: str) -> Optional[Dict[str, str]]:
         """
-        Detects the pattern: "tell me about <term>"
-        It now includes specific logic to identify ship queries.
+        Detects "tell me about" queries and attempts to classify them.
+        If the subject is clearly a ship or character, it's typed.
+        Otherwise, it's a general query for the LogicEngine to disambiguate.
         """
         pattern = re.compile(r'tell me about\s+(?:the\s+)?([A-Za-z0-9\s\'-]+)', re.IGNORECASE)
         match = pattern.search(user_message)
-        if match:
-            term = match.group(1).strip()
-            
-            # Specific check for ship names or the word "ship"
-            # Use the fleet list from log_patterns for comprehensive detection.
-            if 'ship' in term.lower() or any(ship.lower() in term.lower() for ship in FLEET_SHIP_NAMES):
-                return {'type': 'ship', 'term': term}
-                
-            # This is a general query, but we've identified the core subject.
-            # The retriever will handle finding the best match across categories.
-            return {'type': 'tell_me_about', 'subject': term}
-        return None
+        if not match:
+            return None
+
+        term = match.group(1).strip()
+        term_lower = term.lower()
+
+        # Check for specific entity types in the term itself
+        if 'ship' in term_lower or any(ship.lower() in term_lower for ship in FLEET_SHIP_NAMES):
+            return {'type': 'ship', 'term': term}
+        
+        # Simple check for character indicators
+        character_indicators = ['who is', 'character']
+        if any(indicator in user_message.lower() for indicator in character_indicators):
+             return {'type': 'character', 'term': term}
+
+        # For ambiguous "tell me about" queries, let the LogicEngine decide.
+        # We pass the full user message to give the LLM maximum context.
+        print(f"   👁️‍🗨️ DETECTOR: Ambiguous 'tell me about' for '{term}'. Routing to LogicEngine.")
+        return {'type': 'general', 'query': user_message}
 
     def _detect_explicit_search(self, user_message: str) -> Optional[Dict[str, str]]:
         """
@@ -104,11 +112,11 @@ class StructuredQueryDetector:
                 'modifier': modifier
             }
 
-        # Pattern 3: "tell me about the <modifier> <subject> log"
-        pattern3 = re.compile(r'tell me about\s+(?:the\s+)?(latest|last|first|recent)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
-        match3 = pattern3.search(user_message)
-        if match3:
-            modifier, subject = match3.groups()
+        # Pattern 2 & 3: "tell me about the <modifier> <subject> log" or "summarize the <modifier> <subject> log"
+        pattern2_3 = re.compile(r'(?:tell me about|summarize)\s+(?:the\s+)?(latest|last|first|recent)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
+        match2_3 = pattern2_3.search(user_message)
+        if match2_3:
+            modifier, subject = match2_3.groups()
             modifier = modifier.lower()
             if modifier == 'last':
                 modifier = 'latest'

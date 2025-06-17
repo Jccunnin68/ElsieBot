@@ -43,6 +43,9 @@ class RoleplayStateManager:
         self.roleplay_channel_name = None  # Human-readable channel name
         self.roleplay_channel_type = None  # Channel type for validation
         
+        # NEW: Track channels where Elsie has been mentioned in non-RP mode
+        self.activated_channels = set()
+        
         # NEW: 20-minute auto-exit functionality
         self.last_roleplay_channel_activity_time = None  # Timestamp of last activity in RP channel
         
@@ -54,6 +57,18 @@ class RoleplayStateManager:
         # PHASE 2C: DGM scene context storage
         self.dgm_scene_context = {}  # Store scene context from DGM posts
     
+    def activate_channel(self, channel_id: str):
+        """Activates a channel for non-roleplay interaction after Elsie is mentioned."""
+        if channel_id:
+            self.activated_channels.add(channel_id)
+            print(f"   🔔 CHANNEL ACTIVATED: {channel_id} is now active for non-RP conversation.")
+
+    def is_channel_activated(self, channel_id: str) -> bool:
+        """Checks if a channel is activated for non-roleplay interaction."""
+        if not channel_id:
+            return False
+        return channel_id in self.activated_channels
+
     def start_roleplay_session(self, turn_number: int, initial_triggers: List[str], channel_context: Dict = None, dgm_characters: List[str] = None):
         """Initialize a new roleplay session with channel isolation."""
         self.is_roleplaying = True
@@ -77,6 +92,11 @@ class RoleplayStateManager:
             self.roleplay_channel_id = None
             self.roleplay_channel_name = 'Unknown Channel'
             self.roleplay_channel_type = 'unknown'
+        
+        # Deactivate this channel from the non-RP monitoring since RP is starting
+        if self.roleplay_channel_id in self.activated_channels:
+            self.activated_channels.remove(self.roleplay_channel_id)
+            print(f"   🔕 CHANNEL DEACTIVATED: {self.roleplay_channel_id} removed from non-RP activation due to roleplay start.")
         
         # NEW: Initialize activity timestamp for auto-exit functionality
         self.last_roleplay_channel_activity_time = time.time()

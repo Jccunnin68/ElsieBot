@@ -11,6 +11,24 @@ in conversation_memory.py and context_gatherer.py
 
 import re
 
+ELSIE_MENTION_PATTERNS = [
+    r'\belsie\b',
+    r'\bbartender\b',
+    r'\bbarkeep\b',
+    r'\bserver\b',
+    r'\bwaitress\b'
+]
+
+def detect_elsie_mention(user_message: str) -> bool:
+    """
+    Detects if Elsie is mentioned in the message by name or role.
+    This is used to "wake up" Elsie in a channel she isn't actively monitoring.
+    """
+    message_lower = user_message.lower()
+    for pattern in ELSIE_MENTION_PATTERNS:
+        if re.search(pattern, message_lower):
+            return True
+    return False
 
 def detect_who_elsie_addressed(response_text: str, user_message: str) -> str:
     """
