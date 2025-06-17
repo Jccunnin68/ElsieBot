@@ -7,8 +7,9 @@ DGM posts use [DGM] tags and can control scenes or even Elsie directly.
 """
 
 import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
+from ..ai_logic.response_decision import ResponseDecision
 from .character_tracking import is_valid_character_name
 
 
@@ -347,4 +348,57 @@ def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
                 print(f"         👤 CHARACTER FOUND: '[{name_normalized}]' via bracket format")
     
     print(f"      📋 TOTAL CHARACTERS EXTRACTED: {len(characters)} - {characters}")
-    return characters 
+    return characters
+
+
+def handle_dgm_command(user_message: str) -> Optional[ResponseDecision]:
+    """
+    Checks for and handles DGM commands, returning a ResponseDecision if found.
+    This encapsulates the logic for scene setting, ending, and character control.
+    """
+    dgm_result = check_dgm_post(user_message)
+    if not dgm_result or not dgm_result['is_dgm']:
+        return None
+
+    dgm_action = dgm_result['action']
+    from .state_manager import get_roleplay_state
+    rp_state = get_roleplay_state()
+
+    if dgm_action == 'scene_setting':
+        print(f"   🎬 DGM Scene Setting - Starting roleplay session")
+        if not rp_state.is_roleplaying:
+            rp_state.start_roleplay_session(
+                turn_number=0, # Turn number is not available here, but session starts at 0
+                initial_triggers=['dgm_scene_setting'],
+                dgm_characters=dgm_result.get('characters', [])
+            )
+        rp_state.store_dgm_scene_context(dgm_result.get('scene_context', {}))
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy={'approach': 'dgm_scene_setting', 'reasoning': 'DGM scene setting.'}
+        )
+
+    elif dgm_action == 'end_scene':
+        print(f"   🎬 DGM Scene End - Ending roleplay session")
+        if rp_state.is_roleplaying:
+            rp_state.end_roleplay_session('dgm_scene_end')
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response="NO_RESPONSE",
+            strategy={'approach': 'dgm_scene_end', 'reasoning': 'DGM scene ended.'}
+        )
+
+    elif dgm_action == 'control_elsie':
+        print(f"   🎭 DGM Controlled Elsie")
+        if not rp_state.is_roleplaying:
+             rp_state.start_roleplay_session(turn_number=0, initial_triggers=['dgm_controlled_elsie'])
+        rp_state.store_dgm_scene_context(dgm_result.get('scene_context', {}))
+        elsie_content = dgm_result.get('elsie_content', '')
+        return ResponseDecision(
+            needs_ai_generation=False,
+            pre_generated_response=elsie_content,
+            strategy={'approach': 'roleplay_dgm_controlled', 'reasoning': 'DGM controlled Elsie.'}
+        )
+
+    return None 

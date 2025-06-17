@@ -17,7 +17,7 @@ Core Components:
 """
 from .state_manager import get_roleplay_state, RoleplayStateManager
 from .character_tracking import extract_character_names_from_emotes
-from .dgm_handler import check_dgm_post
+from .dgm_handler import check_dgm_post, handle_dgm_command
 from .attention_engine import get_attention_engine
 
 __all__ = [
@@ -32,5 +32,6 @@ __all__ = [
     'extract_character_names_from_emotes',
 
     # DGM Handling (Non-LLM)
-    'check_dgm_post'
+    'check_dgm_post',
+    'handle_dgm_command'
 ] 
