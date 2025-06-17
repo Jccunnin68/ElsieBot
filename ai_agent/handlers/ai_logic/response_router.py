@@ -16,6 +16,8 @@ import traceback
 
 from .response_decision import ResponseDecision
 from ..ai_attention import get_roleplay_state
+from ..ai_emotion.personality_contexts import is_simple_chat
+from ..ai_wisdom.prompt_builder import get_simple_chat_prompt
 
 # Import the specialized handlers
 from .roleplay_handler import handle_roleplay_message
@@ -29,18 +31,27 @@ def route_message_to_handler(user_message: str, conversation_history: list, chan
     
     New Simplified Flow:
     1. Check if roleplay is active. If so, ALL messages go to the Roleplay Handler.
-    2. If not in roleplay, check if the channel is a designated roleplay channel to potentially start a session.
-    3. Check for mock responses (e.g., simple greetings).
-    4. Default to the standard structured query handler for all other messages.
+    2. For simple conversational messages, route to a chat-focused LLM call.
+    3. Default to the standard structured query handler for all other messages.
     """
     rp_state = get_roleplay_state()
     
     # 1. Prioritize active roleplay sessions
-    if rp_state.is_roleplay_active():
+    if rp_state.is_roleplaying:
         print("🚦 ROUTER: Roleplay active, routing to Roleplay Handler.")
         return handle_roleplay_message(user_message, conversation_history)
         
-
+    # 2. Handle simple conversational messages
+    if is_simple_chat(user_message):
+        print("🚦 ROUTER: Simple chat detected, routing to conversational LLM call.")
+        return ResponseDecision(
+            needs_ai_generation=True,
+            pre_generated_response=get_simple_chat_prompt(user_message, conversation_history),
+            strategy={
+                'approach': 'simple_chat',
+                'reasoning': 'Simple conversational message, routing to LLM for chat.'
+            }
+        )
         
     # 3. Default to the standard query handler for all other requests
     print("🚦 ROUTER: Defaulting to Structured Query Handler.")

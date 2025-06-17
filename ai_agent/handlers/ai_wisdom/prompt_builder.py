@@ -63,4 +63,34 @@ DATABASE SEARCH RESULTS ({len(results)} entries found):
             content = res.get('raw_content', 'No content.')
             result_content.append(f"**{title}**\n{content}")
         
-        return '\n\n---\n\n'.join(result_content) 
+        return '\n\n---\n\n'.join(result_content)
+
+def _format_conversation_history(conversation_history: List[Dict]) -> str:
+    if not conversation_history:
+        return ""
+    # Format the last 5 turns for the prompt
+    history_str = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in conversation_history[-5:]])
+    return f"""
+**CONVERSATION HISTORY (last 5 turns):**
+{history_str}
+"""
+
+def get_simple_chat_prompt(user_message: str, conversation_history: List[Dict]) -> str:
+    """
+    Creates a streamlined prompt for simple, direct conversational messages.
+
+    This prompt instructs the LLM to act as Elsie in a conversational manner
+    without the heavy context of database lookups or roleplay scenarios.
+    """
+    history_prompt = _format_conversation_history(conversation_history)
+
+    return f"""
+You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
+Maintain a helpful, sophisticated, and slightly formal persona.
+The user is having a simple conversation with you. Respond directly and naturally.
+
+{history_prompt}
+
+Customer: {user_message}
+Elsie:
+""" 
