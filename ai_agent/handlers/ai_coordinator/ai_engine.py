@@ -19,8 +19,8 @@ from handlers.ai_emotion import get_mock_response, should_trigger_poetic_circuit
 from handlers.ai_coordinator.conversation_utils import convert_to_third_person_emotes, strip_discord_emojis
 
 # Constants
-MAX_PROMPT_CHARS = 26000  # Approx. 8000 tokens as a safe upper limit
-SUMMARIZATION_TARGET_CHARS = 24000 # Give it some buffer
+MAX_PROMPT_CHARS = 48000  # Approx. 8000 tokens as a safe upper limit
+SUMMARIZATION_TARGET_CHARS = 44000 # Give it some buffer
 
 # In-memory cache for generated responses
 response_cache = {}
