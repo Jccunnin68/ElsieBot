@@ -71,6 +71,15 @@ def route_message_to_handler(user_message: str, conversation_history: List, chan
         
         # Step 4: Check for cross-channel messages if in roleplay
         rp_state = get_roleplay_state()
+        
+        # CLEANUP: Check for auto-exit conditions before routing
+        if rp_state.is_roleplaying and rp_state.should_auto_exit_roleplay():
+            print(f"   🧹 AUTO-CLEANUP: Ending inactive roleplay session")
+            rp_state.auto_exit_roleplay("auto_cleanup_on_query")
+            # Re-determine routing context after cleanup
+            routing_context = _determine_routing_context(channel_context, conversation_history, query_info)
+            print(f"   🎯 UPDATED Routing Context: {routing_context['mode']}")
+        
         if rp_state.is_roleplaying and routing_context['mode'] == 'roleplay':
             if not rp_state.is_message_from_roleplay_channel(channel_context):
                 print(f"   🚫 Cross-channel message detected - returning busy response")

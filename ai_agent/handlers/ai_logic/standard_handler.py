@@ -47,80 +47,61 @@ def handle_standard_message(user_message: str, conversation_history: List) -> Re
     query_info = detect_query_type_with_conflicts(user_message)
     
     print(f"   📋 Query Analysis: {query_info['type']} - {query_info.get('subject', 'N/A')}")
-    if query_info.get('conflict_resolved'):
-        print(f"      ⚖️  Conflict Resolution: {query_info['conflict_resolved']}")
     
     # Handle simple mock responses first
     simple_query_types = ['simple_greeting', 'simple_farewell', 'simple_status', 'simple_conversational']
-    if query_info['type'] in simple_query_types:
+    if query_info.get('type') in simple_query_types:
         return _handle_simple_mock_response(user_message, query_info['type'])
     
     # Handle special standard cases
-    if query_info['type'] == 'menu_request':
+    if query_info.get('type') == 'menu_request':
         return _handle_menu_request()
     
-    if query_info['type'] == 'reset_request':
+    if query_info.get('type') == 'reset_request':
         return _handle_reset_request()
     
     # Handle comprehensive database queries
-    database_query_types = ['character', 'ship', 'ship_log', 'character_log', 'tell_me_about', 'log']
+    database_query_types = ['log', 'general']
     if query_info['type'] in database_query_types:
         return _handle_comprehensive_database_query(user_message, query_info)
-    
     
     # Default: simple conversational response
     return _handle_default_conversational(user_message)
 
 
-
-
-
 def _handle_comprehensive_database_query(user_message: str, query_info: Dict) -> ResponseDecision:
     """
-    Comprehensive database query for standard contexts with disambiguation.
-    
-    KEY FEATURE: Returns summary + disambiguation for multiple results.
+    Comprehensive database query for standard contexts.
+    Maps simplified query types to context builder approaches.
     """
-    print(f"   📚 COMPREHENSIVE DATABASE QUERY: {query_info['type']}")
+    query_type = query_info['type']
+    
+    # Map simple types to approaches
+    approach = 'logs' if query_type == 'log' else 'comprehensive'
+    
+    print(f"   📚 COMPREHENSIVE DATABASE QUERY: {query_type} -> Approach: {approach}")
     
     strategy = {
-        'approach': 'comprehensive',
+        'approach': approach,
         'needs_database': True,
-        'query_type': query_info['type'],
+        'query_type': query_type,
         'subject': query_info.get('subject'),
         'context_priority': 'factual',
-        'reasoning': f"Standard comprehensive database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
+        'reasoning': f"Standard comprehensive database query: {query_type} - {query_info.get('subject', 'N/A')}"
     }
     
-    # Add specific query details
-    if query_info.get('log_type'):
-        strategy['log_type'] = query_info['log_type']
-    
-    # Add disambiguation requirements for tell_me_about
-    if query_info['type'] == 'tell_me_about':
+    # Add disambiguation requirements for "general" queries that act like "tell_me_about"
+    if query_type == 'general':
         strategy['needs_title_fallback'] = True
         strategy['provide_disambiguation'] = True
-        strategy['include_summary'] = True  # KEY: Summary + disambiguation
-        print(f"      📋 Title fallback with disambiguation enabled")
-    
-    # Add category intersection requirements
-    if query_info.get('requires_category_intersection'):
-        strategy['valid_categories'] = query_info['valid_categories']
-        strategy['requires_category_intersection'] = True
-        print(f"      📂 Category intersection required: {query_info['valid_categories']}")
-    
-    # Add conflict resolution info
-    if query_info.get('conflict_resolved'):
-        strategy['conflict_info'] = query_info['conflict_resolved']
-        print(f"      ⚖️  Conflict resolved: {query_info['conflict_resolved']}")
-    
+        strategy['include_summary'] = True
+        print(f"      📋 Disambiguation enabled for general query")
+
     return ResponseDecision(
         needs_ai_generation=True,
         pre_generated_response=None,
         strategy=strategy
     )
-
-
 
 
 def _handle_simple_mock_response(user_message: str, query_type: str) -> ResponseDecision:

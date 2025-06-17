@@ -1148,20 +1148,27 @@ class FleetDatabaseController:
                     print(f"   🚢 PRECISE SHIP SEARCH: '{query}' (limit={limit})")
                     
                     # Priority ship categories - focus on the most relevant ones
-                    priority_categories = ['Ship Information', 'Active Starship', 'Starships', 'Ship','Inactive Starships','NPC Starships','Destroyed Starships']
+                    priority_categories = ['Active Starship', 'Starships', 'Ship','Inactive Starships','NPC Starships','Destroyed Starships']
                     
                     # STEP 1: Exact title match with priority categories
                     exact_query = """
                         SELECT id, title, raw_content, url, categories,
-                               3.0 as rank
+                               CASE 
+                                   WHEN LOWER(title) = LOWER(%s) THEN 5.0
+                                   WHEN LOWER(title) LIKE LOWER(%s) THEN 4.0
+                                   WHEN LOWER(title) LIKE LOWER(%s) THEN 3.0
+                                   ELSE 2.0
+                               END as rank
                         FROM wiki_pages 
-                        WHERE LOWER(title) LIKE LOWER(%s)
+                        WHERE (
+                            LOWER(title) = LOWER(%s) OR
+                            LOWER(title) LIKE LOWER(%s) OR 
+                            LOWER(title) LIKE LOWER(%s)
+                        )
                         AND categories IS NOT NULL 
                         AND array_length(categories, 1) > 0
                         AND categories && %s
-                        ORDER BY 
-                            CASE WHEN LOWER(title) = LOWER(%s) THEN 1 ELSE 2 END,
-                            rank DESC
+                        ORDER BY rank DESC, id DESC
                         LIMIT %s
                     """
                     
@@ -1169,14 +1176,29 @@ class FleetDatabaseController:
                     query_variations = self._generate_query_variations(query)
                     
                     results = []
-                    for variation in query_variations[:3]:  # Try top 3 variations
-                        cur.execute(exact_query, [f'%{variation}%', priority_categories, variation, limit])
+                    # Try exact match first, then variations
+                    search_terms = [query] + query_variations[:2]  # Start with original query
+                    
+                    for variation in search_terms:
+                        # Create different search patterns with increasing specificity
+                        exact_match = variation
+                        starts_with = f'{variation}%'
+                        contains = f'%{variation}%'
+                        
+                        cur.execute(exact_query, [
+                            exact_match, starts_with, contains,  # For ranking
+                            exact_match, starts_with, contains,  # For WHERE clause
+                            priority_categories, limit
+                        ])
                         exact_results = [dict(row) for row in cur.fetchall()]
                         
                         if exact_results:
-                            print(f"   ✅ Found {len(exact_results)} exact matches for '{variation}'")
+                            print(f"   ✅ Found {len(exact_results)} matches for '{variation}' (rank: {exact_results[0]['rank']})")
                             results.extend(exact_results)
-                            break  # Found exact matches, no need to try other variations
+                            # If we found exact matches (rank 5.0), stop here
+                            if any(r['rank'] >= 5.0 for r in exact_results):
+                                print(f"   🎯 Found exact title match, stopping search")
+                                break
                     
                     # STEP 2: If no exact matches, try broader ship categories but still prioritize title matches
                     if not results:
@@ -1257,7 +1279,7 @@ class FleetDatabaseController:
             chronological_results = self._get_logs_sorted_by_title_date(
                 ship_name=ship_name, 
                 categories=log_categories, 
-                limit=limit * 2,  # Get more results for filtering
+                limit=limit * 5,  # Get more results for filtering
                 debug_level=1
             )
             

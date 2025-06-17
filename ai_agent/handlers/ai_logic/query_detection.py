@@ -6,9 +6,10 @@ This module contains all query detection and parsing logic extracted from ai_log
 Provides clean, focused interface for identifying user intent patterns.
 
 ENHANCED: Phase 6B Migration with conflict prevention and category intersection.
+SIMPLIFIED: Removed internal-only functions - only keeping externally used functions.
 
 Usage:
-    from handlers.ai_logic.query_detection import is_continuation_request
+    from handlers.ai_logic.query_detection import detect_query_type_with_conflicts
 """
 
 from typing import Optional, Tuple, Dict, List, Any
@@ -67,135 +68,52 @@ SHIP_NAMES = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel
 
 def detect_query_type_with_conflicts(user_message: str) -> Dict[str, Any]:
     """
-    Enhanced query detection that prevents conflicts between types.
-    Returns query type, subject, and conflict resolution.
-    
-    PRIORITY ORDER:
-    1. Log queries (highest priority for conflict prevention)
-    2. Character queries (with category intersection)
-    3. Ship queries (with category intersection)
-    4. Tell me about fallback
+    Simplified query detection based on available content retrievers.
+    Primary distinction is between a LOG query and a GENERAL/UNIFIED query.
     """
-    print(f"   🔍 ENHANCED QUERY DETECTION: '{user_message}'")
-    
-    # PRIORITY 1: Log queries (highest priority for conflict prevention)
+    print(f"   🔍 SIMPLIFIED QUERY DETECTION: '{user_message}'")
+
+    # PRIORITY 1: Log queries. This is the most important distinction.
     if has_log_specific_terms(user_message):
-        print(f"      📋 Log-specific terms detected")
+        print("      📋 Log query detected.")
+        # Identify if the log query is about a specific ship or character for context.
+        _, ship_name, _ = _is_ship_plus_log_query(user_message)
+        _, char_name, _ = _is_character_plus_log_query(user_message)
+        subject = ship_name or char_name
         
-        # Check for ship + log combination
-        is_ship_log, ship_name, log_type = is_ship_plus_log_query(user_message)
-        if is_ship_log:
-            print(f"      🚢📋 Ship+Log conflict resolved: {ship_name} {log_type}")
-            return {
-                'type': 'ship_log',
-                'subject': ship_name,
-                'log_type': log_type,
-                'conflict_resolved': f'ship+log detected: {ship_name} {log_type}',
-                'priority': 1
-            }
-        
-        # Check for character + log combination  
-        is_char_log, char_name, log_type = is_character_plus_log_query(user_message)
-        if is_char_log:
-            print(f"      🧑📋 Character+Log conflict resolved: {char_name} {log_type}")
-            return {
-                'type': 'character_log', 
-                'subject': char_name,
-                'log_type': log_type,
-                'conflict_resolved': f'character+log detected: {char_name} {log_type}',
-                'priority': 1
-            }
-        
-        # General log query
-        print(f"      📋 General log query detected")
-        return {
-            'type': 'log', 
-            'subject': None, 
-            'conflict_resolved': 'general log query',
-            'priority': 1
-        }
+        if not subject:
+             # Clean up the full query to use as a subject if no specific entity found
+             subject = re.sub(r'\b(log|logs|entry|entries|report|reports|record|records)\b', '', user_message, flags=re.IGNORECASE).strip()
+
+        print(f"      - Log Subject: '{subject}'")
+        return {'type': 'log', 'subject': subject}
+
+    # PRIORITY 2: General "tell me about" queries.
+    # This covers ships, characters, and any other general topic.
+    print("      📖 General query detected.")
     
-    # PRIORITY 2: Character queries (with category intersection)
+    # We still need to find the most relevant "subject" for the unified search.
+    # The old priority was character -> ship -> tell me about. This is a good way to find the subject.
     is_char, char_name = is_character_query(user_message)
-    if is_char and char_name:
-        print(f"      🧑 Character query detected: {char_name}")
-        return {
-            'type': 'character',
-            'subject': char_name,
-            'requires_category_intersection': True,
-            'valid_categories': ['Characters', 'Personnel', 'Crew'],
-            'priority': 2
-        }
-    
-    # PRIORITY 3: Ship queries (with category intersection)
-    if is_ship_query(user_message):
-        ship_name = extract_ship_name(user_message)
-        print(f"      🚢 Ship query detected: {ship_name}")
-        return {
-            'type': 'ship',
-            'subject': ship_name,
-            'requires_category_intersection': True,
-            'valid_categories': ['Ship Information', 'Starships', 'Vessels'],
-            'priority': 3
-        }
-    
-    # PRIORITY 4: Tell me about fallback
-    tell_me_subject = extract_tell_me_about_subject(user_message)
-    if tell_me_subject:
-        print(f"      📖 Tell me about query detected: {tell_me_subject}")
-        return {
-            'type': 'tell_me_about',
-            'subject': tell_me_subject,
-            'needs_title_search': True,
-            'priority': 4
-        }
-    
-    print(f"      ❓ General query detected (no specific type)")
-    return {'type': 'general', 'subject': None, 'priority': 5}
+    if is_char:
+        subject = char_name
+        print(f"      - General Subject (from Character): '{subject}'")
+    elif _is_ship_query(user_message):
+        subject = _extract_ship_name(user_message)
+        print(f"      - General Subject (from Ship): '{subject}'")
+    else:
+        subject = extract_tell_me_about_subject(user_message) or user_message
+        if subject != user_message:
+             print(f"      - General Subject (from 'Tell me about'): '{subject}'")
+        else:
+             print(f"      - General Subject (from full query): '{subject}'")
+
+    return {'type': 'general', 'subject': subject}
 
 
-def is_ship_query(user_message: str) -> bool:
-    """
-    Check if the message is asking about a ship specifically.
-    Enhanced to prevent conflicts with log queries.
-    """
-    user_lower = user_message.lower().strip()
-    
-    # Skip if this has log-specific terms - let log detection handle it
-    if has_log_specific_terms(user_message):
-        print(f"      ⚠️  Skipping ship detection - log terms detected")
-        return False
-    
-    # Check for ship indicators
-    ship_indicators = [
-        'uss', 'ship', 'vessel', 'starship', 'cruiser', 'destroyer',
-        'the stardancer', 'the adagio', 'the pilgrim'
-    ]
-    
-    # Check for ship names
-    ship_names_detected = []
-    for ship in SHIP_NAMES:
-        if ship in user_lower:
-            ship_names_detected.append(ship)
-    
-    # Must have ship name AND ship context (or be a tell me about query)
-    has_ship_name = len(ship_names_detected) > 0
-    has_ship_context = any(indicator in user_lower for indicator in ship_indicators)
-    is_tell_me_about = extract_tell_me_about_subject(user_message) is not None
-    
-    return has_ship_name and (has_ship_context or is_tell_me_about)
-
-
-def extract_ship_name(user_message: str) -> Optional[str]:
-    """Extract ship name from the message."""
-    user_lower = user_message.lower().strip()
-    
-    for ship in SHIP_NAMES:
-        if ship in user_lower:
-            return ship
-    
-    return None
-
+# ==============================================================================
+# EXTERNALLY USED FUNCTIONS - Keep these as they're called by other modules
+# ==============================================================================
 
 def is_continuation_request(user_message: str) -> bool:
     """
@@ -244,16 +162,6 @@ def is_federation_archives_request(user_message: str) -> bool:
     return any(pattern in user_lower for pattern in archives_patterns)
 
 
-
-
-
-
-
-
-
-
-
-
 def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
     """
     Extract the subject from a 'tell me about' query.
@@ -284,79 +192,6 @@ def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
                 return subject
     
     return None
-
-
-def detect_log_selection_query(user_message: str) -> Tuple[bool, str, Optional[str]]:
-    """
-    Detect log selection queries with temporal and random selection
-    Returns (is_selection_query, selection_type, ship_name)
-    
-    Selection types:
-    - 'latest'/'last'/'most_recent' → Most recent by date DESC
-    - 'first'/'earliest'/'oldest' → Oldest by date ASC  
-    - 'random'/'pick' → Random selection from results
-    - 'today'/'yesterday'/'this_week' → Date-filtered
-    """
-    message = user_message.strip().lower()
-    
-    # Only process if this contains log indicators
-    if not any(indicator in message for indicator in LOG_SPECIFIC_INDICATORS + ['log', 'logs', 'mission']):
-        return False, "", None
-    
-    # Extract ship name if present
-    detected_ship = None
-    # Use local ship names since SHIP_NAMES was removed in Phase 2
-    ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel']
-    for ship in ship_names:
-        if ship.lower() in message:
-            detected_ship = ship.lower()
-            break
-    
-    # Check for random selection keywords
-    random_patterns = [
-        'pick a log', 'pick', 'random log', 'any log', 'surprise me',
-        'choose a log', 'select a log', 'give me a log'
-    ]
-    
-    for pattern in random_patterns:
-        if pattern in message:
-            print(f"   🎲 Random log selection detected: '{pattern}' (ship: {detected_ship})")
-            return True, 'random', detected_ship
-    
-    # Check for temporal recent keywords (DESC order)
-    recent_patterns = [
-        'latest', 'last', 'most recent', 'newest', 'current', 'recent'
-    ]
-    
-    for pattern in recent_patterns:
-        if pattern in message:
-            print(f"   📅 Recent temporal query detected: '{pattern}' (ship: {detected_ship})")
-            return True, 'latest', detected_ship
-    
-    # Check for temporal old keywords (ASC order)
-    old_patterns = [
-        'first', 'earliest', 'oldest', 'original', 'initial'
-    ]
-    
-    for pattern in old_patterns:
-        if pattern in message:
-            print(f"   📅 Historical temporal query detected: '{pattern}' (ship: {detected_ship})")
-            return True, 'first', detected_ship
-    
-    # Check for date-based keywords
-    date_patterns = {
-        'today': 'today',
-        'yesterday': 'yesterday', 
-        'this week': 'this_week',
-        'last week': 'last_week'
-    }
-    
-    for pattern, selection_type in date_patterns.items():
-        if pattern in message:
-            print(f"   📅 Date-based query detected: '{pattern}' (ship: {detected_ship})")
-            return True, selection_type, detected_ship
-    
-    return False, "", None
 
 
 def extract_url_request(user_message: str) -> Tuple[bool, Optional[str]]:
@@ -410,81 +245,6 @@ def extract_url_request(user_message: str) -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-
-
-def is_ship_plus_log_query(user_message: str) -> Tuple[bool, Optional[str], Optional[str]]:
-    """
-    Detect when a user is asking for ship logs specifically (not general ship info).
-    Returns (is_ship_log_query, ship_name, log_type)
-    """
-    message_lower = user_message.lower().strip()
-    
-    # Skip if this is a "tell me about" query - those should get general info
-    tell_me_about_subject = extract_tell_me_about_subject(user_message)
-    if tell_me_about_subject and not has_log_specific_terms(tell_me_about_subject):
-        print(f"   📖 Skipping ship+log detection - this is a 'tell me about' query without log terms")
-        return False, None, None
-    
-    # Look for ship names combined with log indicators
-    ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel','gigantes']
-    
-    detected_ship = None
-    for ship in ship_names:
-        if ship in message_lower:
-            detected_ship = ship
-            break
-    
-    if detected_ship and has_log_specific_terms(user_message):
-        # Extract log type if specified
-        log_type = None
-        for indicator in LOG_SPECIFIC_INDICATORS:
-            if indicator in message_lower:
-                log_type = indicator
-                break
-        
-        print(f"   🚢📋 Ship+Log query detected: ship='{detected_ship}', log_type='{log_type}'")
-        return True, detected_ship, log_type
-    
-    return False, None, None
-
-
-def is_character_plus_log_query(user_message: str) -> Tuple[bool, Optional[str], Optional[str]]:
-    """
-    Detect when a user is asking for character logs specifically (not general character info).
-    Returns (is_character_log_query, character_name, log_type)
-    """
-    message_lower = user_message.lower().strip()
-    
-    # Skip if this is a "tell me about" query - those should get general info
-    tell_me_about_subject = extract_tell_me_about_subject(user_message)
-    if tell_me_about_subject and not has_log_specific_terms(tell_me_about_subject):
-        print(f"   📖 Skipping character+log detection - this is a 'tell me about' query without log terms")
-        return False, None, None
-    
-    # Only proceed if there are log-specific terms
-    if not has_log_specific_terms(user_message):
-        return False, None, None
-    
-    # Check for character patterns
-    is_char, character_name = is_character_query(user_message)
-    
-    if is_char and character_name:
-        # Extract log type if specified
-        log_type = None
-        for indicator in LOG_SPECIFIC_INDICATORS:
-            if indicator in message_lower:
-                log_type = indicator
-                break
-        
-        print(f"   🧑📋 Character+Log query detected: character='{character_name}', log_type='{log_type}'")
-        return True, character_name, log_type
-    
-    return False, None, None
-
-
-
-
-
 def is_character_query(user_message: str) -> Tuple[bool, Optional[str]]:
     """
     Check if the message is asking about a character and extract the character name.
@@ -497,12 +257,12 @@ def is_character_query(user_message: str) -> Tuple[bool, Optional[str]]:
     # Skip if this is specifically asking for logs - that should be handled by log detection
     if has_log_specific_terms(user_message):
         tell_me_about_subject = extract_tell_me_about_subject(user_message)
-        if not tell_me_about_subject:  # Not a "tell me about" query, so it's probably asking for logs
-            print(f"   📋 Skipping character detection - log-specific terms detected without 'tell me about'")
+        if not tell_me_about_subject or has_log_specific_terms(tell_me_about_subject):
+            print(f"   📋 Skipping character detection - log-specific terms detected")
             return False, None
     
     # Exclude ship names explicitly to prevent false positives
-    ship_indicators = ['uss', 'ship', 'vessel', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant']
+    ship_indicators = ['uss', 'ship', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant','gigantes','manta','sentinel','protector','banshee']
     if any(indicator in message for indicator in ship_indicators):
         print(f"   🚢 Skipping character detection - ship indicator found: {[ind for ind in ship_indicators if ind in message]}")
         return False, None
@@ -581,7 +341,7 @@ def get_query_type(user_message: str) -> str:
         return "continuation"
     elif extract_url_request(user_message)[0]:
         return "url_request"
-    elif detect_log_selection_query(user_message)[0]:
+    elif _detect_log_selection_query(user_message)[0]:
         return "log_selection"
     elif is_character_query(user_message)[0]:
         return "character"
@@ -591,3 +351,149 @@ def get_query_type(user_message: str) -> str:
         return "tell_me_about"
     else:
         return "general"
+
+
+# ==============================================================================
+# INTERNAL HELPER FUNCTIONS - Only used by detect_query_type_with_conflicts
+# ==============================================================================
+
+def _is_ship_query(user_message: str) -> bool:
+    """
+    Check if the message is asking about a ship specifically.
+    Enhanced to prevent conflicts with log queries.
+    """
+    user_lower = user_message.lower().strip()
+    
+    # Skip if this has log-specific terms - let log detection handle it
+    if has_log_specific_terms(user_message):
+        print(f"      ⚠️  Skipping ship detection - log terms detected")
+        return False
+    
+    # Check for ship indicators
+    ship_indicators = [
+        'uss', 'ship', 'vessel', 'starship', 'cruiser', 'destroyer',
+        'the stardancer', 'the adagio', 'the pilgrim','the banshee','the manta','the sentinel','the protector','the gigantes'
+    ]
+    
+    # Check for ship names
+    ship_names_detected = []
+    for ship in SHIP_NAMES:
+        if ship in user_lower:
+            ship_names_detected.append(ship)
+    
+    # Must have ship name AND ship context (or be a tell me about query)
+    has_ship_name = len(ship_names_detected) > 0
+    
+    # Stricter check: if 'tell me about' is present, it must NOT have log terms
+    tell_me_about_subject = extract_tell_me_about_subject(user_message)
+    if tell_me_about_subject and has_log_specific_terms(tell_me_about_subject):
+        print(f"      ⚠️  Skipping ship detection - 'tell me about' query contains log terms")
+        return False
+        
+    has_ship_context = any(indicator in user_lower for indicator in ship_indicators)
+    is_tell_me_about = tell_me_about_subject is not None
+    
+    return has_ship_name and (has_ship_context or is_tell_me_about)
+
+
+def _extract_ship_name(user_message: str) -> Optional[str]:
+    """Extract ship name from the message."""
+    user_lower = user_message.lower().strip()
+    
+    for ship in SHIP_NAMES:
+        if ship in user_lower:
+            return ship
+    
+    return None
+
+
+def _detect_log_selection_query(user_message: str) -> Tuple[bool, str, Optional[str]]:
+    """
+    Detect log selection queries - SIMPLIFIED to handle only random selection.
+    Most temporal queries are now handled by the enhanced ship+log detection system.
+    
+    Returns (is_selection_query, selection_type, ship_name)
+    """
+    message = user_message.strip().lower()
+    
+    # Only process if this contains log indicators
+    if not any(indicator in message for indicator in LOG_SPECIFIC_INDICATORS + ['log', 'logs', 'mission']):
+        return False, "", None
+    
+    # Extract ship name if present
+    detected_ship = None
+    ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 'gigantes']
+    for ship in ship_names:
+        if ship.lower() in message:
+            detected_ship = ship.lower()
+            break
+    
+    # Only handle random selection - everything else goes through enhanced detection
+    random_patterns = [
+        'pick a log', 'pick', 'random log', 'any log', 'surprise me',
+        'choose a log', 'select a log', 'give me a log'
+    ]
+    
+    for pattern in random_patterns:
+        if pattern in message:
+            print(f"   🎲 Random log selection detected: '{pattern}' (ship: {detected_ship})")
+            return True, 'random', detected_ship
+    
+    # All other cases handled by enhanced query detection system
+    return False, "", None
+
+
+def _is_ship_plus_log_query(user_message: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Detect when a user is asking for ship logs specifically (not general ship info).
+    Assumes has_log_specific_terms() is already true.
+    Returns (is_ship_log_query, ship_name, log_type)
+    """
+    message_lower = user_message.lower().strip()
+    
+    # Look for ship names
+    ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel','gigantes']
+    
+    detected_ship = None
+    for ship in ship_names:
+        if ship in message_lower:
+            detected_ship = ship
+            break
+    
+    if detected_ship:
+        # Extract log type if specified
+        log_type = None
+        for indicator in LOG_SPECIFIC_INDICATORS:
+            if indicator in message_lower:
+                log_type = indicator
+                break
+        
+        print(f"   🚢📋 Ship+Log query detected: ship='{detected_ship}', log_type='{log_type}'")
+        return True, detected_ship, log_type
+    
+    return False, None, None
+
+
+def _is_character_plus_log_query(user_message: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Detect when a user is asking for character logs specifically (not general character info).
+    Assumes has_log_specific_terms() is already true.
+    Returns (is_character_log_query, character_name, log_type)
+    """
+    message_lower = user_message.lower().strip()
+
+    # Check for character patterns
+    is_char, character_name = is_character_query(user_message)
+    
+    if is_char and character_name:
+        # Extract log type if specified
+        log_type = None
+        for indicator in LOG_SPECIFIC_INDICATORS:
+            if indicator in message_lower:
+                log_type = indicator
+                break
+        
+        print(f"   🧑📋 Character+Log query detected: character='{character_name}', log_type='{log_type}'")
+        return True, character_name, log_type
+    
+    return False, None, None

@@ -1,956 +1,498 @@
-"""Database-driven content retrieval and wiki search functionality"""
+"""
+Content Retriever - Database Content Access Layer
+================================================
 
+This module provides the core interface for retrieving content from the database.
+All content retrieval now routes through the unified get_tell_me_about_content_prioritized function.
+
+SIMPLIFIED: Removed legacy routing functions - everything uses unified search.
+"""
+
+from typing import List, Dict, Optional
+import traceback
+import re
+
+from ..handlers_utils import is_fallback_response
 from database_controller import get_db_controller
-from typing import Optional, List, Dict
-import requests
-from urllib.parse import quote
 
-from .llm_query_processor import get_llm_processor, should_process_data
+
+def get_db_controller():
+    """Get database controller instance"""
+    return get_db_controller()
+
 
 def determine_query_type(function_name: str, content_type: str = None) -> str:
-    """Map function types to LLM processor query types"""
-    if 'log' in function_name.lower():
-        return "logs"
-    elif content_type == 'personnel' or 'character' in str(content_type or ''):
-        return "character" 
+    """Determine the query type for LLM processing"""
+    if 'log' in function_name.lower() or content_type == 'logs':
+        return 'logs'
+    elif 'ship' in function_name.lower() or content_type == 'ships':
+        return 'ships'
     else:
-        return "general"
+        return 'general'
+
 
 def create_query_description(function_name: str, **kwargs) -> str:
-    """Generate descriptive query for LLM processing context"""
-    descriptions = {
-        'get_ship_information': f"ship information for {kwargs.get('ship_name', 'unknown ship')}",
-        'get_recent_logs': f"recent logs" + (f" for {kwargs.get('ship_name')}" if kwargs.get('ship_name') else ""),   
-        'get_tell_me_about_content': f"information about {kwargs.get('subject', 'unknown subject')}",
-        'search_memory_alpha': f"external wiki information about '{kwargs.get('query', '')}'",
-        'get_random_log_content': f"random log" + (f" from {kwargs.get('ship_name')}" if kwargs.get('ship_name') else "")
-    }
-    return descriptions.get(function_name, "database query results")
+    """Create a human-readable description of the query for LLM processing"""
+    if 'character' in function_name.lower():
+        return f"Character information query: {kwargs.get('character_name', 'unknown')}"
+    elif 'ship' in function_name.lower():
+        return f"Ship information query: {kwargs.get('ship_name', 'unknown')}"
+    elif 'log' in function_name.lower():
+        return f"Mission log query: {kwargs.get('query', 'unknown')}"
+    else:
+        return f"General information query: {kwargs.get('subject', kwargs.get('query', 'unknown'))}"
 
-# _get_roleplay_context_from_caller function removed - is_roleplay parameter no longer used
 
 def is_episode_summary(result: dict) -> bool:
     """
-    Check if a database result is an episode summary that should be filtered out.
+    Check if a result is an episode summary that should be filtered out.
     
-    Args:
-        result: Database result dictionary with 'categories' key
-        
-    Returns:
-        True if this is an episode summary, False otherwise
+    Episode summaries are general summaries of roleplay sessions and don't contain
+    specific character or ship information that would be useful for queries.
     """
-    categories = result.get('categories', [])
-    if not categories:
-        return False
+    title = result.get('title', '').lower()
+    content = result.get('raw_content', '').lower()
     
-    # Check for episode summary pattern in any category
-    for cat in categories:
-        if 'episode summary' in cat.lower():
-            return True
+    # Check for episode summary indicators in title
+    episode_indicators = [
+        'episode', 'session', 'summary', 'recap', 'overview',
+        'part 1', 'part 2', 'part i', 'part ii'
+    ]
+    
+    if any(indicator in title for indicator in episode_indicators):
+        return True
+    
+    # Check for summary-style content patterns
+    summary_patterns = [
+        'in this episode', 'during this session', 'the crew of',
+        'this episode', 'the session began', 'summary of events'
+    ]
+    
+    if any(pattern in content for pattern in summary_patterns):
+        return True
     
     return False
 
 
-
 def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool = False) -> str:
     """
-    Search multiple Star Trek wikis using MediaWiki API as fallback when local database has no results.
-    Returns formatted content from wiki articles.
+    Search Memory Alpha (external Star Trek wiki) for information.
     
     Args:
         query: Search query
-        limit: Number of results to return per wiki
-        is_federation_archives: If True, adds [Federation Archives] tags for explicit federation archives requests
+        limit: Maximum number of results
+        is_federation_archives: Whether this is a federation archives request
+        
+    Returns:
+        Formatted search results or empty string if no results
     """
     try:
-        print(f"🌟 WIKI SEARCH: '{query}' (fallback search)")
+        import requests
+        from urllib.parse import quote
         
-        # Clean up the query for better search results
-        search_query = query.strip()
+        print(f"MEMORY ALPHA SEARCH: '{query}' (limit={limit})")
         
-        # Get wiki endpoints from config
-        from config import WIKI_ENDPOINTS
-        all_content = []
+        # Search Memory Alpha API
+        search_url = "https://memory-alpha.fandom.com/api.php"
+        search_params = {
+            'action': 'query',
+            'format': 'json',
+            'list': 'search',
+            'srsearch': query,
+            'srlimit': limit,
+            'srprop': 'snippet|titlesnippet'
+        }
         
-        for base_url in WIKI_ENDPOINTS:
-            wiki_name = base_url.split('/')[-2]  # Extract wiki name from URL
-            print(f"   🔍 Searching {wiki_name}...")
-            
-            # First, search for articles
-            search_params = {
-                'action': 'query',
-                'format': 'json',
-                'list': 'search',
-                'srsearch': search_query,
-                'srlimit': limit,
-                'srnamespace': 0,  # Main namespace only
-                'srprop': 'snippet|titlesnippet'
-            }
-            
-            search_response = requests.get(base_url, params=search_params, timeout=10)
-            search_data = search_response.json()
-            
-            if 'query' not in search_data or 'search' not in search_data['query']:
-                print(f"   ❌ No {wiki_name} search results found")
-                continue
-            
-            search_results = search_data['query']['search']
-            if not search_results:
-                print(f"   ❌ No {wiki_name} articles found for '{query}'")
-                continue
-            
-            print(f"   📊 Found {len(search_results)} {wiki_name} articles")
-            
-            # Get content for the top results
-            wiki_content = []
-            page_titles = [result['title'] for result in search_results[:limit]]
+        search_response = requests.get(search_url, params=search_params, timeout=10)
+        search_data = search_response.json()
+        
+        if 'query' not in search_data or 'search' not in search_data['query']:
+            print(f"   ❌ No search results found")
+            return ""
+        
+        results = search_data['query']['search']
+        if not results:
+            print(f"   ❌ Empty search results")
+            return ""
+        
+        print(f"  Found {len(results)} Memory Alpha results")
+        
+        # Get page content for each result
+        formatted_results = []
+        for result in results:
+            page_title = result['title']
+            page_id = result['pageid']
             
             # Get page content
             content_params = {
                 'action': 'query',
                 'format': 'json',
-                'titles': '|'.join(page_titles),
+                'pageids': page_id,
                 'prop': 'extracts',
-                'exintro': True,  # Only get intro section
-                'explaintext': True,  # Plain text, no HTML
+                'exintro': True,
+                'explaintext': True,
                 'exsectionformat': 'plain'
             }
             
-            content_response = requests.get(base_url, params=content_params, timeout=10)
+            content_response = requests.get(search_url, params=content_params, timeout=10)
             content_data = content_response.json()
             
-            if 'query' not in content_data or 'pages' not in content_data['query']:
-                print(f"   ❌ Could not retrieve {wiki_name} content")
-                continue
-            
-            pages = content_data['query']['pages']
-            
-            for page_id, page_data in pages.items():
-                if page_id == '-1':  # Page not found
-                    continue
-                    
-                title = page_data.get('title', 'Unknown Title')
-                extract = page_data.get('extract', '')
+            if 'query' in content_data and 'pages' in content_data['query']:
+                page_data = content_data['query']['pages'].get(str(page_id), {})
+                page_content = page_data.get('extract', '')
                 
-                if extract:
-                    # Format for Elsie's response
-                    page_url = f"{base_url.rsplit('/', 1)[0]}/wiki/{quote(title.replace(' ', '_'))}"
-                    if is_federation_archives:
-                        formatted_content = f"**{title}** [{wiki_name} - Federation Archives]\n{extract}"
-                    else:
-                        formatted_content = f"**{title}** [{wiki_name}]\n{extract}"
-                    wiki_content.append(formatted_content)
-                    print(f"   ✓ Retrieved {wiki_name} article: '{title}' ({len(extract)} chars)")
-            
-            if wiki_content:
-                all_content.extend(wiki_content)
+                if page_content:
+                    # Limit content length
+                    if len(page_content) > 1000:
+                        page_content = page_content[:1000] + "..."
+                    
+                    formatted_results.append(f"**{page_title}** (Memory Alpha)\n{page_content}")
         
-        if not all_content:
-            print(f"   ❌ No usable wiki content found")
-            return ""
-        
-        # Join all content with appropriate separators
-        if is_federation_archives:
-            final_content = '\n\n---FEDERATION ARCHIVES---\n\n'.join(all_content)
+        if formatted_results:
+            final_result = '\n\n---\n\n'.join(formatted_results)
+            print(f"   ✅ Memory Alpha search: {len(final_result)} characters")
+            return final_result
         else:
-            final_content = '\n\n---\n\n'.join(all_content)
+            print(f"   ❌ No usable content found")
+            return ""
             
-        print(f"✅ WIKI SEARCH COMPLETE: {len(final_content)} characters from {len(all_content)} articles")
-        
-        # Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_type = determine_query_type('search_memory_alpha')
-            query_description = create_query_description('search_memory_alpha', query=query)
-            result = processor.process_query_results(query_type, final_content, query_description)
-            return result.content
-        
-        return final_content
-        
-    except requests.RequestException as e:
-        print(f"   ❌ Wiki API request failed: {e}")
-        return ""
     except Exception as e:
-        print(f"   ❌ Wiki search error: {e}")
+        print(f"   ❌ Memory Alpha search error: {e}")
         return ""
 
+
 def check_elsiebrain_connection() -> bool:
-    """Check if the elsiebrain database is accessible and populated"""
+    """
+    Check if the Elsiebrain database is accessible.
+    
+    Returns:
+        bool: True if database is accessible, False otherwise
+    """
     try:
         controller = get_db_controller()
-        stats = controller.get_stats()
-        
-        if stats and stats.get('total_pages', 0) > 0:
-            print(f"✓ elsiebrain database ready")
-        else:
-            print("⚠️  elsiebrain database is connected but empty - needs to be populated externally")
-        
+        controller.ensure_connection()
         return True
-        
     except Exception as e:
-        print(f"✗ Error connecting to elsiebrain database: {e}")
-        print("   Make sure the elsiebrain database exists and is populated")
+        print(f"❌ Database connection error: {e}")
         return False
 
 
-
-def get_log_content(query: str, mission_logs_only: bool = False) -> str:
-    """Simplified log search using categories - NO TRUNCATION
-    Uses new Phase 1 category-based database controller methods
+def get_log_content(query: str, mission_logs_only: bool = False, ship_name: Optional[str] = None) -> str:
+    """
+    Get log content from the database.
     
     Args:
-        query: Search query
-        mission_logs_only: If True, only search log categories (same behavior as before)
+        query: Search query for logs
+        mission_logs_only: Whether to restrict to mission logs only
+        ship_name: The name of the ship to search logs for, if available
+        
+    Returns:
+        Formatted log content or fallback message
     """
     try:
         controller = get_db_controller()
-        print(f"🔍 CATEGORY-BASED LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
+        print(f"[LOG] LOG CONTENT SEARCH: '{query}' (mission_logs_only={mission_logs_only}, ship_name={ship_name})")
         
-        # Check for log selection queries first (keep existing special handling)
-        from ..ai_logic.query_detection import detect_log_selection_query
-        is_selection, selection_type, ship_name = detect_log_selection_query(query)
-        
-        if is_selection:
-            print(f"   🎯 LOG SELECTION DETECTED: type='{selection_type}', ship='{ship_name}'")
-            
-            if selection_type == 'random':
-                return get_random_log_content(ship_name)
-            elif selection_type in ['latest', 'recent']:
-                limit = 1 if selection_type == 'latest' else 5
-                return get_temporal_log_content(selection_type, ship_name, limit=limit)
-            elif selection_type in ['first', 'earliest', 'oldest']:
-                limit = 1 if selection_type == 'first' else 5
-                return get_temporal_log_content(selection_type, ship_name, limit=limit)
-            elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
-                return get_temporal_log_content(selection_type, ship_name, limit=10)
-        
-        # Extract ship name for ship-specific log searches
-        ship_name_from_query = None
-        # Simple ship name extraction from query (could be enhanced)
-        ship_keywords = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta']
-        for ship in ship_keywords:
-            if ship in query.lower():
-                ship_name_from_query = ship
-                break
-        
-        # Use new Phase 1 search_logs method - MUCH SIMPLER!
-        results = controller.search_logs(query, ship_name=ship_name_from_query, limit=20)
-        print(f"   📊 Category-based log search returned {len(results)} results")
-        
-        if not results:
-            print(f"✗ No log content found for query: '{query}'")
-            return ""
-        
-        # Process results - keep existing processing logic
-        log_contents = []
-        for result in results:
-            title = result['title']
-            content = result['raw_content']
-            print(f"   📄 Processing: '{title}' ({len(content)} chars)")
-            
-            # Format the log with title and raw content (LLM will handle all parsing)
-            formatted_log = f"**{title}**\n{content}"
-            log_contents.append(formatted_log)
-            print(f"   ✓ Added: {title}")
-        
-        final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
-        print(f"✅ CATEGORY-BASED LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
-        
-        # Always process log content through secondary LLM for character processing
-        print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
-        processor = get_llm_processor()
-        result = processor.process_query_results("logs", final_content, query, force_processing=True)
-        return result.content
-        
-    except Exception as e:
-        print(f"✗ Error getting log content: {e}")
-        return ""
-
-def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> str:
-    """Simplified unified search strategy using categories - NO TRUNCATION
-    Uses intelligent query type detection and category-based searches
-    
-    Args:
-        query: Search query
-        mission_logs_only: If True, only search log categories when detecting log queries
-    """
-    try:
-        controller = get_db_controller()
-        print(f"🔍 UNIFIED CATEGORY-BASED SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
-        
-        # Simple query type detection - category-based routing
-        query_lower = query.lower()
-        
-        if mission_logs_only or any(indicator in query_lower for indicator in ['log', 'mission', 'stardate', 'what happened']):
-            print(f"   🚀 LOG QUERY DETECTED - routing to category-based log search")
-            return get_log_content(query, mission_logs_only)
-        
-        elif any(indicator in query_lower for indicator in ['who is', 'tell me about', 'character', 'person', 'crew']):
-            print(f"   👤 CHARACTER QUERY DETECTED - routing to category-based character search")
-            # Extract potential character name from query (simple approach)
-            character_name = query.replace('who is', '').replace('tell me about', '').strip()
-            return get_character_context(character_name)
-        
-        elif any(indicator in query_lower for indicator in ['uss', 'ship', 'vessel', 'starship', 'specs', 'class']):
-            print(f"   🚢 SHIP QUERY DETECTED - routing to category-based ship search")
-            # Extract potential ship name from query (simple approach)
-            ship_name = query.replace('uss', '').replace('ship', '').strip()
-            return get_ship_information(ship_name)
-        
+        if ship_name:
+            results = controller.search_logs(query, ship_name=ship_name, limit=10)
         else:
-            print(f"   🔍 GENERAL QUERY - using standard search")
-            # General search - use existing logic
-            results = controller.search_pages(query, limit=20)
-            if not results:
-                print(f"✗ No wiki content found for query: {query}")
-                return ""
-            
-            print(f"   📊 General search returned {len(results)} results")
-            
-            context_parts = []
-            for result in results:
-                title = result['title']
-                content = result['raw_content']
-                page_text = f"**{title}**\n{content}"
-                context_parts.append(page_text)
-            
-            final_context = '\n\n---\n\n'.join(context_parts)
-            print(f"✅ UNIFIED SEARCH COMPLETE: {len(final_context)} characters from {len(context_parts)} pages")
-            
-            # Process large content through LLM if needed
-            if should_process_data(final_context):
-                print(f"🔄 Content size ({len(final_context)} chars) exceeds threshold, processing with LLM...")
-                processor = get_llm_processor()
-                result = processor.process_query_results("general", final_context, query)
-                return result.content
-            
-            return final_context
+            # Force mission logs only for log queries
+            results = controller.search_pages(
+                query, 
+                limit=10, 
+                force_mission_logs_only=True,
+                debug_level=1
+            )
         
-    except Exception as e:
-        print(f"✗ Error getting wiki context: {e}")
-        return ""
-
-def get_ship_information(ship_name: str) -> str:
-    """Simplified ship search using categories - uses Phase 1 category-based methods"""
-    try:
-        controller = get_db_controller()
-        print(f"🚢 CATEGORY-BASED SHIP SEARCH: '{ship_name}'")
-        
-        # Use new Phase 1 search_ships method - MUCH SIMPLER!
-        results = controller.search_ships(ship_name, limit=2)  # Focus on most relevant results
-        print(f"   📊 Category-based ship search returned {len(results)} results")
+        print(f"   [DATA] Found {len(results)} log results")
         
         if not results:
-            print(f"✗ No ship information found for: {ship_name}")
-            return ""
+            return "I searched the database but found no logs matching your query."
         
-        ship_info = []
+        # Format results with proper log titles
+        log_parts = []
         for result in results:
-            title = result['title']
+            original_title = result['title']
             content = result['raw_content']
-            print(f"   📄 Processing: '{title}' ({len(content)} chars)")
+            result_ship_name = result.get('ship_name', 'Unknown Ship')
             
-            page_text = f"**{title}**\n{content}"
-            ship_info.append(page_text)
-
-        final_content = '\n\n---\n\n'.join(ship_info)
-        print(f"✅ CATEGORY-BASED SHIP SEARCH COMPLETE: {len(final_content)} characters from {len(ship_info)} pages")
-        
-        # Process large content through LLM if needed (>14,000 chars)
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_type = determine_query_type('get_ship_information')
-            query_description = create_query_description('get_ship_information', ship_name=ship_name)
-            result = processor.process_query_results(query_type, final_content, query_description)
-            return result.content
-        
-        return final_content
-        
-    except Exception as e:
-        print(f"✗ Error getting ship information: {e}")
-        return ""
-
-def get_character_context(character_name: str) -> str:
-    """NEW: Simplified character search using categories - uses Phase 1 category-based methods"""
-    try:
-        controller = get_db_controller()
-        print(f"👤 CATEGORY-BASED CHARACTER SEARCH: '{character_name}'")
-        
-        # Use new Phase 1 search_characters method
-        results = controller.search_characters(character_name, limit=10)
-        print(f"   📊 Category-based character search returned {len(results)} results")
-        
-        if not results:
-            print(f"✗ No character information found for: {character_name}")
-            return ""
-        
-        character_info = []
-        for result in results:
-            title = result['title']
-            content = result['raw_content']
-            print(f"   📄 Processing: '{title}' ({len(content)} chars)")
+            # Extract date from title if possible
+            extracted_date = None
             
-            page_text = f"**{title}**\n{content}"
-            character_info.append(page_text)
-        
-        final_content = '\n\n---\n\n'.join(character_info)
-        print(f"✅ CATEGORY-BASED CHARACTER SEARCH COMPLETE: {len(final_content)} characters from {len(character_info)} pages")
-        
-        # Process through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            result = processor.process_query_results("character", final_content, f"character information for {character_name}")
-            return result.content
-        
-        return final_content
-        
-    except Exception as e:
-        print(f"✗ Error getting character context: {e}")
-        return ""
-
-def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
-    """Get recent mission logs"""
-    try:
-        controller = get_db_controller()
-        results = controller.get_recent_logs(ship_name=ship_name, limit=limit)
-        
-        if not results:
-            return ""
-        
-        log_summaries = []
-
-        for result in results:
-            # Filter out episode summaries
-            if is_episode_summary(result):
-                categories = result.get('categories', [])
-                episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
-                print(f"   ❌ Filtering out episode summary from recent logs: '{result['title']}' Category='{episode_cat}'")
-                continue
+            # Try various date formats in the title
+            date_patterns = [
+                r'(\d{1,2}/\d{1,2}/\d{4})',      # MM/DD/YYYY or M/D/YYYY
+                r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})', # YYYY-MM-DD or YYYY/MM/DD
+                r'(\d{1,2}-\d{1,2}-\d{4})',      # MM-DD-YYYY
+                r'(\d{4}\.\d{1,2}\.\d{1,2})'     # YYYY.MM.DD
+            ]
             
-            title = result['title']
-            content = result['raw_content']
-            log_date = result['log_date']
-
-            log_entry = f"**{title}** ({log_date})\n{content}"
-            log_summaries.append(log_entry)
-
-        final_content = '\n\n---\n\n'.join(log_summaries)
+            for pattern in date_patterns:
+                match = re.search(pattern, original_title)
+                if match:
+                    extracted_date = match.group(1)
+                    break
+            
+            # Create proper log title: "Shipname Mission Log"
+            if result_ship_name and result_ship_name.lower() != 'unknown ship':
+                log_title = f"{result_ship_name} Mission Log"
+            else:
+                # Try to extract ship name from title
+                ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 'banshee', 'gigantes', 'caelian', 'enterprise']
+                detected_ship = None
+                for ship in ship_names:
+                    if ship in original_title.lower():
+                        detected_ship = ship.title()
+                        break
+                
+                if detected_ship:
+                    log_title = f"{detected_ship} Mission Log"
+                else:
+                    log_title = "Mission Log"
+            
+            # Add date information if extracted from title
+            if extracted_date:
+                log_title += f" - {extracted_date}"
+            
+            # If original title has additional context beyond ship name and date, preserve it
+            title_lower = original_title.lower()
+            if (original_title and 
+                not any(ship_indicator in title_lower for ship_indicator in ['mission log', 'log entry', 'stardate']) and
+                not any(date_pattern in original_title for date_pattern in [extracted_date] if extracted_date)):
+                
+                # Clean up the original title by removing ship name and date if they're already in our formatted title
+                clean_title = original_title
+                if detected_ship:
+                    clean_title = re.sub(rf'\b{re.escape(detected_ship)}\b', '', clean_title, flags=re.IGNORECASE).strip()
+                if extracted_date:
+                    clean_title = re.sub(rf'\b{re.escape(extracted_date)}\b', '', clean_title).strip()
+                
+                # Remove leading/trailing punctuation and whitespace
+                clean_title = re.sub(r'^[^\w]+|[^\w]+$', '', clean_title).strip()
+                
+                if clean_title and len(clean_title) > 3:  # Only add if meaningful content remains
+                    log_title += f" ({clean_title})"
+            
+            log_parts.append(f"**{log_title}**\n{content}")
         
-        # Always process log content through secondary LLM for character processing
-        print(f"🔄 Recent log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
+        final_content = '\n\n---\n\n'.join(log_parts)
+        print(f"   [OK] Log content: {len(final_content)} characters")
+        
+        # Always process logs through LLM for better formatting and narrative structure
+        from .llm_query_processor import get_llm_processor
+        print(f"   [PROCESS] Processing logs through secondary LLM (always enabled for logs)...")
         processor = get_llm_processor()
-        query_type = determine_query_type('get_recent_logs')
-        query_description = create_query_description('get_recent_logs', ship_name=ship_name)
-        result = processor.process_query_results(query_type, final_content, query_description, force_processing=True)
+        result = processor.process_query_results('logs', final_content, query)
+        print(f"   [OK] LLM processed: {len(final_content)} → {len(result.content)} chars")
         return result.content
         
     except Exception as e:
-        print(f"✗ Error getting recent logs: {e}")
-        return ""
+        print(f"   [ERROR] Error in log content search: {e}")
+        return f"I encountered an error while searching for logs: {str(e)}"
 
-
-
-def get_tell_me_about_content(subject: str) -> str:
-    """Enhanced 'tell me about' functionality using hierarchical search"""
-    try:
-        controller = get_db_controller()
-        print(f"🔍 HIERARCHICAL 'TELL ME ABOUT' SEARCH: '{subject}'")
-        
-        # Use hierarchical search - will search titles first, then content
-        results = controller.search_pages(subject, limit=15)  # Increased limit
-        print(f"   📊 Hierarchical search returned {len(results)} results")
-        
-        # If it looks like a ship name, also search ship-specific content
-        if any(ship in subject.lower() for ship in ['uss', 'ship', 'vessel']):
-            print(f"   🚢 Ship detected, searching ship-specific content...")
-            # Search using actual database categories instead of artificial mappings
-            ship_results = controller.search_pages(subject, limit=10)
-            print(f"   📊 Ship-specific search returned {len(ship_results)} results")
-            
-            # Merge ship results with general results, prioritizing ship info
-            existing_ids = {r['id'] for r in results}
-            ship_results = [r for r in ship_results if r['id'] not in existing_ids]
-            results = ship_results + results
-        
-        if not results:
-            print(f"✗ No content found for 'tell me about' query: '{subject}'")
-            return ""
-        
-        # Format the results
-        content_parts = []
-
-        for result in results:  # Include ALL results
-            title = result['title']
-            content = result['raw_content']
-            categories = result.get('categories', [])
-            
-            # Add category indicator for clarity
-            category_indicator = ""
-            if categories:
-                # Determine primary category type using dynamic category detection
-                if any('log' in cat.lower() for cat in categories):
-                    category_indicator = " [Mission Log]"
-                elif 'Ship Information' in categories:
-                    category_indicator = " [Ship Information]"
-                elif 'Characters' in categories:
-                    category_indicator = " [Personnel File]"
-                elif categories:
-                    category_indicator = f" [{categories[0]}]"
-            
-            page_text = f"**{title}{category_indicator}**\n{content}"
-            content_parts.append(page_text)
-        
-        final_content = '\n\n---\n\n'.join(content_parts)
-        print(f"✅ HIERARCHICAL 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
-        
-        # Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_type = determine_query_type('get_tell_me_about_content')
-            query_description = create_query_description('get_tell_me_about_content', subject=subject)
-            result = processor.process_query_results(query_type, final_content, query_description)
-            return result.content
-        
-        return final_content
-        
-    except Exception as e:
-        print(f"✗ Error getting 'tell me about' content: {e}")
-        return ""
 
 def get_tell_me_about_content_prioritized(subject: str) -> str:
-    """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs - NO TRUNCATION"""
+    """
+    UNIFIED SEARCH FUNCTION: Get content for any subject using category-based search with ranking.
+    
+    This is the primary function for all content retrieval. It uses the enhanced
+    category-based search methods with 5-tier ranking for optimal results.
+    
+    Search Priority:
+    1. Ships: search_ships() for ship-related queries
+    2. Characters: search_characters() for character-related queries  
+    3. General: search_pages() for everything else
+    
+    Args:
+        subject: The subject to search for
+        
+    Returns:
+        Formatted search results with LLM processing if needed
+    """
     try:
         controller = get_db_controller()
-        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}'")
+        print(f"🔍 UNIFIED SEARCH: '{subject}'")
         
-        # Step 1: Search for ship info specifically first
-        ship_info_results = []
-        if any(indicator in subject.lower() for indicator in ['uss', 'ship', 'stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise']):
-            print(f"   🚢 PRIORITY: Searching ship info pages first...")
-            # Search using actual database categories instead of artificial mappings
-            ship_info_results = controller.search_pages(subject, limit=10)
-            print(f"   📊 Ship info search found {len(ship_info_results)} results")
+        # Determine search strategy based on subject
+        subject_lower = subject.lower()
         
-        # Step 2: Search for personnel records
-        personnel_results = []
-        if any(indicator in subject.lower() for indicator in ['captain', 'commander', 'lieutenant', 'ensign', 'admiral', 'officer']):
-            print(f"   👥 PRIORITY: Searching personnel records...")
-            # Search using actual database categories instead of artificial mappings
-            personnel_results = controller.search_pages(subject, limit=10)
-            print(f"   📊 Personnel search found {len(personnel_results)} results")
+        # Strategy 1: Ship search for ship-related terms
+        ship_indicators = ['ship', 'vessel', 'starship', 'uss', 'stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel', 'banshee', 'gigantes']
+        if any(indicator in subject_lower for indicator in ship_indicators):
+            print(f"   🚢 Using ship search strategy")
+            results = controller.search_ships(subject, limit=10)
+            search_type = 'ships'
         
-        # Step 3: If we have ship info or personnel, use those first
-        priority_results = ship_info_results + personnel_results
+        # Strategy 2: Character search for character-related terms
+        elif any(keyword in subject_lower for keyword in ['captain', 'commander', 'lieutenant', 'ensign', 'doctor', 'officer', 'crew']):
+            print(f"   🧑 Using character search strategy")
+            results = controller.search_characters(subject, limit=10)
+            search_type = 'characters'
         
-        # Step 4: Only search general content if no specific ship/personnel info found
-        general_results = []
-        if not priority_results:
-            print(f"   📝 No ship/personnel info found, searching general content...")
-            general_results = controller.search_pages(subject, limit=15)  # Increased limit
-            print(f"   📊 General search found {len(general_results)} results")
+        # Strategy 3: General search for everything else
+        else:
+            print(f"   📖 Using general search strategy")
+            results = controller.search_pages(subject, limit=15)
+            search_type = 'general'
         
-        # Combine results, prioritizing ship info and personnel
-        all_results = priority_results + general_results
+        print(f"   📊 Found {len(results)} results using {search_type} search")
         
-        # Remove duplicates
-        seen_ids = set()
-        unique_results = []
-        for result in all_results:
-            if result['id'] not in seen_ids:
-                unique_results.append(result)
-                seen_ids.add(result['id'])
+        if not results:
+            print(f"   ❌ No results found")
+            return f"I don't have any information about '{subject}' in my database."
         
-        if not unique_results:
-            print(f"✗ No content found for prioritized 'tell me about' query: '{subject}'")
-            return ""
+        # Filter out episode summaries for better results
+        filtered_results = [r for r in results if not is_episode_summary(r)]
+        if len(filtered_results) < len(results):
+            print(f"   🧹 Filtered out {len(results) - len(filtered_results)} episode summaries")
+            results = filtered_results
         
-        # Format the results, excluding mission logs unless specifically requested
+        if not results:
+            print(f"   ❌ No results after filtering")
+            return f"I don't have any specific information about '{subject}' in my database."
+        
+        # Format results with category indicators
         content_parts = []
-
-        for result in unique_results:  # Include ALL unique results
+        for result in results:
             title = result['title']
-            content = result['raw_content']  # NO LENGTH LIMIT
+            content = result['raw_content']
             categories = result.get('categories', [])
             
-            # Skip mission logs unless no other content was found
-            is_mission_log = any('log' in cat.lower() for cat in categories) if categories else False
-            if is_mission_log and priority_results:
-                print(f"   ⏭️  Skipping mission log '{title}' (ship/personnel info available)")
-                continue
-            
-            # Add category indicator for clarity
+            # Add category indicator
             category_indicator = ""
             if categories:
-                if is_mission_log:
-                    category_indicator = " [Mission Log]"
-                elif 'Ship Information' in categories:
+                if search_type == 'ships' and any('ship' in cat.lower() for cat in categories):
                     category_indicator = " [Ship Information]"
-                elif 'Characters' in categories:
+                elif search_type == 'characters' and 'Characters' in categories:
                     category_indicator = " [Personnel File]"
                 elif categories:
                     category_indicator = f" [{categories[0]}]"
             
-            page_text = f"**{title}{category_indicator}**\n{content}"
-            content_parts.append(page_text)
-            print(f"   ✓ Added {categories[0] if categories else 'unknown'}: '{title}'")
+            content_parts.append(f"**{title}{category_indicator}**\n{content}")
         
         final_content = '\n\n---\n\n'.join(content_parts)
-        print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
+        print(f"   ✅ Unified search: {len(final_content)} characters")
         
-        # Always process content through secondary LLM for character processing
-        print(f"🔄 Content ({len(final_content)} chars) - routing to secondary LLM for character processing")
-        processor = get_llm_processor()
-        result = processor.process_query_results("character", final_content, subject, force_processing=True)
-        return result.content
+        # Process through LLM if needed
+        from .llm_query_processor import should_process_data, get_llm_processor
+        if should_process_data(final_content):
+            print(f"   🔄 Processing content through secondary LLM...")
+            processor = get_llm_processor()
+            query_type = 'ships' if search_type == 'ships' else 'general'
+            result = processor.process_query_results(query_type, final_content, subject)
+            print(f"   ✅ LLM processed: {len(final_content)} → {len(result.content)} chars")
+            return result.content
+        
+        return final_content
         
     except Exception as e:
-        print(f"✗ Error getting prioritized 'tell me about' content: {e}")
-        return ""
-
-
-
+        print(f"   ❌ Error in unified search: {e}")
+        print(f"   📋 Traceback: {traceback.format_exc()}")
+        return f"I encountered an error while searching for information about '{subject}': {str(e)}"
 
 
 def get_log_url(search_query: str) -> str:
-    """Get the URL for a page based on search query (ship name, title, date, etc.) - searches all page types"""
+    """
+    Get URL for a specific log page.
+    
+    Args:
+        search_query: Query to find the log
+        
+    Returns:
+        URL information or message if not found
+    """
     try:
         controller = get_db_controller()
-        print(f"🔗 SEARCHING FOR PAGE URL: '{search_query}'")
+        print(f"🔗 LOG URL SEARCH: '{search_query}'")
         
-        # Try different search strategies in priority order
-        best_result = None
-        best_strategy = None
+        # Search for logs
+        results = controller.search_pages(
+            search_query, 
+            limit=5, 
+            force_mission_logs_only=True,
+            debug_level=1
+        )
         
-        # Strategy 1: Check if it's a "last [ship]" request - search recent mission logs
-        if search_query.lower().startswith('last '):
-            ship_name = search_query[5:].strip().lower()
-            print(f"   📋 Strategy 1: Last mission log for ship '{ship_name}'")
-            results = controller.get_recent_logs(ship_name=ship_name, limit=3)
-            if results:
-                # Find the first result that has a URL and is actually a mission log
-                for result in results:
-                    categories = result.get('categories', [])
-                    if result.get('url') and any('log' in cat.lower() for cat in categories):
-                        best_result = result
-                        best_strategy = f"most recent mission log for {ship_name}"
-                        print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
-                        break
-                print(f"   📊 Found {len(results)} recent logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        if not results:
+            return f"I couldn't find any logs matching '{search_query}' to provide a URL for."
         
-        # Strategy 2: Check for ship info pages (USS [ship] format or ship names)
-        if not best_result:
-            print(f"   📋 Strategy 2: Ship info page search")
-            ship_results = controller.search_pages(search_query, limit=10)
-            if ship_results:
-                # Find first ship info page with URL
-                for result in ship_results:
-                    if result.get('url'):
-                        best_result = result
-                        best_strategy = "ship information page"
-                        print(f"   ✓ Found ship info with URL: '{result.get('title')}'")
-                        break
-                print(f"   📊 Found {len(ship_results)} ship info pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        # Return the first matching result with URL info
+        first_result = results[0]
+        title = first_result['title']
         
-        # Strategy 3: Direct ship name - search mission logs  
-        if not best_result and any(ship in search_query.lower() for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee', 'caelian']):
-            # Extract ship name
-            ship_name = None
-            for ship in ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee', 'caelian']:
-                if ship in search_query.lower():
-                    ship_name = ship
-                    break
-            
-            if ship_name:
-                print(f"   📋 Strategy 3: Recent mission logs for ship '{ship_name}'")
-                results = controller.get_recent_logs(ship_name=ship_name, limit=5)
-                if results:
-                    # Find the first result that has a URL
-                    for result in results:
-                        if result.get('url'):
-                            best_result = result
-                            best_strategy = f"recent mission logs for {ship_name}"
-                            print(f"   ✓ Found mission log with URL: '{result.get('title')}'")
-                            break
-                    print(f"   📊 Found {len(results)} recent logs, selected: {best_result.get('title') if best_result else 'none with URL'}")
+        # Construct wiki URL (this would need to be adapted for your actual wiki)
+        wiki_base_url = "https://your-wiki-domain.com/wiki/"
+        page_url = wiki_base_url + title.replace(' ', '_')
         
-        # Strategy 4: Search by exact title match (all page types)
-        if not best_result:
-            print(f"   📋 Strategy 4: Exact title search (all page types)")
-            title_results = controller.search_pages(search_query, limit=10)
-            if title_results:
-                # Prioritize exact title matches that have URLs
-                for result in title_results:
-                    title = result.get('title', '')
-                    if result.get('url') and (search_query.lower() in title.lower() or title.lower() in search_query.lower()):
-                        categories = result.get('categories', [])
-                        category_type = categories[0] if categories else 'unknown'
-                        best_result = result
-                        best_strategy = f"exact title match ({category_type})"
-                        print(f"   ✓ Found exact match with URL: '{title}' ({category_type})")
-                        break
-                
-                # If no exact match with URL, use first result with URL
-                if not best_result:
-                    for result in title_results:
-                        if result.get('url'):
-                            categories = result.get('categories', [])
-                            category_type = categories[0] if categories else 'page'
-                            best_result = result
-                            best_strategy = f"{category_type} with URL"
-                            print(f"   ✓ Found page with URL: '{result.get('title')}' ({category_type})")
-                            break
-                
-                print(f"   📊 Found {len(title_results)} pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
-        
-        # Strategy 5: General search (all page types)
-        if not best_result:
-            print(f"   📋 Strategy 5: General search (all page types)")
-            general_results = controller.search_pages(search_query, limit=10)
-            if general_results:
-                # Find first result with URL
-                for result in general_results:
-                    if result.get('url'):
-                        categories = result.get('categories', [])
-                        category_type = categories[0] if categories else 'unknown'
-                        best_result = result
-                        best_strategy = f"general search ({category_type})"
-                        print(f"   ✓ Found page with URL: '{result.get('title')}' ({category_type})")
-                        break
-                print(f"   📊 Found {len(general_results)} pages, selected: {best_result.get('title') if best_result else 'none with URL'}")
-        
-        if not best_result:
-            print(f"✗ No pages with URLs found for query: '{search_query}'")
-            return f"No pages with URLs found matching '{search_query}' in the database."
-        
-        # Extract information from the best result
-        title = best_result.get('title', 'Unknown Title')
-        url = best_result.get('url', None)
-        categories = best_result.get('categories', [])
-        log_date = best_result.get('log_date', None)
-        ship_name = best_result.get('ship_name', None)
-        
-        print(f"✅ Found page via {best_strategy}: '{title}' - {url}")
-        
-        if url:
-            # Format response based on categories
-            if categories:
-                category_type = categories[0]
-                if any('log' in cat.lower() for cat in categories):
-                    return f"**Mission Log Found:**\n\n**{title}** ({log_date})\nShip: {ship_name.upper() if ship_name else 'Unknown'}\n🔗 Direct Link: {url}"
-                elif 'Ship Information' in categories:
-                    return f"**Ship Information Found:**\n\n**{title}**\nType: Ship Information Page\n🔗 Direct Link: {url}"
-                elif 'Characters' in categories:
-                    return f"**Personnel Record Found:**\n\n**{title}**\nType: Personnel File\n🔗 Direct Link: {url}"
-                else:
-                    return f"**Page Found:**\n\n**{title}**\nType: {category_type}\n🔗 Direct Link: {url}"
-            else:
-                return f"**Page Found:**\n\n**{title}**\nType: Unknown\n🔗 Direct Link: {url}"
-        else:
-            category_type = categories[0] if categories else 'Unknown'
-            return f"**Page Found:**\n\n**{title}**\nType: {category_type}\n⚠️  No direct URL available for this page."
+        return f"Here's the link to the log page for '{title}':\n{page_url}"
         
     except Exception as e:
-        print(f"✗ Error searching for page URL: {e}")
-        return f"Error retrieving URL for '{search_query}': {e}"
+        print(f"   ❌ Error in log URL search: {e}")
+        return f"I encountered an error while searching for the log URL: {str(e)}"
+
+
+# ==============================================================================
+# LEGACY ROUTING FUNCTIONS - Now route to unified search
+# ==============================================================================
+
+def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> str:
+    """Legacy function - routes to unified search"""
+    if mission_logs_only:
+        return get_log_content(query, mission_logs_only=True)
+    else:
+        return get_tell_me_about_content_prioritized(query)
+
+
+def get_ship_information(ship_name: str) -> str:
+    """Legacy function - routes to unified search"""
+    return get_tell_me_about_content_prioritized(ship_name)
+
+
+def get_character_context(character_name: str) -> str:
+    """Legacy function - routes to unified search"""
+    return get_tell_me_about_content_prioritized(character_name)
+
+
+def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
+    """Legacy function - routes to log search"""
+    query = f"recent logs {ship_name}" if ship_name else "recent logs"
+    return get_log_content(query, mission_logs_only=True)
+
+
+def get_tell_me_about_content(subject: str) -> str:
+    """Legacy function - routes to unified search"""
+    return get_tell_me_about_content_prioritized(subject)
+
 
 def get_random_log_content(ship_name: Optional[str] = None) -> str:
-    """Get one random mission log formatted for display"""
-    try:
-        controller = get_db_controller()
-        print(f"🎲 RANDOM LOG SELECTION: ship='{ship_name}'")
-        
-        random_log = controller.get_random_log(ship_name)
-        
-        if not random_log:
-            ship_msg = f" for {ship_name.upper()}" if ship_name else ""
-            print(f"   ❌ No random log found{ship_msg}")
-            return f"No mission logs found{ship_msg} in the database."
-        
-        # Filter out episode summaries
-        if is_episode_summary(random_log):
-            categories = random_log.get('categories', [])
-            episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
-            print(f"   ❌ Random log is episode summary, skipping: '{random_log['title']}' Category='{episode_cat}'")
-            # Try to get another random log that's not an episode summary
-            print(f"   🔄 Attempting to get another random log (not episode summary)")
-            return get_random_log_content(ship_name)
-        
-        title = random_log['title']
-        content = random_log['raw_content']
-        log_date = random_log.get('log_date', 'Unknown Date')
-        ship = random_log.get('ship_name', 'Unknown Ship')
-        
-        # Format the random log with special indicator (LLM will handle all parsing)
-        formatted_log = f"**{title}** [Random Selection - {log_date}] ({ship.upper()})\n{content}"
-        
-        print(f"   ✅ Random log selected: '{title}' ({len(formatted_log)} chars)")
-        
-        # Always process log content through secondary LLM for character processing
-        print(f"🔄 Random log content ({len(formatted_log)} chars) - routing to secondary LLM for character processing")
-        processor = get_llm_processor()
-        query_description = f"random log" + (f" for {ship_name}" if ship_name else "")
-        result = processor.process_query_results("logs", formatted_log, query_description, force_processing=True)
-        return result.content
-        
-    except Exception as e:
-        print(f"✗ Error getting random log content: {e}")
-        return f"Error retrieving random log: {e}"
+    """Legacy function - routes to log search"""
+    query = f"random log {ship_name}" if ship_name else "random log"
+    return get_log_content(query, mission_logs_only=True)
 
 
 def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5) -> str:
-    """Get temporally ordered logs (newest or oldest first)"""
-    try:
-        controller = get_db_controller()
-        print(f"📅 TEMPORAL LOG SELECTION: type='{selection_type}', ship='{ship_name}', limit={limit}")
-        
-        results = controller.get_selected_logs(selection_type, ship_name, limit)
-        
-        if not results:
-            ship_msg = f" for {ship_name.upper()}" if ship_name else ""
-            print(f"   ❌ No {selection_type} logs found{ship_msg}")
-            return f"No {selection_type} mission logs found{ship_msg} in the database."
-        
-        log_contents = []
-        
-        for result in results:
-            # Filter out episode summaries
-            if is_episode_summary(result):
-                categories = result.get('categories', [])
-                episode_cat = next((cat for cat in categories if 'episode summary' in cat.lower()), 'Episode Summary')
-                print(f"   ❌ Filtering out episode summary from temporal logs: '{result['title']}' Category='{episode_cat}'")
-                continue
-            
-            title = result['title']
-            content = result['raw_content']
-            log_date = result.get('log_date', 'Unknown Date')
-            ship = result.get('ship_name', 'Unknown Ship')
-            
-            # Format with temporal indicator (LLM will handle all parsing)
-            temporal_label = {
-                'latest': 'Latest',
-                'recent': 'Recent', 
-                'first': 'First',
-                'earliest': 'Earliest',
-                'oldest': 'Oldest',
-                'today': 'Today',
-                'yesterday': 'Yesterday',
-                'this_week': 'This Week',
-                'last_week': 'Last Week'
-            }.get(selection_type, selection_type.title())
-            
-            formatted_log = f"**{title}** [{temporal_label} - {log_date}] ({ship.upper()})\n{content}"
-            log_contents.append(formatted_log)
-            
-            print(f"   ✓ Added {selection_type} log: '{title}'")
-        
-        final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
-        print(f"✅ TEMPORAL LOG SELECTION COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
-        
-        # NEW: Always process log content through secondary LLM (regardless of size)
-        print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
-        processor = get_llm_processor()
-        query_description = f"{selection_type} logs" + (f" for {ship_name}" if ship_name else "")
-        result = processor.process_query_results("logs", final_content, query_description, force_processing=True)
-        return result.content
-        
-        return final_content
-        
-    except Exception as e:
-        print(f"✗ Error getting temporal log content: {e}")
-        return f"Error retrieving {selection_type} logs: {e}"
+    """Legacy function - routes to log search"""
+    query = f"{selection_type} logs {ship_name}" if ship_name else f"{selection_type} logs"
+    return get_log_content(query, mission_logs_only=True)
 
 
 
-
-def search_database_content(search_type: str, search_term: str = None, 
-                           categories: List[str] = None, limit: int = 10, 
-                           log_type: str = None, **kwargs) -> List[Dict]:
-    """
-    Universal database search interface that delegates to appropriate search methods.
-    
-    This function provides a unified interface for searching different types of content
-    in the database, used by context_coordinator.py for quick and comprehensive searches.
-    
-    Args:
-        search_type: Type of search ('character', 'ship', 'logs', 'general')
-        search_term: Term to search for
-        categories: List of categories to filter by
-        limit: Maximum number of results to return
-        log_type: Specific log type for log searches
-        **kwargs: Additional parameters passed to underlying search methods
-        
-    Returns:
-        List of search result dictionaries with keys: id, title, raw_content, 
-        ship_name, log_date, url, categories
-    """
-    try:
-        controller = get_db_controller()
-        
-        print(f"   🔍 UNIVERSAL SEARCH: type={search_type}, term='{search_term}', categories={categories}, limit={limit}")
-        
-        if search_type == 'character':
-            # Character search - use search_characters or search_by_categories
-            if categories:
-                return controller.search_by_categories(search_term or '', categories, limit)
-            else:
-                return controller.search_characters(search_term or '', limit)
-                
-        elif search_type == 'ship':
-            # Ship search - use search_ships or search_by_categories  
-            if categories:
-                return controller.search_by_categories(search_term or '', categories, limit)
-            else:
-                return controller.search_ships(search_term or '', limit)
-                
-        elif search_type == 'logs':
-            # Log search - use search_logs
-            ship_name = kwargs.get('ship_name')
-            return controller.search_logs(search_term or '', ship_name, limit)
-            
-        else:
-            # General search - use search_pages
-            ship_name = kwargs.get('ship_name')
-            return controller.search_pages(
-                search_term or '', 
-                page_type=search_type if search_type != 'general' else None,
-                ship_name=ship_name,
-                limit=limit,
-                categories=categories
-            )
-            
-    except Exception as e:
-        print(f"   ❌ ERROR in search_database_content: {e}")
-        return []
 
 
 def search_titles_containing(search_term: str, limit: int = 10) -> List[Dict]:
     """
-    Search for titles containing the given term.
-    
-    This function is used by context_coordinator.py for title-based searches.
+    Search for pages with titles containing the search term.
     
     Args:
         search_term: Term to search for in titles
-        limit: Maximum number of results to return
+        limit: Maximum number of results
         
     Returns:
-        List of search result dictionaries
+        List of matching page dictionaries
     """
     try:
         controller = get_db_controller()
-        
-        print(f"   📖 TITLE SEARCH: '{search_term}', limit={limit}")
-        
-        # Use the general search_pages method which searches titles by default
-        results = controller.search_pages(search_term, limit=limit)
-        
-        print(f"   📖 TITLE SEARCH RESULTS: {len(results)} found")
-        return results
-        
+        return controller.search_pages(search_term, limit=limit)
     except Exception as e:
-        print(f"   ❌ ERROR in search_titles_containing: {e}")
+        print(f"❌ Error in search_titles_containing: {e}")
         return [] 

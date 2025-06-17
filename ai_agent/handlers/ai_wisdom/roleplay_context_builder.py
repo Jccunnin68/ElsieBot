@@ -4,6 +4,8 @@ Roleplay Context Builder - Enhanced Roleplay Context Generation
 
 This module handles context generation for roleplay scenarios with enhanced
 emotional intelligence integration and character relationship awareness.
+
+SIMPLIFIED: Now routes all database queries through the unified search system.
 """
 
 from typing import Dict, Any, List
@@ -24,17 +26,10 @@ class RoleplayContextBuilder:
             return get_roleplay_context(strategy, user_message)
 
 from .content_retriever import (
-    get_relevant_wiki_context, 
     get_tell_me_about_content_prioritized
 )
 
 
-
-def _process_large_content_if_needed_roleplay(content: str, query_type: str, user_query: str, is_roleplay: bool = True) -> str:
-    """Process content through secondary LLM if it exceeds 14,000 characters (roleplay version)"""
-    # Use the standard function with roleplay=True
-    from .standard_context_builder import _process_large_content_if_needed
-    return _process_large_content_if_needed(content, query_type, user_query, is_roleplay)
 
 
 def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
@@ -712,7 +707,7 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
 
 
 def _get_roleplay_database_context(user_message: str) -> str:
-    """Get database context for roleplay scenarios using Phase 1 category-based searches"""
+    """Get database context for roleplay scenarios using unified search"""
     print(f"🎭 ROLEPLAY DATABASE CONTEXT: '{user_message}'")
     
     # Check if this is a character query
@@ -722,51 +717,11 @@ def _get_roleplay_database_context(user_message: str) -> str:
     tell_me_about_subject = extract_tell_me_about_subject(user_message)
     
     if is_char_query and character_name:
-        print(f"   🧑 CATEGORY-BASED CHARACTER QUERY: '{character_name}'")
+        print(f"   🧑 UNIFIED CHARACTER QUERY: '{character_name}'")
         
-        # Use Phase 1 character search method for roleplay
-        try:
-            from .content_retriever import get_db_controller
-            controller = get_db_controller()
-            
-            # Use new Phase 1 search_characters method
-            results = controller.search_characters(character_name, limit=5)
-            print(f"   📊 Category-based roleplay character search: {len(results)} results")
-            
-            if results:
-                character_parts = []
-                for result in results:
-                    title = result['title']
-                    content = result['raw_content']
-                    categories = result.get('categories', [])
-                    
-                    # Add category indicator for roleplay context
-                    category_indicator = ""
-                    if categories and 'Characters' in categories:
-                        category_indicator = " [Personnel File]"
-                    elif categories:
-                        category_indicator = f" [{categories[0]}]"
-                    
-                    page_text = f"**{title}{category_indicator}**\n{content}"
-                    character_parts.append(page_text)
-                
-                character_info = '\n\n---\n\n'.join(character_parts)
-                print(f"   ✅ Category-based character info: {len(character_info)} characters")
-            else:
-                print(f"   ❌ No category-based character results found")
-                character_info = ""
-        
-        except Exception as e:
-            print(f"   ❌ Error in category-based character search: {e}")
-            character_info = ""
-        
-        if not character_info:
-            # Fallback to prioritized search
-            print(f"   🔄 Falling back to prioritized character search")
-            character_info = get_tell_me_about_content_prioritized(character_name)
-        
-        # Process through secondary LLM if content is too large
-        # Content already processed by content retriever functions if needed
+        # Use unified search system
+        character_info = get_tell_me_about_content_prioritized(character_name)
+        print(f"   ✅ Unified character info: {len(character_info)} characters")
         
         # Check if this is a fallback response
         if is_fallback_response(character_info):
@@ -793,11 +748,8 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what s
     
     elif tell_me_about_subject:
         print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
-        # Use prioritized search for general subjects
+        # Use unified search for general subjects
         subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject)
-        
-        # Process through secondary LLM if content is too large
-        # Content already processed by content retriever functions if needed
         
         # Check if this is a fallback response
         if is_fallback_response(subject_info):
@@ -824,11 +776,8 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her kn
     
     else:
         print(f"   📋 GENERAL ROLEPLAY CONTEXT")
-        # Use general wiki context for other queries
-        general_info = get_relevant_wiki_context(user_message)
-        
-        # Process through secondary LLM if content is too large
-        # Content already processed by content retriever functions if needed
+        # Use unified search for other queries
+        general_info = get_tell_me_about_content_prioritized(user_message)
         
         # Check if this is a fallback response
         if is_fallback_response(general_info):

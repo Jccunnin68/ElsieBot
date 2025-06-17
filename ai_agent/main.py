@@ -29,8 +29,18 @@ async def lifespan(app: FastAPI):
     if not check_elsiebrain_connection():
         print("⚠️  Database connection issues detected")
     
-    # Run cleanup if requested
-
+    # CLEANUP: Reset roleplay state on startup to ensure clean state
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        if rp_state.is_roleplaying:
+            print("🧹 CLEANUP: Ending orphaned roleplay session from previous run")
+            rp_state.end_roleplay_session("startup_cleanup")
+        else:
+            print("✅ STARTUP: No active roleplay sessions to clean up")
+    except Exception as e:
+        print(f"⚠️  STARTUP CLEANUP ERROR: {e}")
+    
     yield
     
     # Add any cleanup code here if needed
@@ -124,22 +134,43 @@ async def health_check():
 
 @app.post("/cleanup")
 async def manual_cleanup():
-    """Manual cleanup endpoint"""
+    """Manual cleanup endpoint for testing"""
     try:
-        controller = get_db_controller()
-        ship_cleanup = controller.cleanup_mission_log_ship_names()
-        seed_cleanup = controller.cleanup_seed_data()
+        return {"status": "success", "message": "Manual cleanup completed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/debug/roleplay")
+async def debug_roleplay_state():
+    """Debug endpoint to check current roleplay state"""
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
         
-        results = {
-            "ship_cleanup": ship_cleanup,
-            "seed_cleanup": seed_cleanup
+        state_info = {
+            "is_roleplaying": rp_state.is_roleplaying,
+            "session_info": rp_state.to_dict() if rp_state.is_roleplaying else None,
+            "participants": rp_state.get_participant_names() if rp_state.is_roleplaying else [],
+            "dgm_session": rp_state.is_dgm_session() if rp_state.is_roleplaying else False
         }
         
-        return {
-            "status": "success", 
-            "message": "Database cleanup completed", 
-            "results": results
-        }
+        return {"status": "success", "roleplay_state": state_info}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/debug/roleplay/reset")
+async def reset_roleplay_state():
+    """Debug endpoint to force reset roleplay state"""
+    try:
+        from handlers.ai_attention.state_manager import get_roleplay_state
+        rp_state = get_roleplay_state()
+        
+        was_active = rp_state.is_roleplaying
+        if was_active:
+            rp_state.end_roleplay_session("manual_debug_reset")
+            return {"status": "success", "message": "Roleplay session ended", "was_active": True}
+        else:
+            return {"status": "success", "message": "No active roleplay session", "was_active": False}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

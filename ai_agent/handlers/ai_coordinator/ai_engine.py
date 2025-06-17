@@ -249,7 +249,7 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
 
         
         # Detect topic changes for conversation flow
-        is_topic_change = detect_topic_change(user_message, conversation_history)
+        
         
         # SIMPLIFIED CONTEXT GENERATION - Always use context builders
         print(f"🔍 GENERATING CONTEXT for {strategy['approach']} strategy...")
@@ -269,20 +269,18 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         
         # Format conversation history with topic change awareness
         # Special handling for DGM-controlled Elsie content
-        chat_history = format_conversation_history_with_dgm_elsie(conversation_history, is_topic_change)
+        chat_history = format_conversation_history_with_dgm_elsie(conversation_history)
         
         # Add topic change instruction if needed
         topic_instruction = ""
-        if is_topic_change:
-            topic_instruction = "\n\nIMPORTANT: The customer has asked a NEW QUESTION. Do not continue or elaborate on previous topics. Focus ONLY on answering this specific new question directly and concisely."
-        
+      
         # Build the full prompt
         prompt = f"{context}{topic_instruction}\n\nConversation History:\n{chat_history}\nCustomer: {user_message}\nElsie:"
         
 
         # With increased context window, use full context without chunking
         estimated_tokens = estimate_token_count(prompt)
-        print(f"🧮 Estimated token count: {estimated_tokens} (using full context - no chunking)")
+        print(f"Estimated token count: {estimated_tokens} (using full context - no chunking)")
         
         # Generate response with explicit output limit to avoid excessive verbosity
         from google.generativeai.types import GenerationConfig
