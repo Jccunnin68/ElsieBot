@@ -1,8 +1,8 @@
 """
-Structured Context Builder
-==========================
+Wisdom Engine for Prompt Orchestration
+======================================
 
-This module contains the new StructuredContextBuilder, which orchestrates
+This module contains the new WisdomEngine, which orchestrates
 the prompt generation process. It uses the PromptLibrary to construct
 the final context for the LLM based on a strategy from the
 structured_query_handler.
@@ -11,7 +11,7 @@ structured_query_handler.
 from typing import Dict, Any
 from .prompt_builder import PromptLibrary
 
-class StructuredContextBuilder:
+class WisdomEngine:
     """Orchestrates prompt generation using a strategy and the PromptLibrary."""
 
     def __init__(self):
@@ -25,7 +25,7 @@ class StructuredContextBuilder:
         PromptLibrary based on the 'approach' defined in the strategy.
         """
         approach = strategy.get('approach', 'comprehensive')
-        print(f"         🎯 STRUCTURED CONTEXT BUILDER: Processing approach '{approach}'")
+        print(f"         🎯 WISDOM ENGINE: Processing approach '{approach}'")
         
         # Extract common data from the strategy
         subject = strategy.get('subject', user_message)

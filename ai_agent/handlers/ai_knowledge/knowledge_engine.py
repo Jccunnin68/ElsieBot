@@ -1,9 +1,9 @@
 """
-LLM Query Post Processor
-========================
+Knowledge Engine - LLM Query Post-Processor
+===========================================
 
-Post-processes large query results using gemini-2.0-flash-lite to create concise,
-relevant summaries for the main AI engine. Simplified to three clear query types:
+This engine post-processes large query results using a fast LLM to create concise,
+relevant summaries for the main AI engine. It is simplified to three clear query types:
 - LOGS: Character processing + summarization (for mission logs)
 - SHIPS: Direct summarization (for ship information)
 - GENERAL: Direct summarization (for all other content)
@@ -138,10 +138,10 @@ class ProcessingMetrics:
         }
 
 
-class LLMQueryProcessor:
+class KnowledgeEngine:
     """
-    Post-processes large query results using gemini-2.0-flash-lite
-    to create concise, relevant summaries for the main AI engine.
+    Post-processes large query results using a fast LLM to create concise,
+    relevant summaries for the main AI engine.
     
     Simplified to three clear query types:
     - LOGS: Character processing + summarization (for mission logs)
@@ -163,7 +163,7 @@ class LLMQueryProcessor:
         try:
             genai.configure(api_key=GEMMA_API_KEY)
             model = genai.GenerativeModel('gemini-2.0-flash-lite')
-            print("✅ LLM Query Processor initialized with gemini-2.0-flash-lite")
+            print("✅ Knowledge Engine initialized with gemini-1.5-flash-latest")
             return model
         except Exception as e:
             print(f"⚠️  Failed to initialize Gemini client: {e}")
@@ -522,16 +522,16 @@ Provide a well-organized response that thoroughly addresses the user's query whi
 
 
 # Global instance for use across the application
-_processor_instance = None
+_knowledge_engine_instance = None
 
-def get_llm_processor() -> LLMQueryProcessor:
-    """Get the global LLM processor instance"""
-    global _processor_instance
-    if _processor_instance is None:
-        _processor_instance = LLMQueryProcessor()
-    return _processor_instance
+def get_knowledge_engine() -> KnowledgeEngine:
+    """Get the global Knowledge Engine instance"""
+    global _knowledge_engine_instance
+    if _knowledge_engine_instance is None:
+        _knowledge_engine_instance = KnowledgeEngine()
+    return _knowledge_engine_instance
 
 
 def should_process_data(data: str) -> bool:
     """Determine if data should be processed based on size and content"""
-    return len(data) > LLMQueryProcessor.PROCESSING_THRESHOLD 
+    return len(data) > KnowledgeEngine.PROCESSING_THRESHOLD 

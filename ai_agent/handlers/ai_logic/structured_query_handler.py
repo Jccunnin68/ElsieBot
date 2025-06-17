@@ -12,7 +12,7 @@ from typing import List, Dict, Any
 from ai_agent.handlers.ai_logic.response_decision import ResponseDecision
 from ai_agent.handlers.ai_logic.structured_query_detector import StructuredQueryDetector
 from ai_agent.handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
-from ai_agent.handlers.ai_wisdom.structured_context_builder import StructuredContextBuilder
+from ai_agent.handlers.ai_wisdom.wisdom_engine import WisdomEngine
 
 def handle_structured_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
     """
@@ -38,7 +38,7 @@ def handle_structured_message(user_message: str, conversation_history: List[Dict
     print(f"   - Retrieved {len(results)} results from database")
 
     # 3. Build the final context for the LLM using the appropriate builder
-    context_builder = StructuredContextBuilder()
+    context_builder = WisdomEngine()
     
     # The strategy now includes the results for the context builder
     strategy = {

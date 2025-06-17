@@ -1,143 +1,120 @@
-# Elsie System Architecture
+# Elsie Agent - Engine-Driven Architecture
 
-This document provides a detailed overview of the technical architecture of the Elsie project.
+This document outlines the refactored, engine-driven architecture for the Elsie AI agent. The new design emphasizes a modular, decoupled approach where specialized "engines" handle specific domains of logic (e.g., attention, emotion, knowledge), orchestrated by lightweight coordinators.
 
-## High-Level System Flow
-
-The following diagram illustrates the flow of a message through the entire system, from the user's input in Discord to the final response. It shows the major components and their interactions.
-
-```mermaid
-sequenceDiagram
-    participant A as Discord User
-    participant B as Discord Bot (Go)
-    participant C as AI Agent (Python)
-    participant D as Database
-    participant E as LLM API
-
-    A->>B: 1. Sends Message
-    
-    alt Simple Command (e.g., !ping)
-        B->>B: 2. Processed locally
-        B-->>A: 7. Posts immediate response
-    else Complex Query
-        B->>C: 3. Forwards request to AI Agent
-        C->>D: 4. Fetches context from DB
-        D-->>C: DB Response
-        C->>E: 5. Sends prompt to LLM
-        E-->>C: LLM Response
-        C-->>B: 6. Returns generated response
-        B-->>A: 7. Posts final response
-    end
-```
-
-## Component Breakdown
-
-### Discord Bot (Go)
-
--   **Location**: `discord_bot/`
--   **Technology**: Go, `discordgo` library.
--   **Responsibilities**:
-    -   Connects to the Discord Gateway and maintains a persistent WebSocket connection.
-    -   Listens for and handles Discord events, primarily `messageCreate`.
-    -   Handles simple, hard-coded commands like `!elsie ping` for quick, local responses.
-    -   Packages complex messages and context (user info, channel info) into a JSON payload.
-    -   Forwards the payload to the AI Agent via an HTTP POST request.
-    -   Receives the generated response from the AI agent and posts it back to Discord, handling message splitting for long responses.
--   **Key Principle**: This component is designed to be a lightweight and robust Discord client. All complex logic is delegated to the AI Agent to keep this part simple and focused.
-
-### AI Agent (Python/FastAPI)
-
-This is the core "brain" of the system, where all intelligence resides. See the detailed architecture breakdown below for more information.
-
--   **Location**: `ai_agent/`
--   **Technology**: Python, FastAPI, Google Gemma.
--   **Responsibilities**:
-    -   Provides an HTTP API (`/process`) to receive requests from the Go bot.
-    -   Analyzes user messages to determine intent and strategy.
-    -   Manages roleplay state, including participants, turns, and DGM commands.
-    -   Queries the database for contextual information (lore, character bios, logs).
-    -   Constructs detailed prompts and calls an external Large Language Model (LLM) for response generation.
-    -   Provides efficient, pre-generated responses for simple interactions to avoid unnecessary LLM calls.
-
-### Database (PostgreSQL)
-
--   **Name**: `elsiebrain`
--   **Responsibilities**: Acts as the long-term memory and knowledge base for the AI Agent. It stores structured data on:
-    -   Mission logs and events.
-    -   Character biographies.
-    -   Ship information.
-    -   General lore and world-building articles.
-
-### Supporting functions
-- **`db_populator/wiki_crawler.py`**: An external script used to populate the database from a wiki or other data source. This is not part of the live application but is a critical tool for maintaining the bot's knowledge. 
-
----
-
-## Detailed AI Agent Architecture
-
-This section provides a more detailed breakdown of the internal architecture of the AI Agent component.
-
-### Core Components
-
--   **`main.py`**: The main FastAPI application file. It defines the API endpoints (`/process`, `/health`), manages the application lifecycle (startup/shutdown), and handles incoming requests.
--   **`database_controller.py`**: A low-level module that handles direct communication with the PostgreSQL database. It uses `psycopg2` for connections and queries.
--   **`content_retriever.py`**: A high-level abstraction layer that provides simple, purpose-built functions (e.g., `get_character_context`) that the rest of the application can use.
--   **`__init__.py`**: Exposes the necessary functions from the `database` package to the rest of the application, simplifying imports.
--   **`handlers/`**: This directory contains the core intelligence of the AI agent:
-    -   **`ai_act` & `ai_coordinator`**: The top-level coordinators that interface with `main.py` and direct requests through the processing pipeline.
-    -   **`ai_logic`**: Contains the "inner monologue" of the bot, determining response strategy and detecting user intent.
-    -   **`ai_attention`**: Manages all aspects of roleplay state, DGM commands, and social interaction rules.
-    -   **`ai_wisdom`**: Gathers and coordinates context from the database to build rich prompts.
-    -   **`ai_emotion`**: Provides pre-generated, "canned" responses for simple interactions, allowing for a highly efficient "fast path".
-    -   **`ai_engine`**: Constructs the final prompt and performs the expensive call to the external LLM API.
-
-### AI Agent Data & Processing Flow
+## Architecture Diagram
 
 ```mermaid
 graph TD
-    subgraph "Interface & Core"
-        A[FastAPI Request] --> B(main.py);
-        B --> C(handlers/ai_act.py);
+    subgraph User Input
+        UI(FastAPI Endpoint: /process)
     end
 
-    subgraph "Handler Pipeline"
-        C --> D{ai_coordinator};
-        D --> E{ai_logic};
-        E --> F{ai_attention};
-        E --> G{ai_wisdom};
-        D --> H{ai_emotion};
-        D --> I{ai_engine};
+    subgraph Coordinator Layer
+        RC(Response Coordinator)
+        AIE(AI Engine - Gemma)
     end
 
-    subgraph "Database Layer"
-        G -- "get_context()" --> J(content_retriever.py);
-        J -- "query()" --> K(database_controller.py);
-        K -- "SQL" --> L[(elsiebrain DB)];
-    end
-    
-    subgraph "AI Generation"
-       I -- "Generates Prompt" --> M((LLM API));
+    subgraph Routing Layer
+        Router(Response Router)
     end
 
-    subgraph "Control Flow"
-        C -- "Process Message" --> D;
-        D -- "Strategy" --> E;
-        E -- "Is Roleplay?" --> F;
-        D -- "Simple Query?" --> H;
-        D -- "Complex Query?" --> G;
-        G -- "Context for Prompt" --> I;
-        H -- "Canned Response" --> C;
-        I -- "Generated Response" --> C;
+    subgraph Handlers
+        subgraph Roleplay Handling
+            RPH(Roleplay Handler)
+            AE(Attention Engine)
+            EE(Emotion Engine)
+            RCB(Roleplay Context Builder)
+        end
+        subgraph Structured Handling
+            SH(Structured Handler)
+            SQD(Structured Query Detector)
+            SCR(Structured Content Retriever)
+            LE(Logic Engine)
+            KE(Knowledge Engine)
+            WE(Wisdom Engine)
+            PL(Prompt Library)
+        end
     end
+
+    subgraph Data Layer
+        DB(Database)
+    end
+
+    UI --> RC
+    RC --> Router
+
+    Router -- Roleplay Active --> RPH
+    Router -- Standard Query --> SH
+
+    RPH --> AE
+    AE --> EE
+    AE --> RCB
+    RCB --> AIE
+
+    SH --> SQD
+    SQD --> SCR
+    SCR --> DB
+    SCR --> LE
+    LE --> KE
+    SCR --> WE
+    WE --> PL
+    WE --> AIE
+
+    AIE --> RC
+
+    style AIE fill:#f9f,stroke:#333,stroke-width:2px
+    style AE fill:#bbf,stroke:#333,stroke-width:2px
+    style EE fill:#bbf,stroke:#333,stroke-width:2px
+    style LE fill:#bbf,stroke:#333,stroke-width:2px
+    style KE fill:#bbf,stroke:#333,stroke-width:2px
+    style WE fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
-### How the AI Agent Works
+## Core Principles
 
-1.  A `POST` request with the message context arrives at **`main.py`**.
-2.  The request is passed to **`ai_act.py`** and then to the **`ai_coordinator`**.
-3.  The **`ai_logic`** layer determines a `strategy` for the response, using the **`ai_attention`** layer to understand the social context.
-4.  A crucial decision is made:
-    -   **Fast Path (No AI)**: For simple strategies, a pre-generated response is retrieved from the **`ai_emotion`** package and returned immediately.
-    -   **Slow Path (AI Needed)**: For complex queries, the **`ai_wisdom`** layer is engaged to fetch context from the database.
-5.  The retrieved context is passed to the **`ai_engine`**, which builds a prompt and sends it to the external LLM.
-6.  The final response is passed back up the chain and sent out via the API.
+1.  **Separation of Concerns**: Each package and module has a clearly defined responsibility.
+2.  **Engine-Based Logic**: Complex, heuristic-based logic is replaced by dedicated, LLM-powered engines.
+3.  **Lightweight Orchestration**: Handlers and coordinators are responsible for routing data between engines, not for implementing complex business logic themselves.
+4.  **Centralized Data Access**: All database interactions are routed through the `ai_knowledge` package.
+5.  **Decoupled Prompting**: Prompt construction is separated from data retrieval and logic, managed by the `ai_wisdom` package.
+
+## Data Flow
+
+### 1. Request Ingestion
+
+-   A user message is received by the `main.py` FastAPI application at the `/process` endpoint.
+-   The message, conversation history, and channel context are passed to the `Response Coordinator`.
+
+### 2. Routing
+
+-   The `Response Coordinator` passes the request to the `Response Router` (`ai_logic.response_router`).
+-   The router checks the `RoleplayStateManager` to determine if a roleplay session is active.
+    -   If **yes**, the request is sent to the `Roleplay Handler`.
+    -   If **no**, the request is sent to the `Structured Query Handler`.
+
+### 3. Roleplay Handling Flow
+
+-   **`Roleplay Handler`**: A lightweight orchestrator.
+-   **`Attention Engine`**: The "Roleplay Director." This powerful LLM-based engine analyzes the user message, conversation history, and emotional context (provided by the `Emotion Engine`) to determine the optimal response *strategy*. It decides *if* Elsie should respond and *how* (e.g., active dialogue, subtle action, emotional support).
+-   **`Roleplay Context Builder`**: Receives the strategy from the `AttentionEngine`. It builds the final, comprehensive prompt for the LLM, incorporating character knowledge, scene details, and the specific strategic guidance.
+-   **`AI Engine`**: Receives the final prompt and generates the AI response using the configured Gemma model. The response is then returned to the coordinator.
+
+### 4. Structured Query Flow
+
+-   **`Structured Query Handler`**: The orchestrator for all non-roleplay messages.
+-   **`Structured Query Detector`**: Uses regex and pattern matching to classify the user's query (e.g., `explicit_search`, `logs_search`, `general_knowledge`).
+-   **`Structured Content Retriever`**: Fetches data from the database based on the query type.
+    -   For `general` queries, it consults the `Logic Engine`.
+-   **`Logic Engine`**: A utility LLM that performs reasoning tasks, such as determining the correct database category for a general user query. It can consult the `Knowledge Engine` for post-processing large query results if needed.
+-   **`Wisdom Engine`**: Receives the retrieved data and the query strategy. It uses the `Prompt Library` to construct a precise, task-specific prompt for the main LLM.
+-   **`AI Engine`**: Receives the final prompt from the `Wisdom Engine` and generates the definitive answer for the user.
+
+## Key Modules & Engines
+
+-   **`ai_coordinator`**: Top-level orchestration. Home of the `AIEngine` which makes the final LLM call.
+-   **`ai_logic`**: Handles routing and logical decisions. Home of the `LogicEngine` and `StructuredQueryDetector`.
+-   **`ai_attention`**: Manages conversational state (`RoleplayStateManager`) and high-level roleplay strategy (`AttentionEngine`).
+-   **`ai_emotion`**: Provides emotional analysis (`EmotionEngine`) and generates mock/canned responses.
+-   **`ai_wisdom`**: Responsible for building context and prompts. Home of the `WisdomEngine`, `RoleplayContextBuilder`, and `PromptLibrary`.
+-   **`ai_knowledge`**: Manages all data persistence. Home of the `DatabaseController` and the `KnowledgeEngine` (for LLM-based data processing). 

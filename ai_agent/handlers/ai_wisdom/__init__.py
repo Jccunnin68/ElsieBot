@@ -17,10 +17,10 @@ Components:
 
 from .context_coordinator import get_context_for_strategy
 from .structured_content_retriever import StructuredContentRetriever
-from .llm_query_processor import get_llm_processor, should_process_data
+from ..ai_knowledge.knowledge_engine import get_knowledge_engine, should_process_data
 from .roleplay_context_builder import RoleplayContextBuilder
 from .prompt_builder import PromptLibrary
-from .structured_context_builder import StructuredContextBuilder
+from .wisdom_engine import WisdomEngine
 
 __all__ = [
     # Main entry point for context generation
@@ -29,12 +29,12 @@ __all__ = [
     # Agentic content retrieval
     'StructuredContentRetriever',
 
-    # Context Builders
+    # Context Builders / Engines
     'RoleplayContextBuilder',
     'PromptLibrary',
-    'StructuredContextBuilder',
+    'WisdomEngine',
 
     # LLM Processing
-    'get_llm_processor',
+    'get_knowledge_engine',
     'should_process_data',
 ] 

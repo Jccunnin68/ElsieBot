@@ -1,5 +1,5 @@
 """
-LLM Interface for Query Disambiguation
+Logic Engine for Query Disambiguation
 ======================================
 
 This module provides a dedicated interface for using a local LLM to perform
@@ -14,13 +14,13 @@ import os
 # Note: In a real implementation, this would use the Google Generative AI SDK
 # from google.generativeai as genai
 
-class LLMInterface:
+class LogicEngine:
     """
-    An interface to a local LLM for performing specific reasoning tasks.
+    An engine that uses an LLM for performing specific reasoning tasks.
     """
     def __init__(self, model_name="gemini-1.5-flash-latest"):
         """
-        Initializes the LLM interface.
+        Initializes the Logic Engine.
 
         Args:
             model_name: The name of the Gemini model to use.
@@ -30,7 +30,7 @@ class LLMInterface:
         # genai.configure(api_key=self.api_key)
         # self.model = genai.GenerativeModel(model_name)
         self.model_name = model_name
-        print(f"✓ LLM Interface initialized for model: {self.model_name}")
+        print(f"✓ Logic Engine initialized for model: {self.model_name}")
 
     def determine_query_category(self, query: str, available_categories: List[str]) -> str:
         """
@@ -93,14 +93,14 @@ You are an intelligent data routing agent. Your task is to analyze a user's quer
 """
         return prompt.strip()
 
-# Singleton instance of the LLMInterface
-_llm_interface = None
+# Singleton instance of the LogicEngine
+_logic_engine = None
 
-def get_llm_interface():
+def get_logic_engine():
     """
-    Provides a global singleton instance of the LLMInterface.
+    Provides a global singleton instance of the LogicEngine.
     """
-    global _llm_interface
-    if _llm_interface is None:
-        _llm_interface = LLMInterface()
-    return _llm_interface 
+    global _logic_engine
+    if _logic_engine is None:
+        _logic_engine = LogicEngine()
+    return _logic_engine 

@@ -18,19 +18,30 @@ from .structured_content_retriever import StructuredContentRetriever
 class RoleplayContextBuilder:
     """Context builder for roleplay scenarios."""
     
-    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
+    def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str, conversation_history: List[Dict]) -> str:
         """Build context for roleplay strategies."""
         approach = strategy.get('approach', 'roleplay')
         
         if approach == 'roleplay_mock_enhanced':
-            return get_enhanced_roleplay_context(strategy, user_message)
+            return get_enhanced_roleplay_context(strategy, user_message, conversation_history)
         else:
-            return get_roleplay_context(strategy, user_message)
+            return get_roleplay_context(strategy, user_message, conversation_history)
 
 
+def _format_history_for_prompt(conversation_history: List[Dict]) -> str:
+    """Helper to format a list of conversation history dicts into a string."""
+    if not conversation_history:
+        return ""
+    history_str = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in conversation_history])
+    return f"""
+
+**CONVERSATION MEMORY:**
+{history_str}
+
+This shows the recent flow of conversation. Use this context to maintain continuity, avoid repetition, and respond appropriately to the conversational dynamics."""
 
 
-def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
+def get_roleplay_context(strategy: Dict[str, Any], user_message: str, conversation_history: List[Dict]) -> str:
     """
     Generate context for active roleplay mode.
     
@@ -40,6 +51,7 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     Args:
         strategy: Strategy dictionary containing approach and context info
         user_message: The user's message to analyze
+        conversation_history: List of conversation history dicts
         
     Returns:
         str: Formatted context string for roleplay scenarios
@@ -104,15 +116,7 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
         database_context = _get_structured_roleplay_database_context(user_message)
         print(f"   📚 Database context length: {len(database_context)} chars")
     
-    # NEW: Get conversation memory context
-    conversation_context = ""
-    if conversation_analysis:
-        # Import here to avoid circular dependency
-        from handlers.ai_attention.state_manager import get_roleplay_state 
-        rp_state = get_roleplay_state()
-        if rp_state.has_conversation_memory():
-            conversation_context = rp_state.get_conversation_context_for_prompt()
-            print(f"   💭 CONVERSATION MEMORY: {len(conversation_context)} chars")
+    conversation_context = _format_history_for_prompt(conversation_history)
     
     # Adjust response style based on why Elsie is responding
     response_style_note = ""
@@ -317,7 +321,7 @@ Detected triggers: {', '.join(triggers)}
 Respond naturally to their roleplay action, staying in character as the intelligent, sophisticated Elsie. Keep it brief and conversational.{" In DGM mode, maintain natural conversation flow when you're involved but avoid initiating new interactions." if is_dgm_session else ""}{database_section}{conversation_section}"""
 
 
-def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
+def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str, conversation_history: List[Dict]) -> str:
     """
     PRIMARY: Enhanced roleplay context generation using contextual intelligence.
     
@@ -336,7 +340,7 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
     # Fallback to original if enhanced data not available
     if not response_decision or not contextual_cues:
         print(f"   ⚠️  Enhanced context data not available, falling back to standard context")
-        return get_roleplay_context(strategy, user_message)
+        return get_roleplay_context(strategy, user_message, conversation_history)
     
     print(f"🎭 GENERATING ENHANCED ROLEPLAY CONTEXT:")
     print(f"   🎯 Response Type: {response_decision.response_type.value}")
@@ -348,8 +352,11 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
     character_context = _build_character_relationship_context(contextual_cues)
     
     # Build conversation flow context
-    conversation_context = _build_conversation_flow_context(contextual_cues, response_decision)
+    conversation_flow_context = _build_conversation_flow_context(contextual_cues, response_decision)
     
+    # NEW: Get formatted history from the passed list
+    conversation_history_context = _format_history_for_prompt(conversation_history)
+
     # Build response guidance
     response_guidance = _build_response_guidance(response_decision, contextual_cues)
     
@@ -376,7 +383,8 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
 
 {character_context}
 
-{conversation_context}
+{conversation_flow_context}
+{conversation_history_context}
 
 {personality_context}
 

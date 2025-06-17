@@ -12,7 +12,7 @@ from .response_router import route_message_to_handler
 from .roleplay_handler import handle_roleplay_message
 from .structured_query_handler import handle_structured_message
 from .structured_query_detector import StructuredQueryDetector
-from .llm_interface import get_llm_interface
+from .logic_engine import get_logic_engine
 
 __all__ = [
     # Core data structures
@@ -27,5 +27,5 @@ __all__ = [
 
     # Agentic components
     'StructuredQueryDetector',
-    'get_llm_interface',
+    'get_logic_engine',
 ] 

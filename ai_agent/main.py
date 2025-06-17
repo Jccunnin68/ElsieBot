@@ -5,9 +5,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from handlers.ai_coordinator import coordinate_response
-from handlers.ai_wisdom.content_retriever import check_elsiebrain_connection
-from database_controller import get_db_controller
+from handlers.ai_coordinator.response_coordinator import coordinate_response
+from handlers.ai_knowledge.database_controller import get_db_controller
 import traceback
 
 # Check if cleanup flag is set
@@ -25,9 +24,13 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     print("🚀 Starting Elsie AI Agent...")
     
-    # Check database connection
-    if not check_elsiebrain_connection():
-        print("⚠️  Database connection issues detected")
+    # Check database connection by performing a lightweight query
+    try:
+        db = get_db_controller()
+        db.get_all_categories()
+        print("✅ Database connection successful.")
+    except Exception as e:
+        print(f"⚠️  Database connection issues detected: {e}")
     
     # CLEANUP: Reset roleplay state on startup to ensure clean state
     try:
@@ -40,6 +43,11 @@ async def lifespan(app: FastAPI):
             print("✅ STARTUP: No active roleplay sessions to clean up")
     except Exception as e:
         print(f"⚠️  STARTUP CLEANUP ERROR: {e}")
+        print(f"   Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unhandled error: {str(e)}"
+        )
     
     yield
     
@@ -130,7 +138,12 @@ async def process_message(message: ChatMessage):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "elsie-ai-agent"}
+    db_status = "healthy"
+    try:
+        get_db_controller().get_all_categories()
+    except Exception:
+        db_status = "unhealthy"
+    return {"status": "healthy", "service": "elsie-ai-agent", "database": db_status}
 
 @app.post("/cleanup")
 async def manual_cleanup():

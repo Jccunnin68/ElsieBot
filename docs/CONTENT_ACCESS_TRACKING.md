@@ -90,7 +90,7 @@ python run_schema_update.py
 
 ### Programmatic Access
 ```python
-from database_controller import get_db_controller
+from ai_agent.handlers.ai_knowledge.database_controller import get_db_controller
 
 controller = get_db_controller()
 

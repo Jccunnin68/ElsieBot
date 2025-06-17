@@ -9,8 +9,8 @@ LLMInterface when necessary for general queries.
 """
 
 from typing import Dict, Any, List
-from database_controller import get_db_controller
-from ai_agent.handlers.ai_logic.llm_interface import get_llm_interface
+from ai_agent.handlers.ai_knowledge.database_controller import get_db_controller
+from ai_agent.handlers.ai_logic.logic_engine import get_logic_engine
 
 class StructuredContentRetriever:
     """
@@ -18,7 +18,7 @@ class StructuredContentRetriever:
     """
     def __init__(self):
         self.db_controller = get_db_controller()
-        self.llm_interface = get_llm_interface()
+        self.logic_engine = get_logic_engine()
 
     def get_content(self, structured_query: Dict[str, Any]) -> List[Dict]:
         """
@@ -111,7 +111,7 @@ class StructuredContentRetriever:
             return self.db_controller.search(query=user_query, limit=5)
             
         # Use the LLM to determine the best category
-        chosen_category = self.llm_interface.determine_query_category(user_query, all_categories)
+        chosen_category = self.logic_engine.determine_query_category(user_query, all_categories)
         
         print(f"   🔍 General query routed to category '{chosen_category}' by LLM.")
         
