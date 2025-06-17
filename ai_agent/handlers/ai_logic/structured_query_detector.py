@@ -27,23 +27,41 @@ class StructuredQueryDetector:
         """
         # The order of these checks is important, from most specific to most general.
         
-        # 1. Explicit search: "search for 'term' in 'category'"
+        # 1. "Tell me about <term>"
+        tell_me_about = self._detect_tell_me_about(user_message)
+        if tell_me_about:
+            return tell_me_about
+            
+        # 2. Explicit search: "search for 'term' in 'category'"
         explicit_search = self._detect_explicit_search(user_message)
         if explicit_search:
             return explicit_search
 
-        # 2. Log search: "logs for <ship/character> [latest|first|recent]"
+        # 3. Log search: "logs for <ship/character> [latest|first|recent]"
         log_search = self._detect_log_search(user_message)
         if log_search:
             return log_search
 
-        # 3. Typed search: "ship <name>", "character <name>", etc.
+        # 4. Typed search: "ship <name>", "character <name>", etc.
         typed_search = self._detect_typed_search(user_message)
         if typed_search:
             return typed_search
 
         # If no specific pattern is found, it's a general query for the LLM.
         return {'type': 'general', 'query': user_message}
+
+    def _detect_tell_me_about(self, user_message: str) -> Optional[Dict[str, str]]:
+        """
+        Detects the pattern: "tell me about <term>"
+        """
+        pattern = re.compile(r'tell me about\s+(?:the\s+)?([A-Za-z0-9\s\'-]+)', re.IGNORECASE)
+        match = pattern.search(user_message)
+        if match:
+            term = match.group(1).strip()
+            # This is a general query, but we've identified the core subject.
+            # The LogicEngine will determine the category.
+            return {'type': 'general', 'query': user_message, 'subject': term}
+        return None
 
     def _detect_explicit_search(self, user_message: str) -> Optional[Dict[str, str]]:
         """

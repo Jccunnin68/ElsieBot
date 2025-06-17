@@ -13,6 +13,7 @@ from handlers.ai_logic.response_decision import ResponseDecision
 from handlers.ai_logic.structured_query_detector import StructuredQueryDetector
 from handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
 from handlers.ai_wisdom.wisdom_engine import WisdomEngine
+from handlers.ai_logic.logic_engine import LogicEngine
 
 def handle_structured_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
     """
@@ -32,8 +33,22 @@ def handle_structured_message(user_message: str, conversation_history: List[Dict
     structured_query = detector.detect_query(user_message)
     print(f"   - Detected query structure: {structured_query}")
 
-    # 2. Retrieve content based on the detected structure
+    # Instantiate retriever early to use its db_controller
     retriever = StructuredContentRetriever()
+
+    # If the query is general, use the LogicEngine to determine the category
+    if structured_query.get('type') == 'general':
+        print("   - General query detected, invoking LogicEngine to determine category...")
+        logic_engine = LogicEngine()
+        
+        # Get all available categories from the database to help the LLM choose.
+        all_categories = retriever.db_controller.get_all_categories()
+        
+        category = logic_engine.determine_query_category(user_message, all_categories)
+        structured_query['category'] = category
+        print(f"   - LogicEngine determined category: {category}")
+
+    # 2. Retrieve content based on the detected structure
     results = retriever.get_content(structured_query)
     print(f"   - Retrieved {len(results)} results from database")
 
@@ -43,9 +58,10 @@ def handle_structured_message(user_message: str, conversation_history: List[Dict
     # The strategy now includes the results for the context builder
     strategy = {
         'approach': structured_query.get('type', 'comprehensive'),
-        'subject': structured_query.get('term') or structured_query.get('target'),
+        'subject': structured_query.get('term') or structured_query.get('subject'),
         'results': results,
-        'temporal_type': structured_query.get('log_type')
+        'temporal_type': structured_query.get('log_type'),
+        'category': structured_query.get('category')
     }
     
     final_context = context_builder.build_context_for_strategy(strategy, user_message)

@@ -33,18 +33,45 @@ class StructuredContentRetriever:
         query_type = structured_query.get('type')
         print(f"   📚 Structured Content Retriever: Handling type '{query_type}'")
 
-        match query_type:
-            case 'explicit':
-                return self._handle_explicit_search(structured_query)
-            case 'logs':
-                return self._handle_log_search(structured_query)
-            case 'ship' | 'character' | 'species' | 'planet':
-                return self._handle_typed_search(structured_query)
-            case 'general':
-                return self._handle_general_query(structured_query)
-            case _:
-                print(f"   ⚠️  Unknown query type in content retriever: {query_type}")
-                return []
+        # Use the category if it was pre-determined by the LogicEngine
+        if 'category' in structured_query:
+            category = structured_query['category']
+            subject = structured_query.get('subject', structured_query.get('query'))
+            print(f"   - Using pre-determined category: '{category}' for subject: '{subject}'")
+
+            search_categories = None
+            limit = 5  # Default limit
+            category_lower = category.lower()
+
+            if 'ship' in category_lower:
+                print(f"   - Wildcarding category '{category}' as a ship...")
+                search_categories = self.db_controller.get_ship_categories()
+                limit = 1
+            elif 'character' in category_lower or 'npc' in category_lower:
+                print(f"   - Wildcarding category '{category}' as a character...")
+                search_categories = self.db_controller.get_character_categories()
+            elif 'log' in category_lower:
+                print(f"   - Wildcarding category '{category}' as a log...")
+                search_categories = self.db_controller.get_log_categories()
+            elif category_lower != 'general':
+                # If no keyword matches, search in the specific category returned
+                search_categories = [category]
+            
+            # Note: If category is 'general', search_categories remains None, and the DB controller will search all categories.
+
+            return self.db_controller.search(query=subject, categories=search_categories, limit=limit)
+
+        if query_type == 'explicit':
+            return self._handle_explicit_search(structured_query)
+        elif query_type == 'logs':
+            return self._handle_log_search(structured_query)
+        elif query_type in ['ship', 'character', 'species', 'planet']:
+            return self._handle_typed_search(structured_query)
+        elif query_type == 'general':
+            return self._handle_general_query(structured_query)
+        else:
+            print(f"   ⚠️  Unknown query type in content retriever: {query_type}")
+            return []
 
     def _handle_explicit_search(self, query: Dict[str, str]) -> List[Dict]:
         """Handles: search for "term" in "category" """
@@ -101,21 +128,22 @@ class StructuredContentRetriever:
 
     def _handle_general_query(self, query: Dict[str, Any]) -> List[Dict]:
         """
-        Handles a general query by using the LLM to find the best category.
+        Handles a general query when the category has not been pre-determined.
+        This is a fallback that uses the LLM to find the best category.
         """
         user_query = query.get('query')
-        all_categories = self.db_controller.get_all_categories()
-
-        if not all_categories:
-            print("   ⚠️ No categories found in database. Performing standard search.")
-            return self.db_controller.search(query=user_query, limit=5)
-            
+        print(f"   - Fallback: Using LogicEngine to find category for: '{user_query}'")
+        
         # Use the LLM to determine the best category
-        chosen_category = self.logic_engine.determine_query_category(user_query, all_categories)
+        chosen_category = self.logic_engine.determine_query_category(user_query)
         
         print(f"   🔍 General query routed to category '{chosen_category}' by LLM.")
         
-        # Search within that category
+        # If the LLM chooses 'General', search across all categories
+        if chosen_category.lower() == 'general':
+            return self.db_controller.search(query=user_query, categories=None, limit=5)
+        
+        # Otherwise, search within the chosen category
         return self.db_controller.search(query=user_query, categories=[chosen_category], limit=5)
 
 # Singleton instance

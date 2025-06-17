@@ -10,25 +10,22 @@ avoiding the need for complex heuristic logic.
 
 from typing import List, Dict
 import os
-
-# Note: In a real implementation, this would use the Google Generative AI SDK
-# from google.generativeai as genai
+import google.generativeai as genai
 
 class LogicEngine:
     """
     An engine that uses an LLM for performing specific reasoning tasks.
     """
-    def __init__(self, model_name="gemini-1.5-flash-latest"):
+    def __init__(self, model_name="gemini-2.0-flash-lite"):
         """
         Initializes the Logic Engine.
 
         Args:
             model_name: The name of the Gemini model to use.
         """
-        # In a real implementation, you would configure the API key here
-        # self.api_key = os.getenv("GEMINI_API_KEY")
-        # genai.configure(api_key=self.api_key)
-        # self.model = genai.GenerativeModel(model_name)
+        self.api_key = os.getenv("GEMMA_API_KEY")
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel(model_name)
         self.model_name = model_name
         print(f"✓ Logic Engine initialized for model: {self.model_name}")
 
@@ -46,51 +43,51 @@ class LogicEngine:
         prompt = self._build_category_selection_prompt(query, available_categories)
 
         print(f"   🧠 LLM aAbient: Determining category for query '{query}'")
-        # --- LLM Call (Mocked for now) ---
-        # In a real implementation, the following lines would be replaced
-        # with an actual call to the Gemini API.
-        # response = self.model.generate_content(prompt)
-        # category = response.text.strip()
         
-        # Mocked response: For now, we'll return the first category that appears in the query
-        # This is a placeholder to allow the architecture to be built.
-        query_lower = query.lower()
-        for cat in available_categories:
-            if cat.lower() in query_lower:
-                print(f"   🤖 [MOCK] LLM selected category: {cat}")
-                return cat
+        response = self.model.generate_content(prompt)
+        category = response.text.strip()
         
-        # If no direct match, return a default or the first category for testing
-        mock_category = available_categories[0] if available_categories else "General"
-        print(f"   🤖 [MOCK] LLM defaulted to category: {mock_category}")
-        return mock_category
-        # --- End Mock ---
+        print(f"   🤖 LLM Returned Category: '{category}'")
         
-        # return category
+        return category
 
     def _build_category_selection_prompt(self, query: str, available_categories: List[str]) -> str:
         """
         Constructs the prompt for the LLM to select a category.
         """
-        category_list = "\n".join(f"- {category}" for category in available_categories)
+        # Format the category list for the prompt
+        category_list_str = "\\n".join(f"- {cat}" for cat in available_categories)
 
-        prompt = f"""
-You are an intelligent data routing agent. Your task is to analyze a user's query and select the single most appropriate data category from a provided list.
+        # More explicit rules and examples
+        rules_and_examples = (
+            "**CRITICAL INSTRUCTIONS:**\\n"
+            "1.  Your only job is to select the single best category for the user's query from the list provided.\\n"
+            "2.  You MUST respond with ONLY the full name of the chosen category. Do not add any explanation or extra text.\\n"
+            "3.  If no category is a good fit, you MUST respond with 'General'.\\n\\n"
+            "**EXAMPLES:**\\n"
+            "- User Query: 'tell me about the stardancer' -> Your Response: 'Ships'\\n"
+            "- User Query: 'who is jackson riens' -> Your Response: 'Characters'\\n"
+            "- User Query: 'latest logs for the adagio' -> Your Response: 'Logs'\\n"
+            "- User Query: 'what happened on beryxia' -> Your Response: 'Planets'\\n"
+            "- User Query: 'what are beryxians' -> Your Response: 'Species'\\n"
+            "- User Query: 'what is the federation' -> Your Response: 'General'\\n"
+            "- User Query: 'who is talia' -> Your Response: 'Characters'\\n"
+        )
 
-**Instructions:**
-1.  Read the user's query carefully to understand their intent.
-2.  Review the list of available data categories.
-3.  Choose the one category that best matches the user's query.
-4.  Your response MUST BE ONLY the name of the chosen category and nothing else.
+        prompt = f'''
+You are a database routing specialist. Your task is to analyze a user's query and select the single most appropriate data category from a provided list.
 
-**User Query:**
+{rules_and_examples}
+
+---
+**USER QUERY:**
 "{query}"
 
-**Available Categories:**
-{category_list}
+**AVAILABLE CATEGORIES:**
+{category_list_str}
 
-**Your Response (Category Name Only):**
-"""
+**YOUR RESPONSE (Category Name Only):**
+'''
         return prompt.strip()
 
 # Singleton instance of the LogicEngine
@@ -103,4 +100,4 @@ def get_logic_engine():
     global _logic_engine
     if _logic_engine is None:
         _logic_engine = LogicEngine()
-    return _logic_engine 
+    return _logic_engine

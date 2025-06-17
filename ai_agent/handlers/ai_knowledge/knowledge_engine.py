@@ -163,7 +163,7 @@ class KnowledgeEngine:
         try:
             genai.configure(api_key=GEMMA_API_KEY)
             model = genai.GenerativeModel('gemini-2.0-flash-lite')
-            print("✅ Knowledge Engine initialized with gemini-1.5-flash-latest")
+            print("✅ Knowledge Engine initialized with gemini-2.0-flash-lite")
             return model
         except Exception as e:
             print(f"⚠️  Failed to initialize Gemini client: {e}")

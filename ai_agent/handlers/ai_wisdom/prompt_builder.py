@@ -15,7 +15,15 @@ class PromptLibrary:
     def build_comprehensive_prompt(self, subject: str, results: List[Dict]) -> str:
         """Builds the prompt for a comprehensive information synthesis."""
         if not results:
-            return f"I searched my database but found no information about '{subject}'."
+            return f"""
+You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
+A user has asked you for information about "{subject}", but you could not find anything in your database about it.
+Maintain your persona as a helpful, sophisticated, and slightly formal AI.
+Politely inform the user that you couldn't find any information on the subject.
+
+User: Tell me about {subject}
+Elsie:
+"""
 
         result_content = self._format_results(results)
         
@@ -64,6 +72,47 @@ DATABASE SEARCH RESULTS ({len(results)} entries found):
             result_content.append(f"**{title}**\n{content}")
         
         return '\n\n---\n\n'.join(result_content)
+
+    def build_character_with_associates_prompt(self, primary_character: Dict, associates: List[Dict]) -> str:
+        """Builds a prompt that focuses on a primary character and lists associates."""
+        
+        primary_content = self._format_character_results([primary_character], is_primary=True)
+        associates_content = self._format_character_results(associates, is_primary=False) if associates else "None"
+
+        return f"""
+CHARACTER INFORMATION SYNTHESIS:
+Create a detailed informative response about the primary character, and list any known associates.
+
+INSTRUCTIONS:
+- If no information is available about the primary character, you should inform the user that you could not find any information on the subject. With an Star Trek style tone.
+- PRIMARY FOCUS: The main body of your response should be a comprehensive summary of the **Primary Character**.
+- KNOWN ASSOCIATES: After the primary summary, create a section titled "Known Associates" and briefly list the other individuals (you do not have to indicate a lack of information past their names).
+- ACCURACY: Only use information explicitly provided in the search results.
+- CLARITY: Present information in an accessible, informative manner.
+- Dedicate 75 percent of your response to the primary character and 25 percent to the associates with similiar names taking precedence.
+- If no information is available about the primary character, you should inform the user that you could not find any information on the subject. With an Star Trek style tone.
+
+**PRIMARY CHARACTER:**
+{primary_content}
+
+**KNOWN ASSOCIATES:**
+{associates_content}
+"""
+
+    def _format_character_results(self, results: List[Dict], is_primary: bool) -> str:
+        """Helper to format character results for the prompt."""
+        result_content = []
+        for res in results:
+            title = res.get('title', 'Unknown Individual')
+            if is_primary:
+                content = res.get('raw_content', 'No detailed information available.')
+                result_content.append(f"**{title}**\n{content}")
+            else:
+                # For associates, just list their names (titles).
+                result_content.append(f"- {title}")
+        
+        separator = '\n\n---\n\n' if is_primary else '\n'
+        return separator.join(result_content)
 
 def _format_conversation_history(conversation_history: List[Dict]) -> str:
     if not conversation_history:
