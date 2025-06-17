@@ -30,7 +30,7 @@ def _summarize_prompt_context(long_prompt: str, user_message: str) -> str:
     print(f"   🔄 SUMMARIZING long prompt ({len(long_prompt)} chars)...")
     try:
         # Use a fast, capable model for summarization
-        summarizer_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        summarizer_model = genai.GenerativeModel('gemini-2.0-flash-lite')
 
         # The user's most recent message is the most important part.
         # We find it, separate it, summarize the rest of the context, and append it back.
@@ -43,14 +43,16 @@ def _summarize_prompt_context(long_prompt: str, user_message: str) -> str:
             suffix_to_preserve = "" # Nothing to append
 
         summarization_prompt = f"""
-The following is a large context block for a conversation with an AI assistant named Elsie. It is too long to be processed.
-Your task is to summarize this context. The summary must be less than {SUMMARIZATION_TARGET_CHARS} characters.
+The following is a large context block for a conversation with an Holographic Bartender assistant named Elsie. It is too long to be processed.
+Your task is to summarize this context. The summary must be less than {SUMMARIZATION_TARGET_CHARS} characters but use as much as possible.
 
 CRITICAL INSTRUCTIONS:
 1.  Preserve all essential entities like character names, ship names, locations, specific dates, and technical terms from the original context.
 2.  Retain the key points and flow of the most recent conversation history.
 3.  The goal is to create a condensed version of the original context that allows the AI to respond accurately to the user's final message.
 4.  Do NOT add any new information or dialogue. Your output should be only the summarized text.
+5.  Do not include any new information or dialogue. Your output should be only the summarized text.
+6.  It should be in Narrative Style unless already a bullet point list.
 
 CONTEXT TO SUMMARIZE:
 ---
@@ -58,7 +60,6 @@ CONTEXT TO SUMMARIZE:
 ---
 END OF CONTEXT
 
-Provide only the summarized context, ready to be passed to the main AI.
 """
         
         # Use a simple generation config for summarization
@@ -107,8 +108,8 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
             return response_cache[cache_key]
         
         generation_config = genai.types.GenerationConfig(
-            max_output_tokens=6000,
-            temperature=0.7
+            max_output_tokens=8000,
+            temperature=0.8
         )
 
         response = model.generate_content(final_prompt, generation_config=generation_config)

@@ -69,9 +69,7 @@ ALLOWED_CHANNEL_TYPES = [
     'GUILD_TEXT',  # 0 - General public channels (DGM-only roleplay)
     'GUILD_PUBLIC_THREAD',  # 7
     'GUILD_PRIVATE_THREAD',  # 8
-    'GUILD_NEWS_THREAD',  # 6
-    'GUILD_FORUM',  # 11
-    'GUILD_MEDIA'  # 12
+    
 ]
 
 RESTRICTED_CHANNEL_TYPES = [
@@ -81,6 +79,8 @@ RESTRICTED_CHANNEL_TYPES = [
     'GUILD_DIRECTORY',  # 10 - Directory channels
     'DM',  # 1 - Direct messages (DGM blocked)
     'GROUP_DM'  # 3 - Group direct messages (DGM blocked)
+    'GUILD_FORUM',  # 11
+    'GUILD_MEDIA'  # 12
 ]
 
 # Roleplay response priorities

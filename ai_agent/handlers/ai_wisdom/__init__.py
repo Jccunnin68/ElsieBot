@@ -17,7 +17,7 @@ Components:
 
 from .context_coordinator import get_context_for_strategy
 from .structured_content_retriever import StructuredContentRetriever
-from ..ai_knowledge.knowledge_engine import get_knowledge_engine, should_process_data
+from ..ai_knowledge.knowledge_engine import get_knowledge_engine
 from .roleplay_context_builder import RoleplayContextBuilder
 from .prompt_builder import PromptLibrary
 from .wisdom_engine import WisdomEngine
@@ -36,5 +36,4 @@ __all__ = [
 
     # LLM Processing
     'get_knowledge_engine',
-    'should_process_data',
 ] 

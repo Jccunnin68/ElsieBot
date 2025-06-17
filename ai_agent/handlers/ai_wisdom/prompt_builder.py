@@ -9,69 +9,74 @@ orchestration, creating a cleaner, more modular architecture.
 
 from typing import List, Dict, Any
 
+
 class PromptLibrary:
     """A library of methods for building specialized LLM prompts."""
 
     def build_comprehensive_prompt(self, subject: str, results: List[Dict]) -> str:
-        """Builds the prompt for a comprehensive information synthesis."""
+        """Builds a prompt for a standard, in-universe information synthesis."""
         if not results:
             return f"""
 You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
 A user has asked you for information about "{subject}", but you could not find anything in your database about it.
 Maintain your persona as a helpful, sophisticated, and slightly formal AI.
 Politely inform the user that you couldn't find any information on the subject.
-
-User: Tell me about {subject}
-Elsie:
 """
-
         result_content = self._format_results(results)
-        
         return f"""
-COMPREHENSIVE INFORMATION SYNTHESIS:
-Create a detailed informative response about: {subject}
+You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
+A user has asked you for information about "{subject}". Synthesize the provided data into a comprehensive, in-universe response.
 
 INSTRUCTIONS:
-- SYNTHESIZE all provided information into a comprehensive, well-organized response.
-- STRUCTURE: Use clear sections and logical flow to present the information.
+- SYNTHESIZE all provided information into a well-organized response.
+- STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
 - ACCURACY: Only use information explicitly provided in the search results.
-- CLARITY: Present information in an accessible, informative manner.
+- Do not act as a writer's assistant. Present the information in a comprehensive manner and concise manner.
+- Conclude by asking if there is anything else you can help with.
+- You do not need to format it like an email
+- It should appear like a infomrative page.
 
 DATABASE SEARCH RESULTS ({len(results)} entries found):
 {result_content}
 """
 
     def build_logs_prompt(self, subject: str, results: List[Dict], temporal_type: str) -> str:
-        """Builds the prompt for narrative log storytelling."""
+        """Builds the prompt for summarizing mission logs."""
         if not results:
             return f"I searched the mission logs but found no entries matching your query for '{subject}'."
 
-        result_content = self._format_results(results, is_log=True)
+        # Logs are pre-cleaned by the KnowledgeEngine. We just need the raw content.
+        log_content_list = [res.get('raw_content', '') for res in results if res.get('raw_content')]
+        result_content = "\\n".join(log_content_list)
 
         return f"""
-LOG NARRATIVE STORYTELLING:
-Transform the following {temporal_type} log information for '{subject}' into a compelling NARRATIVE STORY format.
+You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
+A user has asked you for a summary of mission logs regarding '{subject}'. You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
 
 INSTRUCTIONS:
-- Create a NARRATIVE STRUCTURE with a beginning, middle, and end.
-- STORY FLOW: Connect events chronologically and thematically.
-- IMMERSIVE DETAILS: Use the rich details from the logs to paint vivid scenes.
-- MAINTAIN ACCURACY: Only use information explicitly provided in the logs.
-- NARRATIVE VOICE: Write in an engaging, story-telling style that brings the events to life.
+1.  **Maintain Persona:** Respond as Elsie, a helpful and sophisticated AI.
+2.  **Factual Summary:** Create a direct, factual summary of the events. Do not embellish, create a narrative, or add information not present in the logs.
+3.  **Key Information:** Identify and include the most important information: key characters involved, significant actions taken, locations, and the outcome of the events.
+4.  **Concise and Clear:** The summary should be easy to understand and get straight to the point. Avoid overly descriptive or story-like language.
+5.  **Chronological Order:** Present the events in the order they occurred.
 
-DATABASE SEARCH RESULTS ({len(results)} entries found):
+CLEANED LOG DATA:
+---
 {result_content}
+---
+
+Provide a concise summary of these events.
 """
 
-    def _format_results(self, results: List[Dict], is_log: bool = False) -> str:
-        """Helper to format a list of database results into a string."""
+    def _format_results(self, results: List[Dict]) -> str:
+        """Helper to format a list of structured database results into a string."""
         result_content = []
+        # For structured queries, the formatted list is helpful.
         for res in results:
-            title = res.get('title', 'Untitled Log' if is_log else 'Untitled')
+            title = res.get('title', 'Untitled')
             content = res.get('raw_content', 'No content.')
-            result_content.append(f"**{title}**\n{content}")
-        
-        return '\n\n---\n\n'.join(result_content)
+            result_content.append(f"**{title}**\\n{content}")
+        return '\\n\\n---\\n\\n'.join(result_content)
 
     def build_character_with_associates_prompt(self, primary_character: Dict, associates: List[Dict]) -> str:
         """Builds a prompt that focuses on a primary character and lists associates."""
@@ -84,13 +89,16 @@ CHARACTER INFORMATION SYNTHESIS:
 Create a detailed informative response about the primary character, and list any known associates.
 
 INSTRUCTIONS:
-- If no information is available about the primary character, you should inform the user that you could not find any information on the subject. With an Star Trek style tone.
+- If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
 - PRIMARY FOCUS: The main body of your response should be a comprehensive summary of the **Primary Character**.
 - KNOWN ASSOCIATES: After the primary summary, create a section titled "Known Associates" and briefly list the other individuals (you do not have to indicate a lack of information past their names).
 - ACCURACY: Only use information explicitly provided in the search results.
 - CLARITY: Present information in an accessible, informative manner.
+- use bulleted lists and numbered lists when appropriate.
 - Dedicate 75 percent of your response to the primary character and 25 percent to the associates with similiar names taking precedence.
-- If no information is available about the primary character, you should inform the user that you could not find any information on the subject. With an Star Trek style tone.
+- If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
+- You do not need to format it like an email
+- It should appear like a informative page.
 
 **PRIMARY CHARACTER:**
 {primary_content}

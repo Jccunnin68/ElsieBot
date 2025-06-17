@@ -61,7 +61,12 @@ class StructuredContentRetriever:
 
             return self.db_controller.search(query=subject, categories=search_categories, limit=limit)
 
-        if query_type == 'explicit':
+        if query_type == 'tell_me_about':
+            subject = structured_query.get('subject')
+            print(f"   - Handling 'tell_me_about' for subject: '{subject}'")
+            # Search across all categories for the best match.
+            return self.db_controller.search(query=subject, categories=None, limit=5)
+        elif query_type == 'explicit':
             return self._handle_explicit_search(structured_query)
         elif query_type == 'logs':
             return self._handle_log_search(structured_query)

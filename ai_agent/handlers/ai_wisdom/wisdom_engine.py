@@ -31,27 +31,20 @@ class WisdomEngine:
         subject = strategy.get('subject') or user_message
         results = strategy.get('results', [])
 
-        # Determine if this is a character query
-        category = strategy.get('category', '').lower()
-        is_character_query = 'character' in category or 'npc' in category
+        # Determine if this is a character query by inspecting the results.
+        # This is more reliable than relying on the category from the initial routing.
+        result_category = ''
+        if results:
+            result_category = (results[0].get('category') or '').lower()
+        
+        is_character_query = 'character' in result_category or 'npc' in result_category
 
         if is_character_query and results:
+            # If the top result is a character, use the specialized prompt.
             return self._build_character_prompt(subject, results)
-
-        if approach in ['logs', 'temporal_logs']:
-            temporal_type = strategy.get('temporal_type', 'latest')
-            return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
-        
-        elif approach == 'comprehensive':
-            return self.prompt_library.build_comprehensive_prompt(subject, results)
-        
-        elif approach == 'simple_chat':
-            return "Simple conversational response - no additional context needed."
-            
         else:
-            # Fallback for any unknown or unspecified strategies.
-            print(f"         ❌ Unknown approach: '{approach}'. Defaulting to comprehensive.")
-            return self.prompt_library.build_comprehensive_prompt(subject, results) 
+            # For everything else (logs, general info, etc.), use the comprehensive prompt.
+            return self.prompt_library.build_comprehensive_prompt(subject, results)
 
     def _build_character_prompt(self, subject: str, results: list) -> str:
         """

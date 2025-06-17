@@ -7,12 +7,11 @@ and processing large volumes of content using LLMs.
 
 Components:
 - database_controller.py: Manages all connections and operations with the database.
-- knowledge_engine.py: A powerful LLM-based engine for summarizing and
-  post-processing large query results before they are used for context.
+- knowledge_engine.py: An LLM-based engine for cleaning raw Discord logs.
 """
 
 from .database_controller import get_db_controller
-from .knowledge_engine import get_knowledge_engine, should_process_data
+from .knowledge_engine import get_knowledge_engine
 
 __all__ = [
     # Database access
@@ -20,5 +19,4 @@ __all__ = [
 
     # Knowledge processing engine
     'get_knowledge_engine',
-    'should_process_data',
 ] 

@@ -21,8 +21,7 @@ def is_roleplay_allowed_channel(channel_context: Dict = None, user_message: str 
     
     ALLOWED CHANNELS:
     - General text channels (GUILD_TEXT) - DGM posts only
-    - All thread types (PUBLIC/PRIVATE/NEWS)
-    - Forum and media channels
+    - All thread types (PUBLIC/PRIVATE)
     
     BLOCKED CHANNELS:
     - DMs and Group DMs (DGM posts blocked)

@@ -53,14 +53,21 @@ class StructuredQueryDetector:
     def _detect_tell_me_about(self, user_message: str) -> Optional[Dict[str, str]]:
         """
         Detects the pattern: "tell me about <term>"
+        It now includes specific logic to identify ship queries.
         """
         pattern = re.compile(r'tell me about\s+(?:the\s+)?([A-Za-z0-9\s\'-]+)', re.IGNORECASE)
         match = pattern.search(user_message)
         if match:
             term = match.group(1).strip()
+            
+            # Specific check for ship names or the word "ship"
+            known_ships = ['stardancer'] # This could be expanded
+            if 'ship' in term.lower() or any(ship in term.lower() for ship in known_ships):
+                return {'type': 'ship', 'term': term}
+                
             # This is a general query, but we've identified the core subject.
-            # The LogicEngine will determine the category.
-            return {'type': 'general', 'query': user_message, 'subject': term}
+            # The retriever will handle finding the best match across categories.
+            return {'type': 'tell_me_about', 'subject': term}
         return None
 
     def _detect_explicit_search(self, user_message: str) -> Optional[Dict[str, str]]:
@@ -77,15 +84,16 @@ class StructuredQueryDetector:
     def _detect_log_search(self, user_message: str) -> Optional[Dict[str, Any]]:
         """
         Detects log-related queries for ships or characters.
-        Pattern: logs for <ship/character> [latest|first|recent]
+        Handles two patterns:
+        1. logs for <subject> [modifier]
+        2. [summarize] [the] <modifier> <subject> log
         """
-        # Pattern to capture the subject (ship/character) and an optional modifier
-        pattern = re.compile(r'logs for\s+([^"]+?)(?:\s+(latest|first|recent))?$', re.IGNORECASE)
-        match = pattern.search(user_message)
-        if match:
-            subject, modifier = match.groups()
+        # Pattern 1: "logs for <subject> [modifier]"
+        pattern1 = re.compile(r'logs? for\s+([A-Za-z0-9\s\'-]+?)(?:\s+(latest|first|recent))?$', re.IGNORECASE)
+        match1 = pattern1.search(user_message)
+        if match1:
+            subject, modifier = match1.groups()
             subject = subject.strip()
-            # Default modifier to 'recent' if not specified, as per requirements
             modifier = modifier.lower() if modifier else 'recent'
             
             return {
@@ -93,6 +101,22 @@ class StructuredQueryDetector:
                 'subject': subject,
                 'modifier': modifier
             }
+
+        # Pattern 2: "[summarize] [the] <modifier> <subject> log[s]"
+        pattern2 = re.compile(r'(?:summarize\s+)?(?:the\s+)?(latest|last|first|recent)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
+        match2 = pattern2.search(user_message)
+        if match2:
+            modifier, subject = match2.groups()
+            modifier = modifier.lower()
+            if modifier == 'last':
+                modifier = 'latest'
+            
+            return {
+                'type': 'logs',
+                'subject': subject.strip(),
+                'modifier': modifier
+            }
+            
         return None
 
     def _detect_typed_search(self, user_message: str) -> Optional[Dict[str, str]]:

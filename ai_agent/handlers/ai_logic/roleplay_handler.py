@@ -44,6 +44,8 @@ def handle_roleplay_message(user_message: str, conversation_history: List[Dict])
     # 3. If a response is needed, build the necessary context
     if decision.needs_ai_generation:
         print(f"   🛠️ Building context for selected approach: {decision.strategy.get('approach')}")
+        if 'reasoning' not in decision.strategy:
+            decision.strategy['reasoning'] = f"Roleplay response determined by AttentionEngine with approach: {decision.strategy.get('approach', 'unknown')}"
         # The context builder now receives the entire strategy dictionary
         context_prompt = get_enhanced_roleplay_context(decision.strategy, user_message, conversation_history)
         decision.pre_generated_response = context_prompt
