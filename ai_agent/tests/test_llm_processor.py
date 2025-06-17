@@ -17,9 +17,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from ai_agent.handlers.ai_wisdom.llm_query_processor import (
     get_llm_processor, 
     should_process_data, 
-    is_fallback_response,
     ProcessingResult
 )
+from ai_agent.handlers.handlers_utils import is_fallback_response
 
 def test_processor_initialization():
     """Test that the processor initializes correctly"""

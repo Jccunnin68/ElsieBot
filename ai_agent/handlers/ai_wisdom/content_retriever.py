@@ -27,54 +27,7 @@ def create_query_description(function_name: str, **kwargs) -> str:
     }
     return descriptions.get(function_name, "database query results")
 
-def _get_roleplay_context_from_caller() -> bool:
-    """
-    Detect if we're in roleplay context by examining the call stack.
-    This avoids threading roleplay parameters through all content functions.
-    Enhanced to check for explicit roleplay parameters.
-    """
-    import inspect
-    
-    try:
-        # Check call stack for roleplay indicators
-        frame = inspect.currentframe()
-        max_depth = 50  # Safety guard to prevent infinite loops in rare cases
-        depth = 0
-        while frame and depth < max_depth:
-            frame_info = inspect.getframeinfo(frame)
-            filename = frame_info.filename
-            
-            # Look for ai_wisdom_handler.py or context_coordinator.py in call stack
-            if any(handler in filename for handler in ['ai_wisdom_handler.py', 'context_coordinator.py', 'non_roleplay_context_builder.py']):
-                # Check if the calling function has roleplay context
-                local_vars = frame.f_locals
-                if 'is_roleplay' in local_vars:
-                    return local_vars['is_roleplay']
-                # Also check for other roleplay indicators
-                if 'roleplay' in str(local_vars.get('context', '')).lower():
-                    return True
-                break
-            frame = frame.f_back
-            depth += 1
-        if depth >= max_depth:
-            print("⚠️  Stack inspection aborted after reaching max depth to prevent infinite loop")
-    except Exception:
-        # If anything goes wrong with call stack inspection, default to False
-        pass
-    finally:
-        # Clean up frame reference to prevent memory leaks
-        if 'frame' in locals():
-            del frame
-    
-    # Also check roleplay state manager as fallback
-    try:
-        from ..ai_attention.state_manager import get_roleplay_state
-        rp_state = get_roleplay_state()
-        return rp_state.is_roleplaying
-    except:
-        pass
-    
-    return False  # Default to non-roleplay
+# _get_roleplay_context_from_caller function removed - is_roleplay parameter no longer used
 
 def is_episode_summary(result: dict) -> bool:
     """
@@ -210,8 +163,7 @@ def search_memory_alpha(query: str, limit: int = 3, is_federation_archives: bool
             processor = get_llm_processor()
             query_type = determine_query_type('search_memory_alpha')
             query_description = create_query_description('search_memory_alpha', query=query)
-            is_roleplay = _get_roleplay_context_from_caller()
-            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            result = processor.process_query_results(query_type, final_content, query_description)
             return result.content
         
         return final_content
@@ -243,18 +195,17 @@ def check_elsiebrain_connection() -> bool:
 
 
 
-def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
+def get_log_content(query: str, mission_logs_only: bool = False) -> str:
     """Simplified log search using categories - NO TRUNCATION
     Uses new Phase 1 category-based database controller methods
     
     Args:
         query: Search query
         mission_logs_only: If True, only search log categories (same behavior as before)
-        is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
-        print(f"🔍 CATEGORY-BASED LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
+        print(f"🔍 CATEGORY-BASED LOG SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
         
         # Check for log selection queries first (keep existing special handling)
         from ..ai_logic.query_detection import detect_log_selection_query
@@ -264,15 +215,15 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
             print(f"   🎯 LOG SELECTION DETECTED: type='{selection_type}', ship='{ship_name}'")
             
             if selection_type == 'random':
-                return get_random_log_content(ship_name, is_roleplay)
+                return get_random_log_content(ship_name)
             elif selection_type in ['latest', 'recent']:
                 limit = 1 if selection_type == 'latest' else 5
-                return get_temporal_log_content(selection_type, ship_name, limit=limit, is_roleplay=is_roleplay)
+                return get_temporal_log_content(selection_type, ship_name, limit=limit)
             elif selection_type in ['first', 'earliest', 'oldest']:
                 limit = 1 if selection_type == 'first' else 5
-                return get_temporal_log_content(selection_type, ship_name, limit=limit, is_roleplay=is_roleplay)
+                return get_temporal_log_content(selection_type, ship_name, limit=limit)
             elif selection_type in ['today', 'yesterday', 'this_week', 'last_week']:
-                return get_temporal_log_content(selection_type, ship_name, limit=10, is_roleplay=is_roleplay)
+                return get_temporal_log_content(selection_type, ship_name, limit=10)
         
         # Extract ship name for ship-specific log searches
         ship_name_from_query = None
@@ -306,35 +257,34 @@ def get_log_content(query: str, mission_logs_only: bool = False, is_roleplay: bo
         final_content = '\n\n---LOG SEPARATOR---\n\n'.join(log_contents)
         print(f"✅ CATEGORY-BASED LOG SEARCH COMPLETE: {len(final_content)} characters from {len(log_contents)} logs")
         
-        # Process log content through secondary LLM
+        # Always process log content through secondary LLM for character processing
         print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
         processor = get_llm_processor()
-        result = processor.process_query_results("logs", final_content, query, is_roleplay, force_processing=True)
+        result = processor.process_query_results("logs", final_content, query, force_processing=True)
         return result.content
         
     except Exception as e:
         print(f"✗ Error getting log content: {e}")
         return ""
 
-def get_relevant_wiki_context(query: str, mission_logs_only: bool = False, is_roleplay: bool = False) -> str:
+def get_relevant_wiki_context(query: str, mission_logs_only: bool = False) -> str:
     """Simplified unified search strategy using categories - NO TRUNCATION
     Uses intelligent query type detection and category-based searches
     
     Args:
         query: Search query
         mission_logs_only: If True, only search log categories when detecting log queries
-        is_roleplay: If True, use roleplay-appropriate fallback responses when processing fails
     """
     try:
         controller = get_db_controller()
-        print(f"🔍 UNIFIED CATEGORY-BASED SEARCH: '{query}' (mission_logs_only={mission_logs_only}, roleplay={is_roleplay})")
+        print(f"🔍 UNIFIED CATEGORY-BASED SEARCH: '{query}' (mission_logs_only={mission_logs_only})")
         
         # Simple query type detection - category-based routing
         query_lower = query.lower()
         
         if mission_logs_only or any(indicator in query_lower for indicator in ['log', 'mission', 'stardate', 'what happened']):
             print(f"   🚀 LOG QUERY DETECTED - routing to category-based log search")
-            return get_log_content(query, mission_logs_only, is_roleplay)
+            return get_log_content(query, mission_logs_only)
         
         elif any(indicator in query_lower for indicator in ['who is', 'tell me about', 'character', 'person', 'crew']):
             print(f"   👤 CHARACTER QUERY DETECTED - routing to category-based character search")
@@ -372,7 +322,7 @@ def get_relevant_wiki_context(query: str, mission_logs_only: bool = False, is_ro
             if should_process_data(final_context):
                 print(f"🔄 Content size ({len(final_context)} chars) exceeds threshold, processing with LLM...")
                 processor = get_llm_processor()
-                result = processor.process_query_results("general", final_context, query, is_roleplay)
+                result = processor.process_query_results("general", final_context, query)
                 return result.content
             
             return final_context
@@ -413,8 +363,7 @@ def get_ship_information(ship_name: str) -> str:
             processor = get_llm_processor()
             query_type = determine_query_type('get_ship_information')
             query_description = create_query_description('get_ship_information', ship_name=ship_name)
-            is_roleplay = _get_roleplay_context_from_caller()
-            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            result = processor.process_query_results(query_type, final_content, query_description)
             return result.content
         
         return final_content
@@ -453,7 +402,7 @@ def get_character_context(character_name: str) -> str:
         if should_process_data(final_content):
             print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
             processor = get_llm_processor()
-            result = processor.process_query_results("character", final_content, f"character information for {character_name}", _get_roleplay_context_from_caller())
+            result = processor.process_query_results("character", final_content, f"character information for {character_name}")
             return result.content
         
         return final_content
@@ -490,17 +439,13 @@ def get_recent_logs(ship_name: Optional[str] = None, limit: int = 10) -> str:
 
         final_content = '\n\n---\n\n'.join(log_summaries)
         
-        # Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            query_type = determine_query_type('get_recent_logs')
-            query_description = create_query_description('get_recent_logs', ship_name=ship_name)
-            is_roleplay = _get_roleplay_context_from_caller()
-            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
-            return result.content
-        
-        return final_content
+        # Always process log content through secondary LLM for character processing
+        print(f"🔄 Recent log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
+        processor = get_llm_processor()
+        query_type = determine_query_type('get_recent_logs')
+        query_description = create_query_description('get_recent_logs', ship_name=ship_name)
+        result = processor.process_query_results(query_type, final_content, query_description, force_processing=True)
+        return result.content
         
     except Exception as e:
         print(f"✗ Error getting recent logs: {e}")
@@ -567,8 +512,7 @@ def get_tell_me_about_content(subject: str) -> str:
             processor = get_llm_processor()
             query_type = determine_query_type('get_tell_me_about_content')
             query_description = create_query_description('get_tell_me_about_content', subject=subject)
-            is_roleplay = _get_roleplay_context_from_caller()
-            result = processor.process_query_results(query_type, final_content, query_description, is_roleplay)
+            result = processor.process_query_results(query_type, final_content, query_description)
             return result.content
         
         return final_content
@@ -577,11 +521,11 @@ def get_tell_me_about_content(subject: str) -> str:
         print(f"✗ Error getting 'tell me about' content: {e}")
         return ""
 
-def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = False) -> str:
+def get_tell_me_about_content_prioritized(subject: str) -> str:
     """Enhanced 'tell me about' functionality that prioritizes ship info and personnel over logs - NO TRUNCATION"""
     try:
         controller = get_db_controller()
-        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}' (roleplay={is_roleplay})")
+        print(f"🔍 PRIORITIZED 'TELL ME ABOUT' SEARCH: '{subject}'")
         
         # Step 1: Search for ship info specifically first
         ship_info_results = []
@@ -657,14 +601,11 @@ def get_tell_me_about_content_prioritized(subject: str, is_roleplay: bool = Fals
         final_content = '\n\n---\n\n'.join(content_parts)
         print(f"✅ PRIORITIZED 'TELL ME ABOUT' COMPLETE: {len(final_content)} characters from {len(content_parts)} sources")
         
-        # NEW: Process large content through LLM if needed
-        if should_process_data(final_content):
-            print(f"🔄 Content size ({len(final_content)} chars) exceeds threshold, processing with LLM...")
-            processor = get_llm_processor()
-            result = processor.process_query_results("character", final_content, subject, is_roleplay)
-            return result.content
-        
-        return final_content
+        # Always process content through secondary LLM for character processing
+        print(f"🔄 Content ({len(final_content)} chars) - routing to secondary LLM for character processing")
+        processor = get_llm_processor()
+        result = processor.process_query_results("character", final_content, subject, force_processing=True)
+        return result.content
         
     except Exception as e:
         print(f"✗ Error getting prioritized 'tell me about' content: {e}")
@@ -816,7 +757,7 @@ def get_log_url(search_query: str) -> str:
         print(f"✗ Error searching for page URL: {e}")
         return f"Error retrieving URL for '{search_query}': {e}"
 
-def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = False) -> str:
+def get_random_log_content(ship_name: Optional[str] = None) -> str:
     """Get one random mission log formatted for display"""
     try:
         controller = get_db_controller()
@@ -836,7 +777,7 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
             print(f"   ❌ Random log is episode summary, skipping: '{random_log['title']}' Category='{episode_cat}'")
             # Try to get another random log that's not an episode summary
             print(f"   🔄 Attempting to get another random log (not episode summary)")
-            return get_random_log_content(ship_name, is_roleplay)
+            return get_random_log_content(ship_name)
         
         title = random_log['title']
         content = random_log['raw_content']
@@ -848,11 +789,11 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
         
         print(f"   ✅ Random log selected: '{title}' ({len(formatted_log)} chars)")
         
-        # NEW: Always process log content through secondary LLM (regardless of size)
+        # Always process log content through secondary LLM for character processing
         print(f"🔄 Random log content ({len(formatted_log)} chars) - routing to secondary LLM for character processing")
         processor = get_llm_processor()
         query_description = f"random log" + (f" for {ship_name}" if ship_name else "")
-        result = processor.process_query_results("logs", formatted_log, query_description, is_roleplay, force_processing=True)
+        result = processor.process_query_results("logs", formatted_log, query_description, force_processing=True)
         return result.content
         
     except Exception as e:
@@ -860,7 +801,7 @@ def get_random_log_content(ship_name: Optional[str] = None, is_roleplay: bool = 
         return f"Error retrieving random log: {e}"
 
 
-def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5, is_roleplay: bool = False) -> str:
+def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = None, limit: int = 5) -> str:
     """Get temporally ordered logs (newest or oldest first)"""
     try:
         controller = get_db_controller()
@@ -913,8 +854,10 @@ def get_temporal_log_content(selection_type: str, ship_name: Optional[str] = Non
         print(f"🔄 Log content ({len(final_content)} chars) - routing to secondary LLM for character processing")
         processor = get_llm_processor()
         query_description = f"{selection_type} logs" + (f" for {ship_name}" if ship_name else "")
-        result = processor.process_query_results("logs", final_content, query_description, is_roleplay, force_processing=True)
+        result = processor.process_query_results("logs", final_content, query_description, force_processing=True)
         return result.content
+        
+        return final_content
         
     except Exception as e:
         print(f"✗ Error getting temporal log content: {e}")

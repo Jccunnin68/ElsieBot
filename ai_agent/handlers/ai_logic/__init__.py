@@ -1,44 +1,46 @@
 """
-AI Logic Module
-===============
+AI Logic - Response Decision and Context Analysis
+=================================================
 
-This module contains the core decision-making logic for Elsie's AI system.
-It handles response routing, decision extraction, and query processing.
+This package handles the core logic for determining appropriate responses
+and analyzing conversation context for the AI agent.
 
-CURRENT MODULES:
-- response_router.py: Main message routing and decision coordination
-- response_decision_engine.py: Enhanced contextual decision making
-
-- non_roleplay_handler.py: Non-roleplay message handling
-- query_detection.py: Query type detection and analysis
-- log_patterns.py: Log-specific pattern matching
-- log_processor.py: Log content processing
-- context_detection.py: Context detection utilities
-
-The system uses an enhanced pathway for roleplay scenarios with sophisticated
-contextual intelligence and emotional analysis.
+Components:
+- response_decision_engine.py: Main response decision logic
+- context_detection.py: Post-response analysis and prompt builders
+- query_detection.py: Query pattern detection
+- response_router.py: Response routing logic
+- roleplay_handler.py: Roleplay-specific logic
+- standard_handler.py: Standard conversation logic
 """
 
-# Core imports
-from .response_router import route_message_to_handler
-from .response_decision_engine import create_response_decision_engine
-from .response_decision import ResponseDecision
-
-from .standard_handler import handle_standard_message
-
-# Context detection utilities
+from .response_decision_engine import ResponseDecision
 from .context_detection import (
     detect_who_elsie_addressed,
-    detect_general_personality_context
+    detect_who_elsie_addressed_alt,
+    create_personality_context_prompt,
+    create_context_analysis_prompt
 )
+from .query_detection import detect_query_type_with_conflicts
+from .response_router import route_message_to_handler
+from .roleplay_handler import handle_roleplay_message
+from .standard_handler import handle_standard_message
 
 __all__ = [
-    # NEW ARCHITECTURE - Main entry points
+    # Response decision making
     'ResponseDecision',
- 
-    'route_message_to_handler',
     
-    # Legacy (for compatibility)
-    'detect_general_personality_context',
+    # Post-response analysis and prompt building
     'detect_who_elsie_addressed',
+    'detect_who_elsie_addressed_alt',
+    'create_personality_context_prompt',
+    'create_context_analysis_prompt',
+    
+    # Query detection
+    'detect_query_type_with_conflicts',
+    
+    # Response routing
+    'route_message_to_handler',
+    'handle_roleplay_message',
+    'handle_standard_message',
 ] 

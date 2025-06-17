@@ -11,11 +11,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 try:
     from handlers.ai_logic.query_detection import (
-        should_prioritize_logs_over_general_info,
         is_ship_plus_log_query,
-        is_character_plus_log_query,
-        has_log_specific_terms
+        is_character_plus_log_query
     )
+    from handlers.ai_wisdom.log_patterns import has_log_specific_terms
     
     print("✅ Successfully imported new functions!")
     
@@ -47,12 +46,18 @@ try:
     for i, query in enumerate(test_cases, 1):
         print(f"\n{i}. Query: '{query}'")
         
-        # Test log prioritization
-        prioritize_logs, query_type, details = should_prioritize_logs_over_general_info(query)
+        # Test log prioritization (using ship+log and character+log detection)
+        is_ship_log, ship_name_check, log_type_check = is_ship_plus_log_query(query)
+        is_char_log, char_name_check, log_type_check2 = is_character_plus_log_query(query)
+        prioritize_logs = is_ship_log or is_char_log
         print(f"   Prioritize logs: {prioritize_logs}")
         if prioritize_logs:
-            print(f"   Query type: {query_type}")
-            print(f"   Details: {details}")
+            if is_ship_log:
+                print(f"   Query type: ship_logs")
+                print(f"   Details: {{'ship': '{ship_name_check}', 'log_type': '{log_type_check}'}}")
+            elif is_char_log:
+                print(f"   Query type: character_logs")
+                print(f"   Details: {{'character': '{char_name_check}', 'log_type': '{log_type_check2}'}}")
         
         # Test ship+log detection
         is_ship_log, ship_name, log_type = is_ship_plus_log_query(query)

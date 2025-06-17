@@ -245,6 +245,8 @@ def generate_ai_response_with_decision(decision: ResponseDecision, user_message:
         
         # Create the model
         model = genai.GenerativeModel('gemma-3-27b-it')
+        #model = genai.GenerativeModel('gemini-2.0-flash')
+
         
         # Detect topic changes for conversation flow
         is_topic_change = detect_topic_change(user_message, conversation_history)

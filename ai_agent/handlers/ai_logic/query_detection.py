@@ -8,7 +8,7 @@ Provides clean, focused interface for identifying user intent patterns.
 ENHANCED: Phase 6B Migration with conflict prevention and category intersection.
 
 Usage:
-    from handlers.ai_response_decision.query_detection import is_continuation_request
+    from handlers.ai_logic.query_detection import is_continuation_request
 """
 
 from typing import Optional, Tuple, Dict, List, Any
@@ -244,129 +244,14 @@ def is_federation_archives_request(user_message: str) -> bool:
     return any(pattern in user_lower for pattern in archives_patterns)
 
 
-def extract_continuation_focus(user_message: str, conversation_history: list) -> tuple[bool, str, str]:
-    """
-    Extract what specific aspect the user wants more information about in a continuation request.
-    Returns (is_focused_continuation, focus_subject, context_type)
-    """
-    user_lower = user_message.lower().strip()
-    
-    # Check if this is a continuation request first
-    if not is_continuation_request(user_message):
-        return False, "", ""
-    
-    # Get the last assistant response to understand previous context
-    last_assistant_responses = [msg for msg in conversation_history if msg["role"] == "assistant"]
-    if not last_assistant_responses:
-        return False, "", ""
-    
-    last_response = last_assistant_responses[-1]["content"].lower()
-    
-    # Determine what type of context we had before
-    context_type = "general"
-    if "mission log" in last_response or "log content" in last_response:
-        context_type = "logs"
-    elif "character" in last_response or "personnel" in last_response:
-        context_type = "character"
-    elif "ship" in last_response or "vessel" in last_response:
-        context_type = "ship"
-    
-    # Look for specific focus indicators in the continuation request
-    focus_patterns = {
-        'character_focus': [
-            r'about ([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',  # "about Captain Smith"
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)[\'s\s]+(role|part|actions|involvement)',  # "Smith's role"
-            r'what (?:did|was) ([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',  # "what did Smith"
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:do|did|say|said)',  # "Smith did"
-        ],
-        'event_focus': [
-            r'about (?:the\s+)?([a-z\s]+(?:incident|event|mission|operation|encounter))',  # "about the incident"
-            r'what happened (?:to|with|during|in)\s+(.+)',  # "what happened to"
-            r'(?:the\s+)?([a-z\s]+(?:battle|fight|conflict|crisis))',  # "the battle"
-        ],
-        'location_focus': [
-            r'(?:on|at|in)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # "on the bridge"
-            r'what about (?:the\s+)?([a-z\s]+(?:station|ship|planet|system))',  # "what about the station"
-        ],
-        'time_focus': [
-            r'(?:when|what time|during)\s+(.+)',  # "when did"
-            r'(?:before|after)\s+(.+)',  # "after the"
-        ]
-    }
-    
-    # Try to extract specific focus
-    for focus_type, patterns in focus_patterns.items():
-        for pattern in patterns:
-            match = re.search(pattern, user_message, re.IGNORECASE)
-            if match:
-                focus_subject = match.group(1).strip()
-                # Clean up common words
-                focus_subject = re.sub(r'\b(the|a|an|that|this|what|did|was|were|is|are)\b', '', focus_subject, flags=re.IGNORECASE).strip()
-                focus_subject = re.sub(r'\s+', ' ', focus_subject).strip()
-                
-                if focus_subject and len(focus_subject) > 2:
-                    return True, focus_subject, context_type
-    
-    # If no specific focus found, but it's a continuation, return general continuation
-    return True, "", context_type
 
 
-def is_specific_log_request(user_message: str) -> bool:
-    """
-    Detect if user is specifically asking for mission logs (not other page types).
-    Returns True when they use the word "log" specifically.
-    """
-    user_lower = user_message.lower().strip()
-    
-    # Look for specific log indicators
-    log_specific_patterns = [
-        'show me the log', 'get the log', 'find the log', 'retrieve the log',
-        'mission log', 'ship log', 'captain log', 'personal log',
-        'show log', 'get log', 'find log', 'log for', 'log from',
-        'logs for', 'logs from', 'recent log', 'last log', 'latest log'
-    ]
-    
-    # Check if message contains "log" in a specific context
-    if any(pattern in user_lower for pattern in log_specific_patterns):
-        return True
-    
-    # Check for standalone "log" requests
-    words = user_lower.split()
-    if 'log' in words or 'logs' in words:
-        return True
-    
-    return False
 
 
-def is_stardancer_query(user_message: str) -> bool:
-    """
-    Check if the message is asking about the USS Stardancer specifically.
-    Requires special guard rails to prevent inventing command staff.
-    """
-    user_lower = user_message.lower().strip()
-    
-    stardancer_indicators = [
-        'stardancer', 'star dancer', 'uss stardancer', 'this ship', 'our ship',
-        'the ship', 'my ship', 'your ship'
-    ]
-    
-    return any(indicator in user_lower for indicator in stardancer_indicators)
 
 
-def is_stardancer_command_query(user_message: str) -> bool:
-    """
-    Check if the message is asking about Stardancer command staff specifically.
-    These queries need the strictest guard rails.
-    """
-    user_lower = user_message.lower().strip()
-    
-    command_indicators = [
-        'captain', 'commander', 'first officer', 'xo', 'command staff',
-        'senior staff', 'bridge crew', 'officers', 'command structure',
-        'who commands', 'who is the captain', 'command team'
-    ]
-    
-    return is_stardancer_query(user_message) and any(indicator in user_lower for indicator in command_indicators)
+
+
 
 
 def extract_tell_me_about_subject(user_message: str) -> Optional[str]:
@@ -525,34 +410,6 @@ def extract_url_request(user_message: str) -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-def extract_ship_log_query(user_message: str) -> Tuple[bool, Optional[Dict[str, str]]]:
-    """
-    Check if the message is requesting ship logs and extract ship name and context.
-    Returns (is_ship_log_query, details) where details contains ship name and query type.
-    """
-    message = user_message.lower().strip()
-    
-    # Check each pattern for a match
-    for pattern in SHIP_LOG_PATTERNS:
-        match = re.search(pattern, message, re.IGNORECASE)
-        if match:
-            ship_name = match.group('ship').lower()
-            # Verify it's a known ship
-            ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel']
-            if ship_name in [s.lower() for s in ship_names]:
-                # Extract any specific log keywords
-                log_type = None
-                for keyword in LOG_SEARCH_KEYWORDS:
-                    if keyword in message:
-                        log_type = keyword
-                        break
-                
-                return True, {
-                    'ship': ship_name,
-                    'log_type': log_type
-                }
-    
-    return False, None
 
 
 def is_ship_plus_log_query(user_message: str) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -569,7 +426,7 @@ def is_ship_plus_log_query(user_message: str) -> Tuple[bool, Optional[str], Opti
         return False, None, None
     
     # Look for ship names combined with log indicators
-    ship_names = ['stardancer', 'adagio', 'pilgrim', 'voyager', 'enterprise', 'defiant', 'protector', 'manta', 'gigantes', 'banshee', 'caelian', 'sentinel']
+    ship_names = ['stardancer', 'adagio', 'pilgrim', 'protector', 'manta', 'sentinel','gigantes']
     
     detected_ship = None
     for ship in ship_names:
@@ -625,30 +482,7 @@ def is_character_plus_log_query(user_message: str) -> Tuple[bool, Optional[str],
     return False, None, None
 
 
-def should_prioritize_logs_over_general_info(user_message: str) -> Tuple[bool, str, Dict[str, str]]:
-    """
-    Determine if log search should override general ship/character information.
-    Returns (prioritize_logs, query_type, details)
-    """
-    # Check for ship + log combination
-    is_ship_log, ship_name, log_type = is_ship_plus_log_query(user_message)
-    if is_ship_log:
-        return True, 'ship_logs', {
-            'ship': ship_name,
-            'log_type': log_type,
-            'search_focus': 'logs_only'
-        }
-    
-    # Check for character + log combination  
-    is_char_log, character_name, log_type = is_character_plus_log_query(user_message)
-    if is_char_log:
-        return True, 'character_logs', {
-            'character': character_name,
-            'log_type': log_type,
-            'search_focus': 'logs_only'
-        }
-    
-    return False, 'general', {}
+
 
 
 def is_character_query(user_message: str) -> Tuple[bool, Optional[str]]:
@@ -751,10 +585,6 @@ def get_query_type(user_message: str) -> str:
         return "log_selection"
     elif is_character_query(user_message)[0]:
         return "character"
-    elif is_stardancer_query(user_message):
-        return "stardancer"
-    elif extract_ship_log_query(user_message)[0]:
-        return "ship_log"
     elif is_log_query(user_message):
         return "log"
     elif extract_tell_me_about_subject(user_message):

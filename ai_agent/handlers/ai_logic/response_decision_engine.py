@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import traceback
 
 from .response_decision import ResponseDecision
-from ..ai_wisdom.llm_query_processor import is_fallback_response
+from ..handlers_utils import is_fallback_response
 
 
 class ResponseDecisionEngine:

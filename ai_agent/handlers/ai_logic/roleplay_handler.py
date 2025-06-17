@@ -16,7 +16,7 @@ ENHANCED: Quick database response mode for efficient roleplay flow.
 
 from typing import Dict, List, Optional
 
-from handlers.ai_logic.response_router import is_cross_channel_message
+
 
 from .response_decision import ResponseDecision
 from .query_detection import detect_query_type_with_conflicts
@@ -44,6 +44,7 @@ def handle_roleplay_message(user_message: str, conversation_history: List, chann
     print(f"\n🎭 ROLEPLAY HANDLER - Enhanced quick response mode")
     
     # Handle cross-channel busy state first
+    from .response_router import is_cross_channel_message
     if is_cross_channel_message(channel_context):
         return handle_cross_channel_busy(None, channel_context)
     

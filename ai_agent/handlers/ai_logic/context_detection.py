@@ -1,19 +1,23 @@
 """
-Context Detection Functions
-===========================
+Post-Response Analysis Functions
+===============================
 
-Functions for detecting personality context and conversation patterns
-to inform response generation strategy.
+Functions for analyzing Elsie's responses after generation to track
+conversation state and addressing patterns.
+
+Note: Pre-response context detection is now handled by LLM routing
+in conversation_memory.py and context_gatherer.py
 """
 
 import re
-from typing import List
 
 
 def detect_who_elsie_addressed(response_text: str, user_message: str) -> str:
     """
     Detect who Elsie addressed in her response.
     Returns the character name Elsie is speaking to, or None if unclear.
+    
+    This is used POST-RESPONSE to track conversation state.
     """
     # Check for direct address patterns like "[Character Name],"
     address_match = re.search(r'\[([A-Z][a-z]+[A-Za-z\s]*)\],?\s*', response_text)
@@ -44,59 +48,12 @@ def detect_who_elsie_addressed(response_text: str, user_message: str) -> str:
     return None
 
 
-def detect_general_personality_context(user_message: str) -> str:
-    """
-    Detect what aspect of Elsie's personality should be emphasized for general conversations.
-    Returns contextual instructions for her response.
-    """
-    message_lower = user_message.lower()
-    
-    # Stellar Cartography / Space Science topics
-    stellar_keywords = [
-        'star', 'stars', 'constellation', 'nebula', 'galaxy', 'solar system',
-        'planet', 'planets', 'asteroid', 'comet', 'black hole', 'pulsar',
-        'navigation', 'coordinates', 'stellar cartography', 'space',
-        'astronomy', 'astrophysics', 'cosmic', 'universe', 'orbit',
-        'gravitational', 'light year', 'parsec', 'warp', 'subspace',
-        'sensor', 'scan', 'readings', 'stellar phenomena', 'anomaly'
-    ]
-    
-    # Dance / Movement topics
-    dance_keywords = [
-        'dance', 'dancing', 'ballet', 'choreography', 'movement', 'rhythm',
-        'music', 'tempo', 'grace', 'elegant', 'fluid', 'performance',
-        'instructor', 'teaching', 'steps', 'routine', 'artistic',
-        'expression', 'harmony', 'flow', 'composition', 'adagio'
-    ]
-    
-    # Drink/Bar topics (only when explicitly about drinks)
-    drink_keywords = [
-        'drink', 'cocktail', 'beer', 'wine', 'whiskey', 'alcohol',
-        'beverage', 'bartender', 'bar', 'menu', 'order', 'serve',
-        'romulan ale', 'synthehol', 'kanar', 'raktajino'
-    ]
-    
-    # Check for stellar cartography context
-    if any(keyword in message_lower for keyword in stellar_keywords):
-        return "Respond as a Stellar Cartographer - draw on your expertise in space science, navigation, and stellar phenomena. Be knowledgeable and precise about astronomical topics."
-    
-    # Check for dance context
-    elif any(keyword in message_lower for keyword in dance_keywords):
-        return "Respond drawing on your background as a dance instructor - discuss movement, rhythm, artistic expression, and the beauty of coordinated motion with expertise."
-    
-    # Check for explicit drink/bar context
-    elif any(keyword in message_lower for keyword in drink_keywords):
-        return "Respond as a bartender - focus on drinks, service, and hospitality. This is when your bartender expertise is most relevant."
-    
-    # Default - balanced personality
-    else:
-        return "Respond as your complete self - intelligent, sophisticated, with varied interests. Don't default to bartender mode unless drinks are specifically involved."
-
-
 def detect_who_elsie_addressed_alt(response_text: str, user_message: str) -> str:
     """
     Alternative method to detect who Elsie addressed in her response.
     This helps track implicit response chains.
+    
+    This is used POST-RESPONSE for conversation state tracking.
     """
     # First, try to detect who spoke in the user message (likely who Elsie is responding to)
     from handlers.ai_attention.character_tracking import extract_character_names_from_emotes
@@ -131,4 +88,46 @@ def detect_who_elsie_addressed_alt(response_text: str, user_message: str) -> str
                 print(f"   👋 ELSIE ADDRESSING: {word} (inferred from addressing term in response)")
                 return word.capitalize()
     
-    return "" 
+    return ""
+
+
+def create_personality_context_prompt(user_message: str) -> str:
+    """
+    Create a prompt fragment for LLM to determine personality context.
+    This replaces the hardcoded detect_general_personality_context logic.
+    """
+    return f"""
+Based on this message: "{user_message}"
+
+Determine which aspect of Elsie's personality should be emphasized:
+- STELLAR_CARTOGRAPHER: For space science, navigation, stellar phenomena topics
+- BARTENDER: For drinks, service, hospitality topics  
+- COUNSELOR: For emotional support, personal problems
+- BALANCED: For general conversation (default)
+
+Consider the specific topic and context to choose the most appropriate personality mode.
+"""
+
+
+def create_context_analysis_prompt(user_message: str, conversation_context: str) -> str:
+    """
+    Create a comprehensive prompt for LLM context analysis.
+    This replaces multiple hardcoded detection functions.
+    """
+    return f"""
+Analyze this roleplay situation for optimal response context:
+
+CURRENT MESSAGE: "{user_message}"
+
+CONVERSATION CONTEXT:
+{conversation_context}
+
+Provide analysis for:
+1. WHO is speaking (character name if any)
+2. WHO is being addressed (Elsie, another character, or group)
+3. PERSONALITY MODE needed (Stellar Cartographer, Bartender, Counselor, Balanced)
+4. CONVERSATION TONE (casual, formal, emotional, technical)
+5. RESPONSE TYPE needed (active dialogue, supportive listening, service, etc.)
+
+Focus on understanding the conversational dynamics and what kind of response would best serve the scene.
+""" 

@@ -3,12 +3,13 @@ LLM Query Post Processor
 ========================
 
 Post-processes large query results using gemini-2.0-flash-lite to create concise,
-relevant summaries for the main AI engine. Includes context-aware fallback handling
-for roleplay vs non-roleplay scenarios with character rule integration.
+relevant summaries for the main AI engine. Simplified to three clear query types:
+- LOGS: Character processing + summarization (for mission logs)
+- SHIPS: Direct summarization (for ship information)
+- GENERAL: Direct summarization (for all other content)
 """
 
 import time
-import random
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, List
 from datetime import datetime, timedelta
@@ -29,8 +30,8 @@ class ProcessingResult:
 
 @dataclass
 class CharacterContext:
-    """Minimal character context - LLM handles all character processing"""
-    roleplay_active: bool = False
+    """Minimal character context - only used for logs processing"""
+    pass  # No roleplay state dependencies
 
 
 class RateLimiter:
@@ -38,7 +39,7 @@ class RateLimiter:
     
     def __init__(self):
         self.call_times = []
-        self.daily_limit = 1000  # Conservative limit for gemini-2.0-flash-lite
+        self.daily_limit = 1350  # Conservative limit for gemini-2.0-flash-lite
         self.minute_limit = 60
         self.current_delay = 0
         self.last_rate_limit = None
@@ -141,12 +142,15 @@ class LLMQueryProcessor:
     """
     Post-processes large query results using gemini-2.0-flash-lite
     to create concise, relevant summaries for the main AI engine.
-    Enhanced with character rule integration for proper name disambiguation.
+    
+    Simplified to three clear query types:
+    - LOGS: Character processing + summarization (for mission logs)
+    - SHIPS: Direct summarization (for ship information)  
+    - GENERAL: Direct summarization (for all other content)
     """
     
-    # New limits expressed as tokens (Gemini supports larger context windows).
-    # Using a rough 4-chars-per-token heuristic to convert: 14 000 tokens ≈ 56 000 characters.
-    PROCESSING_THRESHOLD = 56000  # Characters (~14k tokens)
+    # Processing threshold for when to use LLM processing
+    PROCESSING_THRESHOLD = 56000  # Characters (~14k tokens) - input threshold for processing
     MAX_RETRIES = 3
     
     def __init__(self):
@@ -165,114 +169,18 @@ class LLMQueryProcessor:
             print(f"⚠️  Failed to initialize Gemini client: {e}")
             return None
             
-    def _extract_character_context(self, raw_data: str, user_query: str) -> CharacterContext:
-        """Extract minimal character context - LLM handles all character processing"""
-        try:
-            from ..ai_attention.state_manager import get_roleplay_state
-            
-            context = CharacterContext()
-            
-            # Only check roleplay state for logging/debugging purposes
-            try:
-                rp_state = get_roleplay_state()
-                context.roleplay_active = rp_state.is_roleplaying
-            except:
-                context.roleplay_active = False
-            
-            return context
-            
-        except Exception as e:
-            print(f"⚠️  Error extracting character context: {e}")
-            return CharacterContext()
-    
-    def _build_character_processing_rules(self, character_context: CharacterContext) -> List[str]:
-        """Build character processing rules dynamically from log_patterns.py"""
-        try:
-            # Import character corrections from log_patterns.py
-            from .log_patterns import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, FALLBACK_CHARACTER_CORRECTIONS
-            
-            character_rules = [
-                f"- Roleplay Session Active: {character_context.roleplay_active}",
-                "- Character Disambiguation Rules (APPLY THESE):"
-            ]
-            
-            # Add ship-specific corrections
-            character_rules.append("  SHIP-SPECIFIC CORRECTIONS:")
-            for ship, corrections in SHIP_SPECIFIC_CHARACTER_CORRECTIONS.items():
-                ship_corrections = []
-                for incorrect, correct in corrections.items():
-                    ship_corrections.append(f"'{incorrect}' → '{correct}'")
-                character_rules.append(f"  * {ship.title()}: {', '.join(ship_corrections)}")
-            
-            # Add general character corrections
-            character_rules.append("  GENERAL CHARACTER CORRECTIONS:")
-            for incorrect, correct in FALLBACK_CHARACTER_CORRECTIONS.items():
-                character_rules.append(f"  * '{incorrect}' → '{correct}'")
-            
-            # Add other processing rules
-            character_rules.extend([
-                "- DGM Character Control Patterns:",
-                "  * Process [Character], Character:, (Character) patterns",
-                "  * Handle DGM gamemaster accounts (liorexus, isis, cygnus, illuice, captain_rien)",
-                "- [DOIC] Channel Rules:",
-                "  * Content in [DOIC] channels is primarily narration or other character dialogue",
-                "  * Rarely will [DOIC] content be from the character@account_name speaking",
-                "  * Treat [DOIC] content as environmental/narrative description",
-                "- OOC Content Filtering:",
-                "  * Filter out ((text)), //text, [ooc text], ooc: patterns",
-                "- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION",
-                "- Apply character name corrections using ship context",
-                "- Resolve ambiguous character names with proper ranks/titles",
-                "- Use surrounding text context for ambiguous names like 'tolena' and 'blaine'"
-            ])
-            
-            return character_rules
-            
-        except Exception as e:
-            print(f"⚠️  Error building character processing rules: {e}")
-            # Fallback to basic rules if import fails
-            return [
-                f"- Roleplay Session Active: {character_context.roleplay_active}",
-                "- Character Disambiguation Rules: Apply basic character name corrections",
-                "- DGM Character Control Patterns: Process [Character], Character:, (Character) patterns",
-                "- [DOIC] Channel Rules: Treat as narration/environmental description",
-                "- OOC Content Filtering: Filter out ((text)), //text, [ooc text], ooc: patterns",
-                "- ⚠️ IMPORTANT: PERFORM CHARACTER DISAMBIGUATION"
-            ]
-            
     def process_query_results(self, query_type: str, raw_data: str, user_query: str, 
-                            is_roleplay: bool = False, force_processing: bool = False) -> ProcessingResult:
-        """Main processing entry point with character rule integration and forced processing support"""
-        print(f"🔄 LLM PROCESSING: type='{query_type}', size={len(raw_data)} chars, roleplay={is_roleplay}, force={force_processing}")
+                             force_processing: bool = False) -> ProcessingResult:
+        """Main processing entry point with simplified three-way routing"""
+        print(f"🔄 LLM PROCESSING: type='{query_type}', size={len(raw_data)} chars, force={force_processing}")
         
         original_size = len(raw_data)
         
-        # NEW: Force processing for log content regardless of size
+        # Force processing for log content regardless of size
         if query_type == "logs" or force_processing:
             print(f"   🎯 FORCED PROCESSING: Log content will be processed regardless of size")
-            # Check rate limits
-            can_process, retry_minutes = self.rate_limiter.can_make_request()
-            if not can_process:
-                print(f"⏳ Rate limited, retry in {retry_minutes} minutes")
-                fallback_content = self._generate_fallback_response(query_type, user_query, is_roleplay, retry_minutes)
-                result = ProcessingResult(
-                    content=fallback_content,
-                    was_processed=False,
-                    processing_status="rate_limited",
-                    is_fallback_response=True,
-                    retry_after_minutes=retry_minutes,
-                    original_data_size=original_size,
-                    processed_data_size=len(fallback_content),
-                    fallback_reason="rate_limited"
-                )
-                self.metrics.log_processing_attempt(result)
-                return result
-            
-            # Process with character rules (forced)
-            return self._process_with_character_rules(raw_data, user_query, query_type, is_roleplay, original_size)
-        
-        # Existing size-based logic for non-log content
-        if len(raw_data) < self.PROCESSING_THRESHOLD:
+        # Check size threshold for non-log content
+        elif len(raw_data) < self.PROCESSING_THRESHOLD:
             return ProcessingResult(
                 content=raw_data,
                 was_processed=False,
@@ -282,50 +190,31 @@ class LLMQueryProcessor:
                 processed_data_size=original_size
             )
             
-        # Check rate limits for regular processing
+        # Check rate limits
         can_process, retry_minutes = self.rate_limiter.can_make_request()
         if not can_process:
             print(f"⏳ Rate limited, retry in {retry_minutes} minutes")
-            fallback_content = self._generate_fallback_response(query_type, user_query, is_roleplay, retry_minutes)
             result = ProcessingResult(
-                content=fallback_content,
+                content="LLM_PROCESSOR_FALLBACK_RATE_LIMITED",
                 was_processed=False,
                 processing_status="rate_limited",
                 is_fallback_response=True,
                 retry_after_minutes=retry_minutes,
                 original_data_size=original_size,
-                processed_data_size=len(fallback_content),
+                processed_data_size=0,
                 fallback_reason="rate_limited"
             )
             self.metrics.log_processing_attempt(result)
             return result
             
-        # Regular processing for large non-log content
-        return self._process_with_character_rules(raw_data, user_query, query_type, is_roleplay, original_size)
-    
-    def _process_with_character_rules(self, raw_data: str, user_query: str, query_type: str, 
-                                    is_roleplay: bool, original_size: int) -> ProcessingResult:
-        """Unified processing method with character rule integration"""
-        # Extract minimal character context (LLM handles all character processing)
-        character_context = self._extract_character_context(raw_data, user_query)
-        print(f"🎭 CHARACTER CONTEXT: roleplay_active={character_context.roleplay_active} (LLM handles all character processing)")
-            
-        # Attempt processing
+        # Route to appropriate processing method
         try:
-            # Determine if we need summarization or just character processing
-            needs_summarization = len(raw_data) >= self.PROCESSING_THRESHOLD
-            print(f"   📊 PROCESSING DECISION: needs_summarization={needs_summarization} (threshold={self.PROCESSING_THRESHOLD})")
-            
             if query_type == "logs":
-                if needs_summarization:
-                    print(f"   📝 LOG PROCESSING: Character processing + summarization ({len(raw_data)} chars)")
-                    processed_content = self._process_log_data_with_character_rules(raw_data, user_query, character_context)
-                else:
-                    print(f"   🎭 LOG PROCESSING: Character processing only (no summarization) ({len(raw_data)} chars)")
-                    processed_content = self._process_log_character_only(raw_data, user_query, character_context)
-            else:
-                print(f"   📋 GENERAL PROCESSING: Character processing + summarization ({len(raw_data)} chars)")
-                processed_content = self._process_general_data_with_character_rules(raw_data, user_query, character_context)
+                processed_content = self._process_logs(raw_data, user_query)
+            elif query_type == "ships":
+                processed_content = self._process_ships(raw_data, user_query)
+            else:  # general
+                processed_content = self._process_general(raw_data, user_query)
                 
             if processed_content:
                 self.rate_limiter.record_request()
@@ -346,112 +235,234 @@ class LLMQueryProcessor:
                 
         except Exception as e:
             print(f"❌ Processing failed: {e}")
-            fallback_content = self._generate_fallback_response(query_type, user_query, is_roleplay, 0)
             result = ProcessingResult(
-                content=fallback_content,
+                content="LLM_PROCESSOR_FALLBACK_ERROR",
                 was_processed=False,
                 processing_status="error",
                 is_fallback_response=True,
                 original_data_size=original_size,
-                processed_data_size=len(fallback_content),
+                processed_data_size=0,
                 fallback_reason=str(e)
             )
             self.metrics.log_processing_attempt(result)
             return result
         
-    def _process_log_data(self, raw_logs: str, user_query: str) -> str:
-        """Specialized log processing with character dialogue parsing"""
-        prompt = self._create_log_summary_prompt(raw_logs, user_query)
-        return self._call_llm_with_prompt(prompt)
-    
-    def _process_log_data_with_character_rules(self, raw_logs: str, user_query: str, 
-                                             character_context: CharacterContext) -> str:
-        """Enhanced log processing with character rule integration"""
-        prompt = self._create_character_aware_log_summary_prompt(raw_logs, user_query, character_context)
-        return self._call_llm_with_prompt(prompt)
+    def _process_logs(self, raw_logs: str, user_query: str) -> str:
+        """Process logs with character disambiguation and optional summarization as separate steps"""
+        print(f"   📝 LOG PROCESSING: Character processing + optional summarization ({len(raw_logs)} chars)")
         
-    def _process_general_data(self, raw_data: str, user_query: str) -> str:
-        """General data summarization"""
+        # Extract character context for logs only
+        character_context = self._extract_character_context(raw_logs, user_query)
+        print(f"   🎭 CHARACTER CONTEXT: Processing character disambiguation rules")
+        
+        # STEP 1: Always do character processing first
+        print(f"   📊 STEP 1: Character processing and disambiguation")
+        character_prompt = self._create_log_character_processing_prompt(raw_logs, character_context)
+        character_processed_logs = self._call_llm_with_prompt(character_prompt, max_output_tokens=100000)
+        
+        # STEP 2: Check if we need summarization after character processing
+        needs_summarization = len(character_processed_logs) >= self.PROCESSING_THRESHOLD
+        
+        if needs_summarization:
+            print(f"   📊 STEP 2: Summarization ({len(character_processed_logs)} chars processed content)")
+            summary_prompt = self._create_log_summary_prompt(character_processed_logs, user_query)
+            return self._call_llm_with_prompt(summary_prompt, max_output_tokens=12000)
+        else:
+            print(f"   ✅ CHARACTER PROCESSING COMPLETE: No summarization needed ({len(character_processed_logs)} chars)")
+            return character_processed_logs
+    
+    def _process_ships(self, raw_data: str, user_query: str) -> str:
+        """Process ship information with direct summarization"""
+        print(f"   🚢 SHIP PROCESSING: Direct summarization ({len(raw_data)} chars)")
+        prompt = self._create_ship_summary_prompt(raw_data, user_query)
+        return self._call_llm_with_prompt(prompt, max_output_tokens=12000)
+    
+    def _process_general(self, raw_data: str, user_query: str) -> str:
+        """Process general content with direct summarization"""
+        print(f"   📋 GENERAL PROCESSING: Direct summarization ({len(raw_data)} chars)")
         prompt = self._create_general_summary_prompt(raw_data, user_query)
-        return self._call_llm_with_prompt(prompt)
-    
-    def _process_general_data_with_character_rules(self, raw_data: str, user_query: str,
-                                                 character_context: CharacterContext) -> str:
-        """Enhanced general data processing with character rule integration"""
-        prompt = self._create_character_aware_general_summary_prompt(raw_data, user_query, character_context)
-        return self._call_llm_with_prompt(prompt)
-    
-    def _process_log_character_only(self, raw_logs: str, user_query: str, 
-                                  character_context: CharacterContext) -> str:
-        """Character processing only for log content without summarization"""
-        prompt = self._create_character_processing_only_prompt(raw_logs, user_query, character_context)
-        return self._call_llm_with_prompt(prompt)
+        return self._call_llm_with_prompt(prompt, max_output_tokens=12000)
         
-    def _create_log_summary_prompt(self, logs: str, query: str) -> str:
-        """Create optimized prompt for log processing with minimal summarization"""
-        return f"""You are a mission log processor. Process the following mission logs in response to this query: "{query}"
+    def _extract_character_context(self, raw_data: str, user_query: str) -> CharacterContext:
+        """Extract minimal character context - only used for logs processing"""
+        # No roleplay state dependencies - always process content the same way
+        return CharacterContext()
+    
+    def _get_character_corrections(self) -> str:
+        """Get character corrections from log_patterns.py"""
+        try:
+            # Import character corrections from log_patterns.py
+            from .log_patterns import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, FALLBACK_CHARACTER_CORRECTIONS
+            
+            corrections = ["CHARACTER CORRECTIONS TO APPLY:"]
+            
+            # Add ship-specific corrections
+            corrections.append("SHIP-SPECIFIC CORRECTIONS:")
+            for ship, ship_corrections in SHIP_SPECIFIC_CHARACTER_CORRECTIONS.items():
+                correction_list = []
+                for incorrect, correct in ship_corrections.items():
+                    correction_list.append(f"'{incorrect}' → '{correct}'")
+                corrections.append(f"  * {ship.title()}: {', '.join(correction_list)}")
+            
+            # Add general character corrections
+            corrections.append("GENERAL CHARACTER CORRECTIONS:")
+            for incorrect, correct in FALLBACK_CHARACTER_CORRECTIONS.items():
+                corrections.append(f"  * '{incorrect}' → '{correct}'")
+            
+            return "\n".join(corrections)
+            
+        except Exception as e:
+            print(f"⚠️  Error loading character corrections: {e}")
+            return "CHARACTER CORRECTIONS: Apply basic character name corrections from context"
+            
+    def _create_log_summary_prompt(self, character_processed_logs: str, query: str) -> str:
+        """Create prompt for log summarization only (character processing already done)"""
+        
+        return f"""You are a mission log summarizer. Summarize the following character-processed mission logs in response to this query: "{query}"
 
-CRITICAL LENGTH REQUIREMENT: Your response should be approximately 30000-33000 characters. Use ALL available space to preserve as much log content as possible.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 35000-40000 characters. Use ALL available space to preserve as much log content as possible.
 
-INSTRUCTIONS:
-- PRESERVE as much original log content as possible - minimize summarization
-- Include ALL character dialogue, actions, and interactions
-- Maintain ALL character names, dates, locations, and specific details
-- Keep chronological order and preserve log structure
-- Include ALL significant events, decisions, and outcomes
-- Preserve character personalities through their actual words and actions
-- Keep ALL mission context, technical details, and background information
-- MINIMAL SUMMARIZATION: Only condense if absolutely necessary to fit 33000 characters
-- PRIORITY: Completeness over brevity - use every available character
-- Preserve the narrative flow and dramatic moments from the logs
+SUMMARIZATION INSTRUCTIONS:
+- The logs have already been character-processed (names corrected, timestamps removed, OOC filtered)
+- ORGANIZE BY NARRATIVE FLOW - like acts/scenes/episodes with natural story progression
+- IDENTIFY SCENE CHANGES based on:
+  * Location changes (bridge to engineering, ship to planet, etc.)
+  * Time shifts (different shifts, days, missions)
+  * Major plot developments or story beats
+  * Character group changes (different characters entering/leaving)
+- CREATE NARRATIVE SECTIONS that flow chronologically through the story
+- DIALOGUE SUMMARIZATION: Keep important contextual dialogue that reveals character relationships, plot developments, decisions, and mission-critical information
+- PRESERVE key character quotes that show personality, important decisions, or mission context
+- SUMMARIZE routine conversations but keep dialogue that advances the story or reveals character
+- INTEGRATE dialogue, actions, and narrative naturally within each scene/act
+- Include ALL character names, locations, and specific details
+- Focus on mission context, technical details, and background information
+- PRIORITY: Natural narrative flow that tells the story chronologically
 
-MISSION LOGS TO PROCESS:
+NARRATIVE SECTION FORMAT:
+=== ACT/SCENE: [Location/Setting] - [Brief Scene Description] ===
+[Integrated narrative combining dialogue, actions, and scene description in chronological order]
+- Key dialogue and character interactions
+- Important actions and decisions  
+- Environmental context and scene setting
+- Mission developments and plot progression
+
+EXAMPLE SECTIONS:
+=== SCENE: Bridge - Morning Shift Briefing ===
+=== SCENE: Engineering - Crisis Response ===
+=== SCENE: Ten Forward - Off-Duty Character Development ===
+=== SCENE: Away Mission - Planet Surface Exploration ===
+
+CHARACTER-PROCESSED MISSION LOGS TO SUMMARIZE:
+{character_processed_logs}
+
+Summarize these character-processed logs with narrative flow organization, creating natural story progression through acts/scenes. Integrate dialogue, actions, and narrative within each scene section. Focus on important contextual dialogue and mission-critical conversations while maintaining chronological story flow. ENSURE YOUR RESPONSE IS UNDER 40000 CHARACTERS."""
+
+    def _create_log_character_processing_prompt(self, logs: str, character_context: CharacterContext) -> str:
+        """Create prompt for character processing only (no summarization) - NO CHARACTER LIMITS"""
+        
+        # Get character corrections from log_patterns.py
+        character_corrections = self._get_character_corrections()
+        
+        return f"""You are a mission log character processor. Your ONLY job is to fix character names and remove timestamps/OOC content.
+
+{character_corrections}
+
+PROCESSING RULES:
+- DGM Character Control: Process [Character], Character:, (Character) patterns
+- DGM Gamemaster Accounts: liorexus, isis, cygnus, illuice, captain_rien, demoncherub
+- DOIC Channels: ALL of these contain valid roleplay content - remove ONLY the channel tags, keep ALL content:
+  * [DOIC] - Main channel with DGM narration and environmental descriptions
+  * [DOIC1] - Character dialogue and actions
+  * [DOIC2] - Character dialogue and actions  
+  * [DOIC3] - Character dialogue and actions
+  * [DOIC4] - Character dialogue and actions
+  * [DOIC5] - Character dialogue and actions
+- OOC Filtering: Remove ((text)), //text, ooc: patterns - but NOT [text] patterns (character names)
+
+🚨 CRITICAL: THIS IS FORMATTING ONLY - NOT SUMMARIZATION 🚨
+
+TARGET OUTPUT LENGTH: {len(logs) - 5000} to {len(logs)} characters
+(Input is {len(logs)} characters - output should be nearly identical length)
+
+FORMATTING TASKS (ONLY THESE 5 MINIMAL CHANGES):
+1. Fix character names using the rules above (e.g., "tolena" → "Captain Tolena Blaine")
+2. Remove timestamps like [2024-12-28 15:30:45] but keep stardates
+3. Remove channel name tags: [DOIC], [DOIC1], [DOIC2], [DOIC3], [DOIC4], [DOIC5] - BUT KEEP ALL CONTENT from these channels
+4. Remove OOC content: ((text)), //text, ooc: - BUT NOT [text] patterns (these could be character names)
+5. Process DGM patterns: [Character], Character:, (Character)
+
+THIS IS TEXT FORMATTING - NOT CONTENT REDUCTION
+
+WHAT YOU MUST NOT DO:
+❌ Do NOT summarize dialogue - keep every word of conversation
+❌ Do NOT summarize actions - keep every emote and action description  
+❌ Do NOT summarize narrative - keep every scene description
+❌ Do NOT remove any character interactions
+❌ Do NOT condense multiple paragraphs into fewer paragraphs
+❌ Do NOT create section headers or reorganize content
+❌ Do NOT shorten descriptions or explanations
+❌ Do NOT combine separate events into single descriptions
+❌ Do NOT remove repetitive content - keep all repetition
+❌ Do NOT paraphrase anything - use original wording
+❌ Do NOT filter out content from ANY DOIC channel - process ALL [DOIC], [DOIC1], [DOIC2], [DOIC3], [DOIC4], [DOIC5] content
+
+EXAMPLES OF CORRECT PROCESSING:
+INPUT: "[2024-12-28 15:30:45] tolena says 'Hello there, how are you doing today?'"
+OUTPUT: "Captain Tolena Blaine says 'Hello there, how are you doing today?'"
+(Notice: Only timestamp removed and character name corrected - dialogue preserved exactly)
+
+INPUT: "[DOIC1] tolena@liorexus says 'Welcome to the bridge, everyone.'"
+OUTPUT: "Captain Tolena Blaine says 'Welcome to the bridge, everyone.'"
+(Notice: Channel tag [DOIC1] removed, character name corrected, dialogue preserved exactly)
+
+INPUT: "[DOIC] The ship's lights dim as evening approaches. [DOIC2] Cadet Tavi enters the gym. [DOIC3] Engineering reports all systems normal."
+OUTPUT: "The ship's lights dim as evening approaches. Cadet Tavi enters the gym. Engineering reports all systems normal."
+(Notice: ALL channel tags removed, ALL content from ALL channels preserved)
+
+EXAMPLE OF WRONG PROCESSING:
+INPUT: Multiple paragraphs of detailed scene description
+WRONG OUTPUT: "The scene was busy with various activities"
+CORRECT OUTPUT: [Keep all original paragraphs exactly as written]
+
+EXPECTED OUTPUT LENGTH: {len(logs) - 5000} to {len(logs)} characters
+(You are processing {len(logs)} characters - return nearly the same amount)
+
+The only content reduction should be from removing timestamps, channel tags, and OOC patterns.
+Everything else must be preserved word-for-word.
+
+CONTENT TO PROCESS:
 {logs}
 
-Process these logs with minimal summarization, preserving as much original content as possible while staying under 14000 characters. Focus on keeping the complete story intact."""
+Apply ONLY the 5 formatting changes listed above. Return the content with character names corrected and timestamps/OOC removed. Do not change anything else. Your output should be {len(logs) - 5000}+ characters."""
 
-    def _create_character_aware_log_summary_prompt(self, logs: str, query: str, 
-                                                 character_context: CharacterContext) -> str:
-        """Create character-aware prompt for log summarization with disambiguation rules"""
-        
-        # Build character processing rules dynamically from log_patterns.py
-        character_rules = self._build_character_processing_rules(character_context)
-        character_context_text = "\n".join(character_rules)
-        
-        return f"""You are a mission log processor with character rule awareness. Process the following mission logs in response to this query: "{query}"
+    def _create_ship_summary_prompt(self, data: str, query: str) -> str:
+        """Create prompt for ship information processing"""
+        return f"""You are a starship database analyst. Process the following ship information in response to this query: "{query}"
 
-CHARACTER PROCESSING RULES:
-{character_context_text}
-
-CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. Use ALL available space to preserve as much log content as possible.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 35000-40000 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive ship information.
 
 INSTRUCTIONS:
-- APPLY character disambiguation rules using ship context
-- Process DGM character control patterns: [Character], Character:, (Character)
-- Filter out OOC content: ((text)), //text, [ooc text], ooc:
-- Handle [DOIC] channel content as narration/environmental description
-- Apply character name corrections and resolve ambiguities
-- PRESERVE as much original log content as possible - minimize summarization
-- Include ALL character dialogue, actions, and interactions
-- Maintain ALL character names, dates, locations, and specific details
-- Keep chronological order and preserve log structure
-- Include ALL significant events, decisions, and outcomes
-- Preserve character personalities through their actual words and actions
-- Keep ALL mission context, technical details, and background information
-- MINIMAL SUMMARIZATION: Only condense if absolutely necessary to fit 14000 characters
-- PRIORITY: Completeness over brevity - use every available character
-- Preserve the narrative flow and dramatic moments from the logs
+- Extract key ship specifications, capabilities, and technical details
+- Preserve important ship names, registry numbers, class information, and specifications
+- Organize information logically by ship systems, history, and capabilities
+- Include comprehensive technical context and operational background
+- Maintain accuracy of all factual ship data
+- Focus on information that directly answers the user's question about the ship
+- TARGET LENGTH: Aim for 35000-40000 characters - this should be a comprehensive, detailed response
+- Use the full available space to provide thorough coverage of ship information
+- Only summarize if absolutely necessary to fit within the character limit
 
-MISSION LOGS TO PROCESS:
-{logs}
+SHIP DATA TO PROCESS:
+{data}
 
-Process these logs with character rules applied and minimal summarization, preserving as much original content as possible while staying under 14000 characters. Focus on keeping the complete story intact with proper character disambiguation."""
+Provide a well-organized response that thoroughly addresses the user's ship query while preserving important technical specifications and operational information. ENSURE YOUR RESPONSE IS UNDER 40000 CHARACTERS."""
 
     def _create_general_summary_prompt(self, data: str, query: str) -> str:
-        """Create optimized prompt for general data"""
+        """Create prompt for general content processing"""
         return f"""You are a database analyst. Process the following information in response to this query: "{query}"
 
-CRITICAL LENGTH REQUIREMENT: Your response should be approximately 30000 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
+CRITICAL LENGTH REQUIREMENT: Your response should be approximately 35000-40000 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
 
 INSTRUCTIONS:
 - Extract key facts and relationships relevant to the query
@@ -460,93 +471,28 @@ INSTRUCTIONS:
 - Include comprehensive context and background information
 - Maintain accuracy of all factual content
 - Focus on information that directly answers the user's question
-- TARGET LENGTH: Aim for 30000 characters - this should be a comprehensive, detailed response
+- TARGET LENGTH: Aim for 35000-40000 characters - this should be a comprehensive, detailed response
 - Use the full available space to provide thorough coverage of the content
 - Only summarize if absolutely necessary to fit within the character limit
 
 DATA TO PROCESS:
 {data}
 
-Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. ENSURE YOUR RESPONSE IS UNDER 30000 CHARACTERS."""
+Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. ENSURE YOUR RESPONSE IS UNDER 40000 CHARACTERS."""
 
-    def _create_character_aware_general_summary_prompt(self, data: str, query: str,
-                                                     character_context: CharacterContext) -> str:
-        """Create character-aware prompt for general data with disambiguation rules"""
-        
-        # Build character processing rules dynamically from log_patterns.py
-        character_rules = self._build_character_processing_rules(character_context)
-        character_context_text = "\n".join(character_rules)
-        
-        return f"""You are a database analyst with character rule awareness. Process the following information in response to this query: "{query}"
-
-CHARACTER PROCESSING RULES:
-{character_context_text}
-
-CRITICAL LENGTH REQUIREMENT: Your response should be approximately 12000-13800 characters. This is a SUBSTANTIAL response - use most of the available space to provide comprehensive information.
-
-INSTRUCTIONS:
-- APPLY character disambiguation rules using ship context
-- Process character designations and resolve ambiguities
-- Filter out OOC content when appropriate
-- Handle [DOIC] channel content as narration/environmental description
-- Extract key facts and relationships relevant to the query
-- Preserve important names with proper formatting and ranks/titles
-- Organize information logically and clearly
-- Include comprehensive context and background information
-- Maintain accuracy of all factual content
-- Focus on information that directly answers the user's question
-- TARGET LENGTH: Aim for 12000-13800 characters - this should be a comprehensive, detailed response
-- Use the full available space to provide thorough coverage of the content
-- Only summarize if absolutely necessary to fit within the character limit
-
-DATA TO PROCESS:
-{data}
-
-Provide a well-organized response that thoroughly addresses the user's query while preserving important factual information and context. APPLY CHARACTER DISAMBIGUATION AND FILTERING RULES. ENSURE YOUR RESPONSE IS UNDER 14000 CHARACTERS."""
-
-    def _create_character_processing_only_prompt(self, logs: str, query: str, 
-                                               character_context: CharacterContext) -> str:
-        """Create prompt for character processing only (no summarization)"""
-        
-        # Build character processing rules dynamically from log_patterns.py
-        character_rules = self._build_character_processing_rules(character_context)
-        character_context_text = "\n".join(character_rules)
-        
-        return f"""You are a mission log character processor. Apply character disambiguation and formatting rules to the following content.
-
-CHARACTER PROCESSING RULES:
-{character_context_text}
-
-CRITICAL INSTRUCTIONS:
-- DO NOT SUMMARIZE OR SHORTEN THE CONTENT
-- Return the FULL ORIGINAL CONTENT with character processing applied
-- APPLY character disambiguation rules using ship context
-- Process DGM character control patterns: [Character], Character:, (Character)
-- Filter out OOC content: ((text)), //text, [ooc text], ooc:
-- Handle [DOIC] channel content as narration/environmental description
-- Apply character name corrections and resolve ambiguities
-- Preserve ALL original dialogue, actions, and narrative content
-- Maintain original structure and formatting
-- Only change character names and filter OOC content
-
-CONTENT TO PROCESS:
-{logs}
-
-Return the full content with character disambiguation and filtering applied. DO NOT SUMMARIZE."""
-
-    def _call_llm_with_prompt(self, prompt: str) -> str:
-        """Call LLM with the given prompt and validate response length"""
+    def _call_llm_with_prompt(self, prompt: str, max_output_tokens: int = 8250) -> str:
+        """Call LLM with the given prompt and configurable token limits"""
         if not self.client:
             raise Exception("Gemini client not initialized")
             
-        print(f"🔄 LLM CALL: Prompt size = {len(prompt)} chars")
+        print(f"🔄 LLM CALL: Prompt size = {len(prompt)} chars, max_tokens = {max_output_tokens}")
         
         try:
-            # Apply explicit generation limits – Gemini can output up to 6 000 tokens safely
+            # Apply explicit generation limits with configurable token count
             from google.generativeai.types import GenerationConfig
 
             generation_config = GenerationConfig(
-                max_output_tokens=13000,  # Allow up to ~52k chars (~13k tokens)
+                max_output_tokens=max_output_tokens,
                 temperature=0.7
             )
 
@@ -568,51 +514,7 @@ Return the full content with character disambiguation and filtering applied. DO 
             else:
                 raise Exception(f"LLM call failed: {e}")
                 
-    def _generate_fallback_response(self, query_type: str, user_query: str, 
-                                  is_roleplay: bool, retry_minutes: int) -> str:
-        """Generate context-appropriate fallback responses"""
-        if is_roleplay:
-            return self._generate_roleplay_fallback(query_type, user_query)
-        else:
-            return self._generate_nonroleplay_fallback(query_type, retry_minutes)
-            
-    def _generate_roleplay_fallback(self, query_type: str, user_query: str) -> str:
-        """Generate in-character responses when processing fails"""
-        
-        roleplay_fallbacks = {
-            "logs": [
-                "I'm having trouble accessing those records right now. My memory banks seem a bit foggy on that particular mission.",
-                "Those logs aren't coming to mind at the moment. Perhaps we could discuss something else while I sort through my data?",
-                "I don't recall that information right now. My stellar cartography databases are being a bit stubborn today.",
-                "My access to those mission records seems to be experiencing some interference. Could we try a different approach?"
-            ],
-            "general": [
-                "I'm drawing a blank on that topic right now. My knowledge systems seem to be taking a little break.",
-                "That information isn't readily available in my current memory banks. Perhaps I can help with something else?",
-                "I don't have that data at my fingertips right now. My databases are being rather selective today.",
-                "My information networks are having a quiet moment. Is there something else I can assist you with?"
-            ],
-            "character": [
-                "I'm not recalling much about them at the moment. My personnel files seem to be having a quiet moment.",
-                "That person isn't coming to mind right now. Perhaps you could refresh my memory with some details?",
-                "My character databases are being a bit elusive today. Could you tell me more about who you're asking about?"
-            ]
-        }
-        
-        # Select appropriate response based on query type
-        fallback_list = roleplay_fallbacks.get(query_type, roleplay_fallbacks["general"])
-        return random.choice(fallback_list)
-        
-    def _generate_nonroleplay_fallback(self, query_type: str, retry_minutes: int) -> str:
-        """Generate system-level responses when processing fails"""
-        
-        if retry_minutes > 0:
-            if retry_minutes == 1:
-                return f"Deep data searches are currently rate limited. Please try again in {retry_minutes} minute. For immediate assistance, try a more specific query."
-            else:
-                return f"Deep data searches are currently rate limited. Please try again in {retry_minutes} minutes. For immediate assistance, try a more specific query."
-        else:
-            return "Data processing services are temporarily unavailable. The system will automatically retry your request. You can also try rephrasing your query to be more specific."
+
             
     def get_processing_stats(self) -> Dict[str, int]:
         """Get current processing statistics"""
@@ -628,24 +530,6 @@ def get_llm_processor() -> LLMQueryProcessor:
     if _processor_instance is None:
         _processor_instance = LLMQueryProcessor()
     return _processor_instance
-
-
-def is_fallback_response(content: str) -> bool:
-    """Check if content is a fallback response"""
-    roleplay_indicators = [
-        "don't recall", "drawing a blank", "not coming to mind", 
-        "memory banks seem", "databases are being", "having a quiet moment",
-        "trouble accessing", "isn't readily available"
-    ]
-    
-    system_indicators = [
-        "rate limited", "try again", "temporarily unavailable",
-        "processing services", "system will automatically retry"
-    ]
-    
-    content_lower = content.lower()
-    return (any(indicator in content_lower for indicator in roleplay_indicators) or
-            any(indicator in content_lower for indicator in system_indicators))
 
 
 def should_process_data(data: str) -> bool:

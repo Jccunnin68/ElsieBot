@@ -9,6 +9,8 @@ general information.
 
 from typing import Dict, Any
 
+from handlers.handlers_utils import is_fallback_response
+
 
 class StandardContextBuilder:
     """Context builder for standard scenarios."""
@@ -120,11 +122,10 @@ from .content_retriever import (
     get_tell_me_about_content_prioritized,
     search_memory_alpha,
     get_log_url,
-    is_fallback_response
 )
 from .llm_query_processor import get_llm_processor, should_process_data
-# Note: Using local imports to avoid circular dependency with query_detection
-from ..handlers_utils import convert_earth_date_to_star_trek
+from ..handlers_utils import is_fallback_response
+
 
 
 def _process_large_content_if_needed(content: str, query_type: str, user_query: str, is_roleplay: bool = False) -> str:
@@ -175,7 +176,7 @@ def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool
     print(f"   - Retrieved focused content length: {len(wiki_info)} chars")
     
     # Process through secondary LLM if content is too large
-    wiki_info = _process_large_content_if_needed(wiki_info, context_type, focus_subject, is_roleplay)
+            # Content already processed by content retriever functions if needed
     
     # STANDARD: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
@@ -184,7 +185,7 @@ def get_focused_continuation_context(strategy: Dict[str, Any], is_roleplay: bool
 - Create a focused, comprehensive narrative about: {focus_subject}
 - Context type: {context_type}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
-- PROVIDE UP TO 8000 CHARACTERS in your response - be detailed and comprehensive
+- PROVIDE UP TO 13000 CHARACTERS in your response - be detailed and comprehensive
 - SYNTHESIZE the information into flowing, narrative paragraphs rather than bullet points
 - If no specific information is found, provide a thoughtful general response
 - Connect different aspects of the information to tell a complete story
@@ -252,7 +253,7 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is
         character_info = _get_character_info_optimized(character_name, is_roleplay=is_roleplay)
     
     # Process through secondary LLM if content is too large
-    character_info = _process_large_content_if_needed(character_info, "character", user_message, is_roleplay)
+            # Content already processed by content retriever functions if needed
     
     # STANDARD: Preserve real Earth dates - no conversion needed
     converted_character_info = character_info
@@ -261,7 +262,7 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is
 - Create a comprehensive narrative biography about: {character_name}
 - ONLY use information provided in the DATABASE SEARCH RESULTS section below
 - DO NOT invent, create, or extrapolate beyond what is explicitly stated in the records
-- PROVIDE UP TO 7990 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
+- PROVIDE UP TO 13000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
 - SYNTHESIZE the information into flowing, narrative paragraphs that tell their story
 - Include rank, position, ship assignment, achievements, and personal background when available
 - Focus on their role, personality, relationships, and what made them special to their crew
@@ -271,7 +272,7 @@ def get_character_context(user_message: str, strategy: Dict[str, Any] = None, is
 - End with: "Was that all you wanted to know about {character_name}?"
 - DO NOT include meeting times, GM names, or session schedule information
 - Present information as a flowing biographical narrative, not raw data or bullet points
-- use all 8000 characters of the response space unless the original content is less than 8000 characters
+- use all 13000 characters of the response space unless the original content is less than 13000 characters
 - Always end in a complete thought and not a partial thought.
 
 DATABASE SEARCH RESULTS:
@@ -344,7 +345,7 @@ def get_federation_archives_context(user_message: str, is_roleplay: bool = False
     print(f"   - Retrieved archives content length: {len(archives_info)} chars")
     
     # Process through secondary LLM if content is too large
-    archives_info = _process_large_content_if_needed(archives_info, "general", user_message, is_roleplay)
+            # Content already processed by content retriever functions if needed
     
     # STANDARD: Preserve real Earth dates - no conversion needed
     converted_archives_info = archives_info
@@ -494,7 +495,6 @@ Present this information naturally and suggest the user try again later or rephr
     
     return f"""CRITICAL INSTRUCTIONS FOR LOG INFORMATION QUERIES:
 - Present and organize the log information for: {log_type_description}
--START WITH "I AM IN FALLBACK MODE" printed in bold
 - ENHANCED SEARCH was performed: prioritizing log-specific content over general information
 - Search focused specifically on mission logs when ship/character names were combined with log terms
 - PROVIDE UP TO 8000 CHARACTERS in your response - be comprehensive and detailed summarize if needed to stay under the limit
@@ -533,11 +533,10 @@ def get_tell_me_about_context(user_message: str, is_roleplay: bool = False) -> s
     print(f"🔍 TELL ME ABOUT: '{subject}' (roleplay={is_roleplay})")
     
     # Use prioritized search that focuses on ship info and personnel over logs
-    wiki_info = get_tell_me_about_content_prioritized(subject, is_roleplay=is_roleplay)
+    wiki_info = get_tell_me_about_content_prioritized(subject)
     print(f"   - Retrieved tell me about content length: {len(wiki_info)} chars")
     
-    # Process through secondary LLM if content is too large
-    wiki_info = _process_large_content_if_needed(wiki_info, "general", user_message, is_roleplay)
+    # Content already processed by content retriever functions if needed
     
     # STANDARD: Preserve real Earth dates - no conversion needed
     converted_wiki_info = wiki_info
@@ -625,8 +624,7 @@ def get_ship_context(ship_name: str, strategy: Dict[str, Any] = None, is_rolepla
         print(f"   🔄 Falling back to original ship information search")
         ship_info = get_ship_information(ship_name)
     
-    # Process through secondary LLM if content is too large
-    ship_info = _process_large_content_if_needed(ship_info, "general", ship_name, is_roleplay)
+    # Content already processed by content retriever functions if needed
     
     # STANDARD: Preserve real Earth dates - no conversion needed
     converted_ship_info = ship_info
@@ -658,11 +656,10 @@ Transform the database information into a comprehensive, informative prose that 
 def get_general_with_context(user_message: str, is_roleplay: bool = False) -> str:
     """Generate general context with light database information."""
     print(f"📋 SEARCHING LIGHT CONTEXT DATA (roleplay={is_roleplay})")
-    wiki_info = get_relevant_wiki_context(user_message, is_roleplay=is_roleplay)
+    wiki_info = get_relevant_wiki_context(user_message)
     print(f"   - Retrieved general context length: {len(wiki_info)} chars")
     
-    # Process through secondary LLM if content is too large
-    wiki_info = _process_large_content_if_needed(wiki_info, "general", user_message, is_roleplay)
+    # Content already processed by content retriever functions if needed
     
     print(f"   ⚠️  STANDARD Query: Preserving real Earth dates for accuracy")
     # STANDARD: Preserve real Earth dates - no conversion needed

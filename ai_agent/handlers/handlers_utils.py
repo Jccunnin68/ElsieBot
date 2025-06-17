@@ -111,3 +111,23 @@ def estimate_token_count(text: str) -> int:
     if not text:
         return 0
     return int(len(text) / 4)
+
+
+def is_fallback_response(content: str) -> bool:
+    """
+    Check if content is a fallback response from LLM processing.
+    
+    Fallback responses are returned when LLM processing fails due to:
+    - Rate limiting
+    - API errors  
+    - Processing failures
+    
+    Args:
+        content: The content string to check
+        
+    Returns:
+        bool: True if content is a fallback response, False otherwise
+    """
+    if not content:
+        return False
+    return content.startswith("LLM_PROCESSOR_FALLBACK_")

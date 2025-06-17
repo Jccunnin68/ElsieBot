@@ -8,6 +8,8 @@ emotional intelligence integration and character relationship awareness.
 
 from typing import Dict, Any, List
 
+from handlers.handlers_utils import is_fallback_response
+
 
 class RoleplayContextBuilder:
     """Context builder for roleplay scenarios."""
@@ -23,8 +25,7 @@ class RoleplayContextBuilder:
 
 from .content_retriever import (
     get_relevant_wiki_context, 
-    get_tell_me_about_content_prioritized,
-    is_fallback_response
+    get_tell_me_about_content_prioritized
 )
 
 
@@ -762,10 +763,10 @@ def _get_roleplay_database_context(user_message: str) -> str:
         if not character_info:
             # Fallback to prioritized search
             print(f"   🔄 Falling back to prioritized character search")
-            character_info = get_tell_me_about_content_prioritized(character_name, is_roleplay=True)
+            character_info = get_tell_me_about_content_prioritized(character_name)
         
         # Process through secondary LLM if content is too large
-        character_info = _process_large_content_if_needed_roleplay(character_info, "character", user_message, is_roleplay=True)
+        # Content already processed by content retriever functions if needed
         
         # Check if this is a fallback response
         if is_fallback_response(character_info):
@@ -793,10 +794,10 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what s
     elif tell_me_about_subject:
         print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
         # Use prioritized search for general subjects
-        subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject, is_roleplay=True)
+        subject_info = get_tell_me_about_content_prioritized(tell_me_about_subject)
         
         # Process through secondary LLM if content is too large
-        subject_info = _process_large_content_if_needed_roleplay(subject_info, "general", user_message, is_roleplay=True)
+        # Content already processed by content retriever functions if needed
         
         # Check if this is a fallback response
         if is_fallback_response(subject_info):
@@ -824,10 +825,10 @@ ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her kn
     else:
         print(f"   📋 GENERAL ROLEPLAY CONTEXT")
         # Use general wiki context for other queries
-        general_info = get_relevant_wiki_context(user_message, is_roleplay=True)
+        general_info = get_relevant_wiki_context(user_message)
         
         # Process through secondary LLM if content is too large
-        general_info = _process_large_content_if_needed_roleplay(general_info, "general", user_message, is_roleplay=True)
+        # Content already processed by content retriever functions if needed
         
         # Check if this is a fallback response
         if is_fallback_response(general_info):
