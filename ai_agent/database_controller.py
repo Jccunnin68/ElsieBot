@@ -203,6 +203,23 @@ class FleetDatabaseController:
             print(f"✗ Error getting character categories: {e}")
             return []
     
+    def get_all_categories(self) -> List[str]:
+        """Get all distinct categories from the database"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT unnest(categories) as category
+                        FROM wiki_pages
+                        WHERE categories IS NOT NULL AND array_length(categories, 1) > 0
+                        ORDER BY category
+                    """)
+                    categories = [row[0] for row in cur.fetchall()]
+                    return categories
+        except Exception as e:
+            print(f"✗ Error getting all categories: {e}")
+            return []
+    
     # ==============================================================================
     # RESULT PROCESSING HELPERS
     # ==============================================================================

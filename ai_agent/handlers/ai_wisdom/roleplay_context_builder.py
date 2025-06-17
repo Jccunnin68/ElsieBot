@@ -11,6 +11,8 @@ SIMPLIFIED: Now routes all database queries through the unified search system.
 from typing import Dict, Any, List
 
 from handlers.handlers_utils import is_fallback_response
+from ..ai_logic.structured_query_detector import StructuredQueryDetector
+from .structured_content_retriever import StructuredContentRetriever
 
 
 class RoleplayContextBuilder:
@@ -24,10 +26,6 @@ class RoleplayContextBuilder:
             return get_enhanced_roleplay_context(strategy, user_message)
         else:
             return get_roleplay_context(strategy, user_message)
-
-from .content_retriever import (
-    get_content
-)
 
 
 
@@ -103,7 +101,7 @@ def get_roleplay_context(strategy: Dict[str, Any], user_message: str) -> str:
     
     if needs_database:
         print(f"   🔍 ROLEPLAY DATABASE QUERY DETECTED")
-        database_context = _get_roleplay_database_context(user_message)
+        database_context = _get_structured_roleplay_database_context(user_message)
         print(f"   📚 Database context length: {len(database_context)} chars")
     
     # NEW: Get conversation memory context
@@ -361,7 +359,9 @@ def get_enhanced_roleplay_context(strategy: Dict[str, Any], user_message: str) -
     # Database context if needed
     database_context = ""
     if strategy.get('needs_database'):
-        database_context = _get_roleplay_database_context(user_message)
+        print(f"   🔍 ENHANCED ROLEPLAY: DATABASE QUERY DETECTED")
+        database_context = _get_structured_roleplay_database_context(user_message)
+        print(f"   📚 Database context length: {len(database_context)} chars")
     
     # Personality emphasis
     personality_context = _build_personality_context(contextual_cues)
@@ -706,106 +706,43 @@ def _check_roleplay_database_needs(user_message: str) -> bool:
     return any(pattern in message_lower for pattern in database_patterns)
 
 
-def _get_roleplay_database_context(user_message: str) -> str:
-    """Get database context for roleplay scenarios using unified search"""
-    print(f"🎭 ROLEPLAY DATABASE CONTEXT: '{user_message}'")
+def _get_structured_roleplay_database_context(user_message: str) -> str:
+    """
+    Gets database context for roleplay scenarios using the new structured query system.
+    This allows Elsie to answer specific questions in-character.
+    """
+    print(f"🎭 STRUCTURED ROLEPLAY DATABASE CONTEXT: '{user_message}'")
     
-    # Check if this is a character query
-    from ..ai_logic.query_detection import is_character_query, extract_tell_me_about_subject
+    detector = StructuredQueryDetector()
+    structured_query = detector.detect_query(user_message)
     
-    is_char_query, character_name = is_character_query(user_message)
-    tell_me_about_subject = extract_tell_me_about_subject(user_message)
-    
-    if is_char_query and character_name:
-        print(f"   🧑 UNIFIED CHARACTER QUERY: '{character_name}'")
-        
-        # Use unified content retriever with character content type
-        character_info = get_content(character_name, content_type='characters')
-        print(f"   ✅ Unified character info: {len(character_info)} characters")
-        
-        # Check if this is a fallback response
-        if is_fallback_response(character_info):
-            print(f"   ⚠️  Fallback response detected for character query")
-            return f"""
-ROLEPLAY DATABASE CONTEXT - CHARACTER QUERY:
-Subject: {character_name}
-Status: Processing limitations encountered
+    # Only proceed if a specific, non-general query was detected in the roleplay.
+    if structured_query.get('type') == 'general':
+        return "" # No specific query, so no database context needed.
 
-{character_info}
+    retriever = StructuredContentRetriever()
+    results = retriever.get_content(structured_query)
 
-ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing her memory banks about this person.
+    if not results:
+        return """
+ROLEPLAY INSTRUCTION: You search your memory banks but find no specific information matching that request. Respond naturally that you don't have the information.
 """
-        
-        return f"""
-ROLEPLAY DATABASE CONTEXT - CHARACTER QUERY:
-Subject: {character_name}
-Database Results: {len(character_info)} characters
 
-{character_info}
-
-ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what she knows about this person from her databases.
-"""
+    # Format the results into a readable string for the prompt
+    formatted_results = []
+    for result in results:
+        title = result.get('title', 'Untitled')
+        content = result.get('raw_content', 'No content.')
+        formatted_results.append(f"**{title}**\n{content}")
     
-    elif tell_me_about_subject:
-        print(f"   📖 TELL ME ABOUT QUERY: '{tell_me_about_subject}'")
-        # Use unified content retriever for general subjects
-        subject_info = get_content(tell_me_about_subject, content_type='general')
-        
-        # Check if this is a fallback response
-        if is_fallback_response(subject_info):
-            print(f"   ⚠️  Fallback response detected for tell me about query")
-            return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL QUERY:
-Subject: {tell_me_about_subject}
-Status: Processing limitations encountered
+    final_content = '\n\n---\n\n'.join(formatted_results)
 
-{subject_info}
-
-ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing information about this topic.
-"""
-        
-        return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL QUERY:
-Subject: {tell_me_about_subject}
-Database Results: {len(subject_info)} characters
-
-{subject_info}
-
-ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing her knowledge about this topic.
-"""
-    
-    else:
-        print(f"   📋 GENERAL ROLEPLAY CONTEXT")
-        # Use unified content retriever for other queries
-        general_info = get_content(user_message, content_type='general')
-        
-        # Check if this is a fallback response
-        if is_fallback_response(general_info):
-            print(f"   ⚠️  Fallback response detected for general query")
-            return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL:
+    return f"""
+ROLEPLAY DATABASE CONTEXT:
 Query: {user_message}
-Status: Processing limitations encountered
+Database Results:
 
-{general_info}
+{final_content}
 
-ROLEPLAY INSTRUCTION: Present this naturally as Elsie having difficulty accessing her databases right now.
-"""
-        
-        if general_info:
-            return f"""
-ROLEPLAY DATABASE CONTEXT - GENERAL:
-Query: {user_message}
-Database Results: {len(general_info)} characters
-
-{general_info}
-
-ROLEPLAY INSTRUCTION: Use this information naturally in your roleplay response as Elsie's knowledge.
-"""
-        else:
-            return """
-ROLEPLAY DATABASE CONTEXT - GENERAL:
-No specific database information found for this query.
-
-ROLEPLAY INSTRUCTION: Respond naturally without specific database information, focusing on character interaction.
+ROLEPLAY INSTRUCTION: Present this information naturally as Elsie sharing what she knows or recalls from her databases. Weave it into the conversation, don't just recite it.
 """ 

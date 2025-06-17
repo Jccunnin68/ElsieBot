@@ -15,16 +15,19 @@ ENHANCED: Quick database response mode for efficient roleplay flow.
 """
 
 from typing import Dict, List, Optional
-
-
+import traceback
 
 from .response_decision import ResponseDecision
-from .query_detection import detect_query_type_with_conflicts
+from ..ai_attention.state_manager import get_roleplay_state
+from ..ai_attention.context_gatherer import build_contextual_cues
+from ..ai_attention.response_logic import check_if_other_character_addressed
+from ..ai_logic.response_decision_engine import create_response_decision_engine
 
 
 def handle_roleplay_message(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
     """
-    Enhanced roleplay handler with quick database responses and contextual intelligence.
+    Handles incoming messages when the AI is in a roleplay state.
+    This is the primary entry point for all roleplay interactions.
     
     Roleplay mode provides:
     - Quick database queries (single best result)
@@ -48,137 +51,39 @@ def handle_roleplay_message(user_message: str, conversation_history: List, chann
     if is_cross_channel_message(channel_context):
         return handle_cross_channel_busy(None, channel_context)
     
-    # Detect query type with conflict resolution
-    query_info = detect_query_type_with_conflicts(user_message)
+    # Get current roleplay session state
+    session_id = channel_context.get('channel_id', 'unknown')
+    rp_state = get_roleplay_state()
+    turn_number = len(conversation_history) + 1
     
-    print(f"   📋 Query Analysis: {query_info['type']} - {query_info.get('subject', 'N/A')}")
-    if query_info.get('conflict_resolved'):
-        print(f"      ⚖️  Conflict Resolution: {query_info['conflict_resolved']}")
+    print(f"      📊 Roleplay State: {rp_state.current_mode}")
+    print(f"      🔄 Turn: {turn_number}")
     
-    # Route to quick response strategies for database queries
-    database_query_types = ['character', 'ship', 'ship_log', 'character_log', 'tell_me_about']
-    if query_info['type'] in database_query_types:
-        return _handle_roleplay_database_query(user_message, query_info)
+    # Use the new enhanced decision engine
+    decision_engine = create_response_decision_engine()
+    contextual_cues = build_contextual_cues(user_message, rp_state, turn_number)
     
-    # Route to standard roleplay processing for non-database queries
-    return _handle_standard_roleplay(user_message, conversation_history, channel_context)
+    # The decision engine now provides the complete, final decision
+    llm_decision = decision_engine.getNextResponseEnhanced(contextual_cues)
 
+    # Update state based on the decision
+    _update_roleplay_state_from_decision(llm_decision, contextual_cues, rp_state, turn_number)
 
-def _handle_roleplay_database_query(user_message: str, query_info: Dict) -> ResponseDecision:
-    """
-    Quick database query for roleplay contexts - return single best result.
+    # Convert the LLM's decision into the final ResponseDecision format
+    response = _convert_to_final_response_decision(llm_decision, contextual_cues)
     
-    KEY FEATURE: No disambiguation, just return the most relevant result quickly
-    to maintain roleplay flow.
-    """
-    print(f"   🚀 ROLEPLAY QUICK DATABASE: {query_info['type']}")
-    
-    strategy = {
-        'approach': 'roleplay_quick_database',
-        'needs_database': True,
-        'query_type': query_info['type'],
-        'subject': query_info.get('subject'),
-        'context_priority': 'roleplay',
-        'reasoning': f"Roleplay quick database query: {query_info['type']} - {query_info.get('subject', 'N/A')}"
-    }
-    
-    # Add specific query details
-    if query_info.get('log_type'):
-        strategy['log_type'] = query_info['log_type']
-    
-    # Add category intersection requirements
-    if query_info.get('requires_category_intersection'):
-        strategy['valid_categories'] = query_info['valid_categories']
-        strategy['requires_category_intersection'] = True
-        print(f"      📂 Category intersection required: {query_info['valid_categories']}")
-    
-    # Add conflict resolution info
-    if query_info.get('conflict_resolved'):
-        strategy['conflict_info'] = query_info['conflict_resolved']
-        print(f"      ⚖️  Conflict resolved: {query_info['conflict_resolved']}")
-    
-    return ResponseDecision(
-        needs_ai_generation=True,
-        pre_generated_response=None,
-        strategy=strategy
-    )
+    # Add database context if the decision requires it
+    if _should_use_database(llm_decision, contextual_cues):
+        print(f"   📚 Roleplay decision requires database context.")
+        # This flag will be used by the context builder later
+        response.strategy['needs_database'] = True
 
-
-def _handle_standard_roleplay(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
-    """
-    Standard roleplay processing using enhanced contextual intelligence.
-    
-    This uses the existing enhanced roleplay system with contextual cues
-    and emotional intelligence integration.
-    """
-    print(f"   🎭 STANDARD ROLEPLAY PROCESSING")
-    
-    try:
-        # Import roleplay state management
-        from ..ai_attention.state_manager import get_roleplay_state
-        
-        # Get current roleplay session state
-        session_id = channel_context.get('channel_id', 'unknown')
-        rp_state = get_roleplay_state()
-        turn_number = len(conversation_history) + 1
-        
-        print(f"      📊 Roleplay State: {rp_state.current_mode}")
-        print(f"      🔄 Turn: {turn_number}")
-        
-        # Enhanced LLM-based routing and contextual intelligence processing
-        from ..ai_attention.conversation_memory import ConversationMemory
-        
-        # Use conversation memory for LLM-enhanced routing
-        conversation_memory = ConversationMemory()
-        
-        # Add current turn to conversation memory
-        conversation_memory.add_turn(
-            speaker="User",
-            message=user_message,
-            turn_number=turn_number,
-            message_type="standard"
-        )
-        
-        # Get LLM-enhanced routing decision
-        routing_result = conversation_memory.process_message_enhanced(
-            user_message, 
-            turn_number, 
-            conversation_history, 
-            channel_context
-        )
-        
-        print(f"      🧠 LLM Routing: {routing_result.get('processing_approach', 'unknown')}")
-        print(f"      🎯 Confidence: {routing_result.get('routing_confidence', 0.0):.2f}")
-        
-        # Convert LLM routing to response decision
-        response_decision = _convert_llm_routing_to_response_decision(routing_result, user_message)
-        
-        # Update roleplay state
-        _update_roleplay_state_from_decision(response_decision, routing_result.get('contextual_cues'), rp_state, turn_number)
-        
-        # Convert to final response decision
-        final_decision = _convert_to_final_response_decision(response_decision, routing_result.get('contextual_cues'))
-        
-        return final_decision
-        
-    except Exception as e:
-        print(f"   ❌ ERROR in standard roleplay processing: {e}")
-        # Fallback to simple roleplay response
-        return ResponseDecision(
-            needs_ai_generation=True,
-            pre_generated_response=None,
-            strategy={
-                'approach': 'roleplay_fallback',
-                'needs_database': False,
-                'reasoning': f'Roleplay processing error fallback: {e}',
-                'context_priority': 'roleplay'
-            }
-        )
+    return response
 
 
 def handle_cross_channel_busy(rp_state, channel_context: Dict) -> ResponseDecision:
     """
-    Handle cross-channel busy state - Elsie is active in another channel.
+    Handles messages sent to a different channel while Elsie is in roleplay.
     
     Returns a pre-generated response indicating she's busy elsewhere.
     """
@@ -401,9 +306,6 @@ def _convert_llm_routing_to_response_decision(routing_result: Dict, user_message
         print(f"      ❌ Error converting LLM routing: {e}")
         # Fallback to basic response decision
         return _create_basic_response_decision(user_message)
-
-
-
 
 
 def _create_basic_response_decision(user_message: str):
