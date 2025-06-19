@@ -635,6 +635,89 @@ class FleetDatabaseController:
                 order_by=order_by
             )
 
+    # ==============================================================================
+    # SPECIALIZED SEARCH METHODS
+    # ==============================================================================
+    
+    def search_ships(self, query: str, limit: int = 10) -> List[Dict]:
+        """
+        Search for ships with priority given to Active Starships over Inactive ones.
+        
+        Args:
+            query: Ship name to search for
+            limit: Max results
+            
+        Returns:
+            List of ship results with active ships prioritized
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    
+                    print(f"🚢 SHIP SEARCH: '{query}' with active ship priority")
+                    
+                    # Get all ship categories
+                    ship_categories = self.get_ship_categories()
+                    
+                    if not ship_categories:
+                        print("   ⚠️  No ship categories available")
+                        return []
+                    
+                    # Build query with ship category filter and active ship priority
+                    ts_query = self._format_search_query(query)
+                    
+                    base_query = """
+                        SELECT id, title, raw_content, url, categories,
+                               CASE 
+                                   WHEN to_tsvector('english', title) @@ to_tsquery('english', %s) THEN
+                                       ts_rank(to_tsvector('english', title), to_tsquery('english', %s)) + 2.0
+                                   ELSE 
+                                       ts_rank(to_tsvector('english', raw_content), to_tsquery('english', %s))
+                               END as rank,
+                               CASE 
+                                   WHEN 'Active Starships' = ANY(categories) THEN 3
+                                   WHEN 'Starships' = ANY(categories) THEN 2
+                                   WHEN 'Inactive Starships' = ANY(categories) THEN 1
+                                   ELSE 0
+                               END as ship_priority
+                        FROM wiki_pages 
+                        WHERE (
+                            to_tsvector('english', title) @@ to_tsquery('english', %s) OR
+                            to_tsvector('english', raw_content) @@ to_tsquery('english', %s)
+                        )
+                        AND categories IS NOT NULL 
+                        AND array_length(categories, 1) > 0 
+                        AND categories && %s
+                        ORDER BY ship_priority DESC, rank DESC, id DESC
+                        LIMIT %s
+                    """
+                    
+                    params = [ts_query, ts_query, ts_query, ts_query, ts_query, ship_categories, limit]
+                    
+                    cur.execute(base_query, params)
+                    results = [dict(row) for row in cur.fetchall()]
+                    
+                    print(f"   ✅ Found {len(results)} ship results")
+                    
+                    # Log the prioritization for debugging
+                    for i, result in enumerate(results):
+                        title = result.get('title', 'Unknown')
+                        categories = result.get('categories', [])
+                        ship_priority = result.get('ship_priority', 0)
+                        priority_name = {3: 'Active', 2: 'Standard', 1: 'Inactive', 0: 'Other'}[ship_priority]
+                        print(f"   {i+1}. {title} (Priority: {priority_name}) - Categories: {categories}")
+                    
+                    # Track content access for returned results
+                    if results:
+                        page_ids = [result['id'] for result in results]
+                        self.update_content_accessed(page_ids)
+                    
+                    return results
+                    
+        except Exception as e:
+            print(f"✗ Error in ship search: {e}")
+            return []
+
 # Global database controller instance
 db_controller = None
 

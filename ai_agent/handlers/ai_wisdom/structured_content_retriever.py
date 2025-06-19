@@ -48,8 +48,8 @@ class StructuredContentRetriever:
 
             if 'ship' in category_lower:
                 print(f"   - Wildcarding category '{category}' as a ship...")
-                search_categories = self.db_controller.get_ship_categories()
-                limit = 1
+                # Use prioritized ship search for active ship preference
+                return self.db_controller.search_ships(query=subject, limit=1)
             elif 'character' in category_lower or 'npc' in category_lower:
                 print(f"   - Wildcarding category '{category}' as a character...")
                 search_categories = self.db_controller.get_character_categories()
@@ -152,6 +152,10 @@ class StructuredContentRetriever:
         # Enhanced character search with interaction analysis
         if query_type == 'character':
             return self._handle_enhanced_character_search(term, categories)
+        
+        # Enhanced ship search with active ship priority
+        if query_type == 'ship':
+            return self.db_controller.search_ships(query=term, limit=1)
         
         return self.db_controller.search(query=term, categories=categories, limit=1)
     
