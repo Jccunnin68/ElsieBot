@@ -51,11 +51,20 @@ class ContentProcessor:
         Process raw wikitext by leveraging HTML parsing.
         """
         try:
-            parsed_content = page_data.get('parsed', {})
+            html_content = page_data.get('parsed', {}).get('text', {}).get('*', '')
+            if not html_content:
+                # Fallback to raw wikitext if parsed HTML is missing
+                wikitext = page_data.get('raw_wikitext', '')
+                return self.build_simple_formatted_content(title, wikitext)
+
             text_extract = page_data.get('extract', '')
-            return self.build_formatted_content(title, parsed_content, text_extract)
+            sections = page_data.get('parsed', {}).get('sections', [])
+            
+            return self.build_formatted_content(title, html_content, text_extract, sections)
         except Exception as e:
+            logging.error(f"Error processing wikitext for '{title}': {e}")
             wikitext = page_data.get('raw_wikitext', '')
+            # Basic HTML tag stripping as a final fallback
             basic_text = re.sub(r'<[^>]+>', '', wikitext)
             return f"**{title}**\n\n{basic_text}"
 
@@ -208,17 +217,36 @@ class ContentProcessor:
             if final_speaker:
                 last_processed_speaker = final_speaker
 
-        return f"**{title}**\n\n" + "\n".join(cleaned_lines)
+        return f"**{title}**\\n\\n" + "\\n".join(cleaned_lines)
 
-    def build_formatted_content(self, title: str, parsed_content: dict, text_extract: str) -> str:
+    def _clean_wikitext(self, text: str) -> str:
+        """Cleans wikitext formatting from a string."""
+        # Handle [[link|display]] -> display
+        text = re.sub(r'\\[\\[(?:[^|]+\\|)?([^]]+)\\]\\]', r'\\1', text)
+        # Handle [[link]] -> link
+        text = re.sub(r'\\[\\[([^]]+)\\]\\]', r'\\1', text)
+        # Handle bold '''text''' -> text
+        text = re.sub(r"'''(.*?)'''", r'\\1', text)
+        # Handle italics ''text'' -> text
+        text = re.sub(r"''(.*?)''", r'\\1', text)
+        # Remove ==Headings== but keep the text
+        text = re.sub(r'=+\\s*(.*?)\\s*=*', r'\\1', text)
+        # Remove leftover HTML tags that BeautifulSoup might miss
+        text = re.sub(r'</?[^>]+>', '', text)
+        return text.strip()
+
+    def build_formatted_content(self, title: str, html_content: str, text_extract: str, sections: List[Dict]) -> str:
         """Builds a formatted string from structured page content."""
-        content_parts = [f"**{title}**\n"]
-        if text_extract and len(text_extract.strip()) > 20:
-            content_parts.append(f"## Summary\n{text_extract}\n")
+        soup = BeautifulSoup(html_content, 'html.parser')
         
-        full_content = '\n'.join(content_parts)
-        full_content = re.sub(r'\n{3,}', '\n\n', full_content)
-        return full_content.strip()
+        # Get all text from the parsed HTML, preserving line breaks
+        full_text = soup.get_text(separator='\\n', strip=True)
+        
+        # Clean the wikitext formatting from the extracted text
+        cleaned_text = self._clean_wikitext(full_text)
+        
+        # Combine everything with the main title
+        return f"**{title}**\\n\\n{cleaned_text}"
 
     def build_simple_formatted_content(self, title: str, extract_content: str) -> str:
         """Builds simple formatted content from extract."""
@@ -229,11 +257,9 @@ class ContentProcessor:
         
         return '\n'.join(content_parts).strip()
 
-    def extract_infobox_from_html(self, html: str) -> Optional[str]:
+    def extract_infobox_from_html(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract and format infobox data from HTML"""
         try:
-            soup = BeautifulSoup(html, 'html.parser')
-            
             # Look for portable infobox (Fandom's standard)
             infobox = soup.find('aside', class_='portable-infobox')
             if not infobox:
@@ -254,24 +280,26 @@ class ContentProcessor:
     def extract_section_content(self, soup: BeautifulSoup, section_anchor: str) -> Optional[str]:
         """Extract content for a specific section"""
         try:
-            # Find the heading with this anchor
-            heading = soup.find(attrs={'id': section_anchor})
-            if heading:
-                content_parts = []
-                current = heading.find_next_sibling()
+            heading = soup.find(id=section_anchor)
+            if not heading:
+                return None
+
+            content_html = []
+            parent_heading = heading.find_parent(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            if not parent_heading:
+                return None # Should not happen if anchor is on a heading
                 
-                while current and current.name not in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-                    if current.name in ['p', 'div'] and current.get_text(strip=True):
-                        text = current.get_text(strip=True)
-                        if len(text) > 20:
-                            content_parts.append(text)
-                    current = current.find_next_sibling()
-                    # Remove limit - get ALL section content for mission logs
-                
-                return ' '.join(content_parts) if content_parts else None
-            return None
+            current_level = int(parent_heading.name[1])
+
+            for sibling in parent_heading.find_next_siblings():
+                if sibling.name and sibling.name.startswith('h') and int(sibling.name[1]) <= current_level:
+                    break
+                # Convert HTML content of the sibling to clean text
+                content_html.append(sibling.get_text(separator='\\n', strip=True))
             
+            return '\\n'.join(content_html).strip() if content_html else None
         except Exception as e:
+            logging.warning(f"  ⚠️  Error extracting content for section {section_anchor}: {e}")
             return None
     
     def extract_fallback_content(self, html: str) -> Optional[str]:
@@ -331,106 +359,4 @@ class ContentProcessor:
             
         except Exception as e:
             print(f"  ⚠️  Error in fallback extraction: {e}")
-            return None
-    
-    def build_formatted_content(self, title: str, parsed_content: dict, text_extract: str) -> str:
-        """Build comprehensive formatted content similar to fandom-py output"""
-        content_parts = []
-        
-        # Add title
-        content_parts.append(f"**{title}**\n")
-        
-        # Add summary if available
-        if text_extract and len(text_extract.strip()) > 20:
-            content_parts.append(f"## Summary\n{text_extract}\n")
-        
-        # Extract and add infobox if present
-        if parsed_content and parsed_content.get('html'):
-            infobox_content = self.extract_infobox_from_html(parsed_content['html'])
-            if infobox_content:
-                content_parts.append(infobox_content)
-        
-        # Process sections from parsed content
-        content_added = False
-        if parsed_content and parsed_content.get('sections'):
-            try:
-                html = parsed_content.get('html', '')
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # Remove infoboxes since we already extracted them
-                for infobox in soup.find_all(['aside', 'table'], class_=['portable-infobox', 'infobox']):
-                    infobox.decompose()
-                
-                # Remove navigation boxes and other clutter
-                for nav in soup.find_all('table', class_='navbox'):
-                    nav.decompose()
-                for toc in soup.find_all('div', id='toc'):
-                    toc.decompose()
-                
-                # Extract sections based on headings
-                sections = parsed_content['sections']
-                if sections:
-                    # Find content before first section (overview) - NO LIMITS
-                    overview_content = []
-                    for elem in soup.find_all(['p', 'div']):
-                        text = elem.get_text(strip=True)
-                        if text and len(text) > 20:
-                            overview_content.append(text)
-                            # Remove limit - get ALL overview content for mission logs
-                    
-                    if overview_content:
-                        content_parts.append(f"## Overview\n{' '.join(overview_content)}\n")
-                        content_added = True
-                    
-                    # Add sections with proper hierarchy (NO LIMITS for mission logs)
-                    for section in sections:  # Get ALL sections, not just first 10
-                        section_title = section.get('line', '')
-                        section_level = int(section.get('level', 2))
-                        
-                        if section_title and section_title.lower() not in ['references', 'external links', 'see also']:
-                            heading = '#' * max(2, section_level)
-                            content_parts.append(f"{heading} {section_title}\n")
-                            
-                            # Try to extract section content
-                            section_anchor = section.get('anchor', '')
-                            if section_anchor:
-                                section_content = self.extract_section_content(soup, section_anchor)
-                                if section_content:
-                                    content_parts.append(f"{section_content}\n")
-                                    content_added = True
-                
-            except Exception as e:
-                print(f"  ⚠️  Error processing sections: {e}")
-        
-        # Enhanced fallback content extraction
-        current_content = '\n'.join(content_parts)
-        if len(current_content) < 200 and parsed_content and parsed_content.get('html'):
-            fallback_content = self.extract_fallback_content(parsed_content['html'])
-            if fallback_content:
-                content_parts.append(fallback_content)
-                content_added = True
-        
-        # Join all content and clean up
-        full_content = '\n'.join(content_parts)
-        full_content = re.sub(r'\n{3,}', '\n\n', full_content)
-        return full_content.strip()
-    
-    def build_simple_formatted_content(self, title: str, extract_content: str) -> str:
-        """Build simple formatted content from extract (faster for mission logs)"""
-        try:
-            content_parts = []
-            
-            # Add title
-            content_parts.append(f"**{title}**\n")
-            
-            # Add the extract content with minimal processing
-            if extract_content:
-                # Clean up the content slightly
-                clean_content = re.sub(r'\s+', ' ', extract_content)  # Normalize whitespace
-                content_parts.append(f"## Content\n{clean_content}\n")
-            
-            return '\n'.join(content_parts)
-            
-        except Exception as e:
-            print(f"  ⚠️  Error building simple content: {e}")
-            return f"**{title}**\n\n{extract_content}" 
+            return None 
