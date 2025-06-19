@@ -12,8 +12,8 @@ from bs4 import BeautifulSoup
 import logging
 
 # Local import for character mapping, no cross-container dependency
-from .db_operations import DatabaseOperations
-from .character_maps import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, resolve_character_name_with_context, FALLBACK_CHARACTER_CORRECTIONS, FLEET_SHIP_NAMES
+from db_operations import DatabaseOperations
+from character_maps import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, resolve_character_name_with_context, FALLBACK_CHARACTER_CORRECTIONS, FLEET_SHIP_NAMES
 
 class ContentProcessor:
     """Handles content processing, classification, and formatting"""

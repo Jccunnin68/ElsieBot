@@ -9,6 +9,7 @@ import sys
 import time
 from datetime import datetime
 from typing import List, Dict, Optional
+from api_client import MediaWikiAPIClient
 from content_extractor import ContentExtractor
 from content_processor import ContentProcessor
 from db_operations import DatabaseOperations
@@ -18,9 +19,10 @@ class FreshImportController:
     """Orchestrates fresh import process with clean schema"""
     
     def __init__(self):
-        self.extractor = ContentExtractor()
-        self.processor = ContentProcessor()
+        self.api_client = MediaWikiAPIClient()
         self.db_ops = DatabaseOperations()
+        self.extractor = ContentExtractor(self.api_client, self.db_ops)
+        self.processor = ContentProcessor(self.db_ops)
         self.stats = {
             'total_pages': 0,
             'successful': 0,

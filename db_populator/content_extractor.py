@@ -9,10 +9,10 @@ from typing import Optional, Dict
 from bs4 import BeautifulSoup
 import logging
 
-from .api_client import MediaWikiAPIClient
-from .content_processor import ContentProcessor
-from .db_operations import DatabaseOperations
-from .character_maps import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, resolve_character_name_with_context
+from api_client import MediaWikiAPIClient
+from content_processor import ContentProcessor
+from db_operations import DatabaseOperations
+from character_maps import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, resolve_character_name_with_context
 
 
 class ContentExtractor:
@@ -21,6 +21,7 @@ class ContentExtractor:
     def __init__(self, client: MediaWikiAPIClient, db_ops: DatabaseOperations):
         self.client = client
         self.db_ops = db_ops
+        self.content_processor = ContentProcessor(db_ops)
         self.character_maps = SHIP_SPECIFIC_CHARACTER_CORRECTIONS
     
     def get_enhanced_page_content_optimized(self, page_title: str) -> Optional[Dict]:
@@ -222,6 +223,10 @@ class ContentExtractor:
             # The new structure passes the raw, unprocessed data forward.
             # The ContentProcessor, called by DatabaseOperations, will handle the logic
             # of deciding whether to use HTML parsing or wikitext processing based on categories.
+            
+            # Add crawled_at timestamp
+            page_data['crawled_at'] = datetime.now()
+            
             print(f"  ✓ Successfully gathered all data components for '{page_title}'")
             return page_data
                 
