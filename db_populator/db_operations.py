@@ -163,7 +163,9 @@ class DatabaseOperations:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     title = page_data['title']
-                    content = page_data['raw_content']
+                    
+                    # Process the content using the appropriate processor (log vs. standard)
+                    content = content_processor.process_content(title, page_data)
                     
                     # Get real categories from page data (no classification)
                     categories = content_processor.get_categories_from_page_data(page_data)

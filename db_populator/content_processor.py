@@ -9,112 +9,226 @@ import hashlib
 from typing import Tuple, Optional, List, Dict
 from datetime import datetime
 from bs4 import BeautifulSoup
+import logging
 
-
-
+# Local import for character mapping, no cross-container dependency
+from .db_operations import DatabaseOperations
+from .character_maps import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, resolve_character_name_with_context, FALLBACK_CHARACTER_CORRECTIONS, FLEET_SHIP_NAMES
 
 class ContentProcessor:
     """Handles content processing, classification, and formatting"""
     
-    def get_categories_from_page_data(self, page_data: Dict) -> List[str]:
-        """Extract categories from page data (no classification)"""
-        categories = page_data.get('categories', [])
-        
-        if not categories:
-            print(f"  ⚠️  No categories found for page, using fallback")
-            return ['General Information']  # Minimal fallback only
-        
-        print(f"  ✓ Using real wiki categories: {categories}")
-        return categories
-    
+    def __init__(self, db_ops: DatabaseOperations):
+        self.db_ops = db_ops
+        self.character_maps = SHIP_SPECIFIC_CHARACTER_CORRECTIONS
 
+    def process_content(self, title: str, page_data: dict) -> str:
+        """
+        Routes content to the appropriate processor based on its categories.
+        """
+        categories = self.get_categories_from_page_data(page_data)
+        wikitext = page_data.get('raw_wikitext', '')
+        is_log = any('log' in cat.lower() for cat in categories)
+
+        if is_log:
+            return self.process_log_content(title, wikitext, categories)
+        else:
+            return self.process_wikitext(title, page_data)
+    
+    def get_categories_from_page_data(self, page_data: Dict) -> List[str]:
+        """Extract categories from page data"""
+        categories = page_data.get('categories', [])
+        if not categories:
+            return ['General Information']
+        return categories
     
     def calculate_content_hash(self, content: str) -> str:
         """Calculate SHA-256 hash of content for change detection"""
         return hashlib.sha256(content.encode('utf-8')).hexdigest()
     
-    def process_wikitext(self, title: str, wikitext: str) -> str:
-        """Process raw wikitext into readable content"""
+    def process_wikitext(self, title: str, page_data: dict) -> str:
+        """
+        Process raw wikitext by leveraging HTML parsing.
+        """
         try:
-            content_parts = []
-            
-            # Add title
-            content_parts.append(f"**{title}**\n")
-            
-            # Remove common wikitext elements
-            text = wikitext
-            
-            # Remove template calls (simple version)
-            text = re.sub(r'\{\{[^}]+\}\}', '', text)
-            
-            # Remove file/image references
-            text = re.sub(r'\[\[File:[^\]]+\]\]', '', text)
-            text = re.sub(r'\[\[Image:[^\]]+\]\]', '', text)
-            
-            # Remove category links
-            text = re.sub(r'\[\[Category:[^\]]+\]\]', '', text)
-            
-            # Convert internal links to plain text
-            text = re.sub(r'\[\[([^|\]]+)\|([^\]]+)\]\]', r'\2', text)  # [[Page|Display]] -> Display
-            text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)  # [[Page]] -> Page
-            
-            # Remove external link formatting
-            text = re.sub(r'\[([^ ]+) ([^\]]+)\]', r'\2', text)  # [URL Text] -> Text
-            
-            # Remove bold/italic markup
-            text = re.sub(r"'{3,5}", '', text)
-            
-            # Remove HTML tags
-            text = re.sub(r'<[^>]+>', '', text)
-            
-            # Remove ref tags and content
-            text = re.sub(r'<ref[^>]*>.*?</ref>', '', text, flags=re.DOTALL)
-            text = re.sub(r'<ref[^>]*/?>', '', text)
-            
-            # Split into lines and process
-            lines = text.split('\n')
-            current_section = ""
-            
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                # Handle section headers
-                if line.startswith('='):
-                    level = 0
-                    while line.startswith('='):
-                        level += 1
-                        line = line[1:]
-                    while line.endswith('='):
-                        line = line[:-1]
-                    line = line.strip()
-                    
-                    if line and level <= 4:  # Only include up to level 4 headers
-                        heading = '#' * max(2, level)
-                        content_parts.append(f"{heading} {line}\n")
-                
-                # Handle regular content
-                elif len(line) > 10 and not line.startswith(('#', '*', ':', ';')):
-                    # Clean up the line further
-                    clean_line = line.strip()
-                    if clean_line and not clean_line.lower().startswith(('category:', 'file:', 'image:')):
-                        content_parts.append(f"{clean_line}\n")
-            
-            # Join and clean up
-            result = '\n'.join(content_parts)
-            result = re.sub(r'\n{3,}', '\n\n', result)
-            return result.strip()
-            
+            parsed_content = page_data.get('parsed', {})
+            text_extract = page_data.get('extract', '')
+            return self.build_formatted_content(title, parsed_content, text_extract)
         except Exception as e:
-            print(f"  ⚠️  Error processing wikitext: {e}")
-            # Return basic processed version - NO TRUNCATION for mission logs
-            basic_text = re.sub(r'\{\{[^}]+\}\}', '', wikitext)  # Remove templates
-            basic_text = re.sub(r'\[\[[^\]]+\]\]', '', basic_text)  # Remove links
-            basic_text = re.sub(r'<[^>]+>', '', basic_text)  # Remove HTML
-            # Remove truncation - keep full content for mission logs
+            wikitext = page_data.get('raw_wikitext', '')
+            basic_text = re.sub(r'<[^>]+>', '', wikitext)
             return f"**{title}**\n\n{basic_text}"
-    
+
+    def _cleanup_line(self, line: str) -> str:
+        """Performs final formatting on the line content."""
+        line = re.sub(r"'''(.*?)'''", r'\\1', line)
+        line = re.sub(r"''(.*?)''", r'\\1', line)
+        # Preserve asterisks for actions
+        # line = line.replace('*', '') 
+        return line
+
+    def _remove_timestamp(self, line: str) -> str:
+        """Removes a timestamp from the start of a line."""
+        timestamp_pattern = r'^\s*\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]\s*'
+        return re.sub(timestamp_pattern, '', line)
+
+    def _convert_scene_tags(self, line: str) -> Tuple[str, str]:
+        """Converts [DOIC] tags."""
+        scene_tag = ""
+        scene_map = {'1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E', '6': 'F'}
+        doic_pattern = r'\[\s*(DOIC(\d)?)\s*\]'
+        match = re.search(doic_pattern, line, re.IGNORECASE)
+        
+        if match:
+            original_tag = match.group(0)
+            digit = match.group(2)
+            scene_tag = f"-Scene {scene_map.get(digit, '?')}-" if digit else "-Setting-"
+            line = line.replace(original_tag, "", 1).lstrip()
+            
+        return line, scene_tag
+
+    def _assign_speaker(self, line: str, ship_context: str) -> Tuple[str, str]:
+        """Assigns a speaker from patterns."""
+        bracket_speaker_pattern = r'\[\s*([^\]]+?)\s*\]'
+        bracket_match = re.search(bracket_speaker_pattern, line)
+        
+        if bracket_match and self._is_known_character(bracket_match.group(1), ship_context):
+            speaker = bracket_match.group(1)
+            line = line.replace(bracket_match.group(0), "", 1).lstrip()
+            line = re.sub(r'^\s*[^:]+:\s*', '', line, count=1).lstrip()
+            return line, speaker
+
+        at_tag_pattern = r'^\s*([^:]+@\S+)\s*:'
+        at_match = re.search(at_tag_pattern, line)
+        if at_match:
+            speaker = at_match.group(1).strip()
+            line = line[at_match.end(0):].lstrip()
+            return line, speaker
+        
+        # Fallback for simple "Name: message"
+        colon_pattern = r'^\s*([^:]{2,30}?)\s*:'
+        colon_match = re.search(colon_pattern, line)
+        if colon_match:
+            potential_speaker = colon_match.group(1).strip()
+            # Basic heuristic to avoid matching non-names
+            if ' ' in potential_speaker or (potential_speaker.isalpha() and potential_speaker[0].isupper()):
+                 line = line[colon_match.end(0):].lstrip()
+                 return line, potential_speaker
+
+        return line, ""
+
+    def _is_known_character(self, name: str, ship_context: str) -> bool:
+        """Checks if a name is a known character."""
+        resolved_name = resolve_character_name_with_context(name, ship_context)
+        return resolved_name != 'Unknown' and resolved_name is not None
+
+    def _get_ship_context(self, title: str) -> str:
+        """Determines the ship context from the page title."""
+        title_lower = title.lower()
+        for ship_name in FLEET_SHIP_NAMES:
+            if ship_name.lower() in title_lower:
+                return ship_name.lower().replace('uss ', '')
+        return ""
+
+    def process_log_content(self, title: str, wikitext: str, categories: List[str]) -> str:
+        """Processes raw wikitext from a log page."""
+        if not wikitext:
+            return ""
+        
+        ship_context = self._get_ship_context(title)
+        cleaned_lines = []
+        lines = wikitext.splitlines()
+        line_number = 1
+        last_setting_speaker = ""
+        last_processed_speaker = ""
+
+        for original_line in lines:
+            work_line = original_line.strip()
+            if not work_line:
+                continue
+
+            line_with_number = f"-Line {line_number}- "
+            work_line = self._remove_timestamp(work_line)
+            work_line, scene_tag = self._convert_scene_tags(work_line)
+            
+            is_action_line = work_line.startswith('*')
+            
+            work_line, speaker = self._assign_speaker(work_line, ship_context)
+            
+            # --- Speaker Logic for "-Setting-" channels ---
+            if scene_tag == "-Setting-":
+                # If a GM speaks, inherit the last speaker or become Narrator
+                if '@' in speaker:
+                    speaker = last_setting_speaker if last_setting_speaker else "Narrator"
+                # If no speaker, but there was a previous one, continue their speech
+                elif not speaker and last_setting_speaker:
+                    speaker = last_setting_speaker
+                # If it's an action line with no speaker, it's the Narrator
+                elif is_action_line and not speaker:
+                    speaker = "Narrator"
+
+                # Update memory for the next line
+                if speaker:
+                    last_setting_speaker = speaker
+                
+                # Reset speaker if the line indicates the end of a thought/log
+                words = work_line.rstrip().split()
+                if words and "end" in [word.lower() for word in words[-4:]]:
+                    last_setting_speaker = ""
+            else:
+                last_setting_speaker = ""
+
+            # --- Final Speaker Resolution ---
+            raw_speaker_name = speaker.split('@')[0].strip()
+            if "DGM" in raw_speaker_name:
+                if is_action_line:
+                    final_speaker = "Narrator"
+                else:
+                    final_speaker = last_processed_speaker # Inherit previous speaker
+            elif raw_speaker_name:
+                # Use the existing resolver to get the canonical name
+                final_speaker = resolve_character_name_with_context(raw_speaker_name, ship_context)
+            else:
+                final_speaker = "" # No speaker
+
+            work_line = self._cleanup_line(work_line)
+
+            final_line = line_with_number
+            if scene_tag:
+                final_line += f"{scene_tag} "
+            
+            if final_speaker:
+                final_line += f"{final_speaker}: "
+            
+            final_line += work_line
+            cleaned_lines.append(final_line)
+            line_number += 1
+            
+            # Update last_processed_speaker for the next iteration
+            if final_speaker:
+                last_processed_speaker = final_speaker
+
+        return f"**{title}**\n\n" + "\n".join(cleaned_lines)
+
+    def build_formatted_content(self, title: str, parsed_content: dict, text_extract: str) -> str:
+        """Builds a formatted string from structured page content."""
+        content_parts = [f"**{title}**\n"]
+        if text_extract and len(text_extract.strip()) > 20:
+            content_parts.append(f"## Summary\n{text_extract}\n")
+        
+        full_content = '\n'.join(content_parts)
+        full_content = re.sub(r'\n{3,}', '\n\n', full_content)
+        return full_content.strip()
+
+    def build_simple_formatted_content(self, title: str, extract_content: str) -> str:
+        """Builds simple formatted content from extract."""
+        content_parts = [f"**{title}**\n"]
+        if extract_content:
+            clean_content = re.sub(r'\s+', ' ', extract_content)
+            content_parts.append(f"## Content\n{clean_content}\n")
+        
+        return '\n'.join(content_parts).strip()
+
     def extract_infobox_from_html(self, html: str) -> Optional[str]:
         """Extract and format infobox data from HTML"""
         try:
