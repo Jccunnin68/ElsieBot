@@ -105,33 +105,132 @@ class StructuredContentRetriever:
         return self.db_controller.search(query=term, categories=[category], limit=10)
 
     def _handle_log_search(self, query: Dict[str, Any]) -> List[Dict]:
-        """Handles: logs for <ship/character> [latest|first|recent]"""
+        """
+        Handles: logs for <ship/character> [latest|first|recent|random]
+        Enhanced to support:
+        - Random selection from logs
+        - Numeric counts (last 5, latest 3)
+        - General mission queries (from all logs)
+        - General log queries (from any logs)
+        - List queries (show me a list of all X logs)
+        """
         subject = query.get('subject')
-        modifier = query.get('modifier')
+        modifier = query.get('modifier', 'recent')
+        count = query.get('count')
+        is_general_mission = query.get('is_general_mission', False)
+        is_general_log = query.get('is_general_log', False)
+        is_list_query = query.get('is_list_query', False)
         
+        # Handle list queries separately
+        if is_list_query:
+            print(f"   📋 LIST QUERY: Looking for all '{subject}' logs")
+            return self._handle_list_query(subject)
+        
+        # Map temporal modifiers to database ordering
+        # Use 'closest_to_today' for latest to find logs with dates closest to current date
         order_by_map = {
-            'latest': 'chronological',
+            'latest': 'closest_to_today',  # Find logs closest to current system date
             'first': 'id_asc',
-            'recent': 'chronological'
+            'recent': 'chronological',     # Keep chronological for general recent queries
+            'random': 'random'
         }
+        
+        # Map temporal modifiers to default limits
         limit_map = {
             'latest': 1,
             'first': 1,
-            'recent': 3
+            'recent': 3,
+            'random': 1
         }
 
         order_by = order_by_map.get(modifier, 'chronological')
-        limit = limit_map.get(modifier, 3)
         
-        # We assume 'Logs' is a valid category. This could be made more robust.
+        # Use count if specified, otherwise use default limit
+        if count:
+            limit = min(count, 10)  # Cap at 10 to prevent overwhelming results
+        else:
+            limit = limit_map.get(modifier, 3)
+        
+        print(f"   📋 LOG SEARCH: subject='{subject}', modifier='{modifier}', count={count}, limit={limit}")
+        print(f"   📋 FLAGS: is_general_mission={is_general_mission}, is_general_log={is_general_log}")
+        
+        # Handle different types of log queries
+        if is_general_mission:
+            # General mission query - search all log categories for missions
+            print(f"   🎯 GENERAL MISSION SEARCH: Looking for missions across all logs")
+            log_categories = self.db_controller.get_log_categories()
+            
+            # Search for "mission" in all log categories
+            results = self.db_controller.search(
+                query="mission", 
+                categories=log_categories, 
+                limit=limit, 
+                order_by=order_by
+            )
+            
+        elif is_general_log:
+            # General log query - search all log categories
+            print(f"   🎯 GENERAL LOG SEARCH: Looking for any logs")
+            log_categories = self.db_controller.get_log_categories()
+            
+            # Return logs from any category, no specific search term
+            results = self.db_controller.search(
+                query="", 
+                categories=log_categories, 
+                limit=limit, 
+                order_by=order_by
+            )
+            
+        else:
+            # Specific subject query (ship or character)
+            print(f"   🎯 SPECIFIC LOG SEARCH: Looking for '{subject}' logs")
+            log_categories = self.db_controller.get_log_categories()
+            
+            results = self.db_controller.search(
+                query=subject, 
+                categories=log_categories, 
+                limit=limit, 
+                order_by=order_by
+            )
+        
+        # Add metadata to indicate if this should use historical summary format
+        # Use historical summary for multiple logs (count > 1 or limit > 1)
+        if results and (count and count > 1) or (not count and limit > 1):
+            print(f"   📚 MULTIPLE LOGS DETECTED: Will use historical summary format")
+            for result in results:
+                result['use_historical_summary'] = True
+        
+        return results
+
+    def _handle_list_query(self, subject: str) -> List[Dict]:
+        """
+        Handle list queries that return titles only.
+        
+        Args:
+            subject: The subject to search for (e.g., "stardancer", "adagio")
+            
+        Returns:
+            List of results with a special flag indicating this is a list query
+        """
+        print(f"   📜 PROCESSING LIST QUERY for '{subject}'")
+        
+        # Get log categories and search for the subject
         log_categories = self.db_controller.get_log_categories()
         
-        return self.db_controller.search(
+        # Search with a high limit to get all matching logs
+        results = self.db_controller.search(
             query=subject, 
             categories=log_categories, 
-            limit=limit, 
-            order_by=order_by
+            limit=50,  # High limit to get comprehensive list
+            order_by='closest_to_today'  # Logs closest to current date for lists
         )
+        
+        # Mark all results as list items
+        for result in results:
+            result['is_list_item'] = True
+        
+        print(f"   ✅ Found {len(results)} logs for list query")
+        return results
 
     def _handle_typed_search(self, query: Dict[str, str]) -> List[Dict]:
         """Handles: ship <name>, character <name>, etc."""

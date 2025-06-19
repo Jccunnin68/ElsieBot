@@ -51,9 +51,12 @@ DATABASE SEARCH RESULTS ({len(results)} entries found):
         log_content_list = [res.get('raw_content', '') for res in results if res.get('raw_content')]
         result_content = "\\n".join(log_content_list)
 
+        # Determine the context based on temporal type and subject
+        context_description = self._get_log_context_description(subject, temporal_type, len(results))
+
         return f"""
 Log Summarization:
-You are a main computer aboard the starship USS Stardancer. Summarize logs regarding '{subject}'. You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
+You are a main computer aboard the starship USS Stardancer. {context_description} You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
 
 INSTRUCTIONS:
 - FORBIDDEN: Do not present the information like an episode summary. instead present it as a story.
@@ -61,6 +64,7 @@ INSTRUCTIONS:
 - FORBIDDEN: Do not present a bulleted list. instead present it as a story.
 - FORBIDDEN: Do not present the information like a in universe log. instead present it as a story.
 - FORBIDDEN: Do not present a bulleted list. instead present it as a story.
+- IMPERATIVE: You must include a title for the result you may find a title the Setting scenes at the start fo the episode to use just after the Stardancer title card. 
 - You do not need to greet the user.
 - You do not need to format it like an email
 - SYNTHESIZE all provided information into a well-organized long form response.
@@ -68,6 +72,7 @@ INSTRUCTIONS:
 - ACCURACY: Only use information explicitly provided in the search results.
 - CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the logs, state that you do not have that information.
 - LENGTH: Be thorough and detailed in your response. You have up to 45000 characters use as many as you need to be thorough.
+- Make sure to include all storylines even side storylines.
 - Format narratively like a story.
 - If the episode has a title, use it in your response. The title will appear in the first line by the Narrator if it exists.
 - You do not need to make up a stardate for the logs. It is in the data returned to you with "stardate: in the line of the log. If it does not exist, do not make one up. simply leave that line off.
@@ -80,6 +85,54 @@ CLEANED LOG DATA:
 
 Provide a comprehensive retelling of these events with a master storyteller's flair.
 """
+
+    def _get_log_context_description(self, subject: str, temporal_type: str, result_count: int) -> str:
+        """
+        Generate appropriate context description based on the type of log query.
+        
+        Args:
+            subject: The subject of the log query
+            temporal_type: The temporal modifier (latest, first, recent, random)
+            result_count: Number of results found
+            
+        Returns:
+            Context description for the prompt
+        """
+        # Handle special subjects
+        if subject == 'mission':
+            if temporal_type == 'random':
+                return f"Summarize this randomly selected mission from the fleet records."
+            elif temporal_type == 'latest':
+                return f"Summarize the most recent mission from the fleet records."
+            elif temporal_type == 'first':
+                return f"Summarize the earliest mission from the fleet records."
+            else:
+                return f"Summarize recent missions from the fleet records."
+        
+        elif subject == 'any':
+            if temporal_type == 'random':
+                return f"Summarize this randomly selected log entry from the fleet records."
+            elif temporal_type == 'latest':
+                return f"Summarize the most recent log entry from the fleet records."
+            elif temporal_type == 'first':
+                return f"Summarize the earliest log entry from the fleet records."
+            else:
+                return f"Summarize recent log entries from the fleet records."
+        
+        # Handle specific subjects (ships/characters)
+        else:
+            count_text = ""
+            if result_count > 1:
+                count_text = f" ({result_count} entries)"
+            
+            if temporal_type == 'random':
+                return f"Summarize this randomly selected log regarding '{subject}'{count_text}."
+            elif temporal_type == 'latest':
+                return f"Summarize the most recent log regarding '{subject}'{count_text}."
+            elif temporal_type == 'first':
+                return f"Summarize the earliest log regarding '{subject}'{count_text}."
+            else:
+                return f"Summarize recent logs regarding '{subject}'{count_text}."
 
     def _format_results(self, results: List[Dict]) -> str:
         """Helper to format a list of structured database results into a string."""
@@ -191,6 +244,150 @@ Example response format:
         
         separator = '\n\n---\n\n' if is_primary else '\n'
         return separator.join(result_content)
+
+    def build_historical_summary_prompt(self, subject: str, results: List[Dict], temporal_type: str) -> str:
+        """
+        Builds a prompt for historical summary of multiple logs.
+        This format is better for multiple log entries as it provides structured summaries
+        separated by log entry rather than a single narrative.
+        """
+        if not results:
+            return f"I searched the mission logs but found no entries matching your query for '{subject}'."
+
+        # Format each log entry separately for historical summary
+        log_entries = []
+        for i, result in enumerate(results, 1):
+            title = result.get('title', f'Log Entry {i}')
+            content = result.get('raw_content', 'No content available.')
+            
+            # Extract date from title if available
+            date_info = self._extract_date_info(title)
+            date_str = f" - {date_info}" if date_info else ""
+            
+            log_entries.append(f"**LOG ENTRY {i}: {title}{date_str}**\n{content}")
+
+        formatted_logs = "\n\n" + "="*50 + "\n\n".join(log_entries)
+        
+        # Determine the context based on temporal type and subject
+        context_description = self._get_historical_context_description(subject, temporal_type, len(results))
+
+        return f"""
+Historical Log Summary:
+You are a main computer aboard the starship USS Stardancer. {context_description} You have been provided with multiple log entries that should be summarized in a structured historical format.
+
+INSTRUCTIONS:
+- PRESENT each log entry as a separate historical summary
+- STRUCTURE: Create a clear section for each log entry with its title and summary
+- FORMAT: Use "**LOG ENTRY X: [Title]**" as section headers titles are found in the first few lines of the log.
+- SUMMARIZE: Provide a concise summary of each log entry's key events
+- CHRONOLOGY: Maintain the chronological order provided
+- ACCURACY: Only use information explicitly provided in the search results
+- CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If information is missing, state that you do not have that information
+- CONSISTENCY: Use consistent formatting throughout
+- BREVITY: Keep each log summary focused and concise while capturing key events
+MULTIPLE LOG ENTRIES TO SUMMARIZE:
+---
+{formatted_logs}
+---
+
+Provide a structured historical summary with each log entry clearly separated and summarized.
+"""
+
+    def build_log_list_prompt(self, subject: str, results: List[Dict]) -> str:
+        """
+        Builds a prompt for listing log titles.
+        Returns a simple list of log titles without content summaries.
+        """
+        if not results:
+            return f"I searched the mission logs but found no entries matching your query for '{subject}'."
+
+        # Extract titles and format as a numbered list
+        log_titles = []
+        for i, result in enumerate(results, 1):
+            title = result.get('title', f'Untitled Log {i}')
+            
+            # Extract date info if available
+            date_info = self._extract_date_info(title)
+            date_str = f" ({date_info})" if date_info else ""
+            
+            log_titles.append(f"{i}. {title}{date_str}")
+
+        title_list = "\n".join(log_titles)
+        total_count = len(results)
+        
+        return f"""
+Log Database Query Results:
+You are a main computer aboard the starship USS Stardancer. The user has requested a list of all logs related to '{subject}'. Present this as a clean, organized list.
+
+INSTRUCTIONS:
+- PRESENT the results as a numbered list
+- INCLUDE the log title and date (if available) for each entry
+- USE a professional, database-style format
+- DO NOT include content summaries - titles only
+- MAINTAIN chronological order
+- PROVIDE a count of total entries found
+
+QUERY RESULTS FOR '{subject.upper()}' LOGS:
+Found {total_count} matching log entries:
+
+{title_list}
+
+---
+Total: {total_count} log entries found in the database.
+"""
+
+    def _extract_date_info(self, title: str) -> str:
+        """
+        Extract date information from log titles.
+        
+        Args:
+            title: The log title to extract date from
+            
+        Returns:
+            Formatted date string or empty string if no date found
+        """
+        import re
+        
+        # Look for common date patterns in titles
+        date_patterns = [
+            r'\b(\d{1,2}/\d{1,2}/\d{4})\b',  # MM/DD/YYYY
+            r'\b(\d{4}-\d{1,2}-\d{1,2})\b',  # YYYY-MM-DD
+            r'\b(\d{1,2}-\d{1,2}-\d{4})\b',  # MM-DD-YYYY
+            r'stardate\s+(\d+\.?\d*)',       # Stardate format
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, title, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return ""
+
+    def _get_historical_context_description(self, subject: str, temporal_type: str, result_count: int) -> str:
+        """
+        Generate appropriate context description for historical summaries.
+        
+        Args:
+            subject: The subject of the log query
+            temporal_type: The temporal modifier
+            result_count: Number of results found
+            
+        Returns:
+            Context description for historical summary prompt
+        """
+        if subject == 'mission':
+            return f"Provide a historical summary of {result_count} mission records from the fleet database."
+        elif subject == 'any':
+            return f"Provide a historical summary of {result_count} log entries from the fleet database."
+        else:
+            if temporal_type == 'random':
+                return f"Provide a historical summary of {result_count} randomly selected logs regarding '{subject}'."
+            elif temporal_type == 'latest':
+                return f"Provide a historical summary of the {result_count} most recent logs regarding '{subject}'."
+            elif temporal_type == 'first':
+                return f"Provide a historical summary of the {result_count} earliest logs regarding '{subject}'."
+            else:
+                return f"Provide a historical summary of {result_count} logs regarding '{subject}'."
 
 def _format_conversation_history(conversation_history: List[Dict]) -> str:
     if not conversation_history:

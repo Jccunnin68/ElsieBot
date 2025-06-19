@@ -222,18 +222,24 @@ class StructuredQueryDetector:
     def _detect_log_search(self, user_message: str) -> Optional[Dict[str, Any]]:
         """
         Detects log-related queries for ships or characters.
-        Handles two patterns:
+        Enhanced to handle multiple temporal patterns and general log queries.
+        
+        Patterns supported:
         1. logs for <subject> [modifier]
-        2. [summarize] [the] <modifier> <subject> log
-        3. tell me about the <modifier> <subject> log
+        2. [summarize/tell me about] [the] <modifier> <subject> log[s]
+        3. [show me/give me] [the] <modifier> [number] <subject> log[s]
+        4. [tell me about/summarize] [a] <modifier> <subject> log[s]
+        5. [tell me about/summarize] [a] mission[s] (random from all logs)
+        6. random log queries
         """
+        
         # Pattern 1: "logs for <subject> [modifier]"
-        pattern1 = re.compile(r'logs? for\s+([A-Za-z0-9\s\'-]+?)(?:\s+(latest|first|recent))?$', re.IGNORECASE)
+        pattern1 = re.compile(r'logs? for\s+([A-Za-z0-9\s\'-]+?)(?:\s+(latest|last|first|recent|most recent|random))?$', re.IGNORECASE)
         match1 = pattern1.search(user_message)
         if match1:
             subject, modifier = match1.groups()
             subject = subject.strip()
-            modifier = modifier.lower() if modifier else 'recent'
+            modifier = self._normalize_temporal_modifier(modifier) if modifier else 'recent'
             
             return {
                 'type': 'logs',
@@ -241,14 +247,34 @@ class StructuredQueryDetector:
                 'modifier': modifier
             }
 
-        # Pattern 2 & 3: "tell me about the <modifier> <subject> log" or "summarize the <modifier> <subject> log"
-        pattern2_3 = re.compile(r'(?:tell me about|summarize)\s+(?:the\s+)?(latest|last|first|recent)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
+        # Pattern 2 & 3: Enhanced to handle more temporal modifiers and numeric patterns
+        # "tell me about the <modifier> <subject> log" or "summarize the <modifier> <subject> log"
+        # "show me the latest 5 <subject> logs" or "give me the first 3 <subject> logs"
+        pattern2_3 = re.compile(r'(?:tell me about|summarize|show me|give me)\s+(?:the\s+)?(latest|last|first|recent|most recent|random)(?:\s+(\d+))?\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
         match2_3 = pattern2_3.search(user_message)
         if match2_3:
-            modifier, subject = match2_3.groups()
-            modifier = modifier.lower()
-            if modifier == 'last':
-                modifier = 'latest'
+            modifier, count, subject = match2_3.groups()
+            modifier = self._normalize_temporal_modifier(modifier)
+            subject = subject.strip()
+            
+            result = {
+                'type': 'logs',
+                'subject': subject,
+                'modifier': modifier
+            }
+            
+            # Add count if specified
+            if count:
+                result['count'] = int(count)
+            
+            return result
+
+        # Pattern 4: "tell me about a random <subject> log" or "summarize a recent mission"
+        pattern4 = re.compile(r'(?:tell me about|summarize)\s+a\s+(random|recent|latest|first)\s+([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
+        match4 = pattern4.search(user_message)
+        if match4:
+            modifier, subject = match4.groups()
+            modifier = self._normalize_temporal_modifier(modifier)
             
             return {
                 'type': 'logs',
@@ -256,7 +282,104 @@ class StructuredQueryDetector:
                 'modifier': modifier
             }
 
+        # Pattern 5: General mission queries without specific ship - "tell me about a mission", "summarize recent missions"
+        pattern5 = re.compile(r'(?:tell me about|summarize)\s+(?:a\s+|(?:the\s+)?(?:recent|latest|random)\s+)?missions?\b', re.IGNORECASE)
+        match5 = pattern5.search(user_message)
+        if match5:
+            # Extract temporal modifier if present
+            modifier_match = re.search(r'\b(recent|latest|random|first)\b', user_message, re.IGNORECASE)
+            modifier = self._normalize_temporal_modifier(modifier_match.group(1)) if modifier_match else 'random'
+            
+            return {
+                'type': 'logs',
+                'subject': 'mission',  # Special subject for all missions
+                'modifier': modifier,
+                'is_general_mission': True
+            }
+
+        # Pattern 6: Simple random/recent log queries - "random log please", "show me recent logs", "give me the first log"
+        pattern6 = re.compile(r'(?:show me|give me|random)\s+(?:(?:the\s+)?(?:recent|latest|first|random)\s+)?logs?\b(?:\s+please)?', re.IGNORECASE)
+        match6 = pattern6.search(user_message)
+        if match6:
+            # Extract temporal modifier if present
+            modifier_match = re.search(r'\b(recent|latest|first|random)\b', user_message, re.IGNORECASE)
+            modifier = self._normalize_temporal_modifier(modifier_match.group(1)) if modifier_match else 'random'
+            
+            return {
+                'type': 'logs',
+                'subject': 'any',  # Special subject for any logs
+                'modifier': modifier,
+                'is_general_log': True
+            }
+
+        # Pattern 7: "summarize recent missions" - general mission summaries
+        pattern7 = re.compile(r'summarize\s+(?:(?:recent|latest|random)\s+)?missions?\b', re.IGNORECASE)
+        match7 = pattern7.search(user_message)
+        if match7:
+            modifier_match = re.search(r'\b(recent|latest|random)\b', user_message, re.IGNORECASE)
+            modifier = self._normalize_temporal_modifier(modifier_match.group(1)) if modifier_match else 'recent'
+            
+            return {
+                'type': 'logs',
+                'subject': 'mission',
+                'modifier': modifier,
+                'is_general_mission': True
+            }
+
+        # Pattern 8: "give me a random mission log" - specific pattern for mission log requests
+        pattern8 = re.compile(r'(?:give me|show me)\s+a\s+(random|recent|latest|first)\s+mission\s+logs?\b', re.IGNORECASE)
+        match8 = pattern8.search(user_message)
+        if match8:
+            modifier = self._normalize_temporal_modifier(match8.group(1))
+            
+            return {
+                'type': 'logs',
+                'subject': 'mission',
+                'modifier': modifier,
+                'is_general_mission': True
+            }
+
+        # Pattern 9: "show me a list of all X logs" - list queries for log titles
+        pattern9 = re.compile(r'(?:show me|give me)\s+a\s+list\s+of\s+(?:all\s+)?([A-Za-z0-9\s\'-]+?)\s+logs?\b', re.IGNORECASE)
+        match9 = pattern9.search(user_message)
+        if match9:
+            subject = match9.group(1).strip()
+            
+            return {
+                'type': 'logs',
+                'subject': subject,
+                'modifier': 'list',
+                'is_list_query': True
+            }
+
         return None
+
+    def _normalize_temporal_modifier(self, modifier: str) -> str:
+        """
+        Normalize temporal modifiers to standard forms.
+        
+        Args:
+            modifier: Raw temporal modifier from regex
+            
+        Returns:
+            Normalized modifier: 'latest', 'first', 'recent', 'random'
+        """
+        if not modifier:
+            return 'recent'
+        
+        modifier = modifier.lower().strip()
+        
+        # Normalize variations
+        if modifier in ['last', 'latest', 'most recent']:
+            return 'latest'
+        elif modifier == 'first':
+            return 'first'
+        elif modifier == 'recent':
+            return 'recent'
+        elif modifier == 'random':
+            return 'random'
+        else:
+            return 'recent'  # Default fallback
 
     def _detect_typed_search(self, user_message: str) -> Optional[Dict[str, str]]:
         """

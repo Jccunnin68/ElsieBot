@@ -89,7 +89,21 @@ class WisdomEngine:
         
         if strategy.get('approach') == 'logs':
             temporal_type = strategy.get('temporal_type', 'latest')
-            return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
+            
+            # Check if this is a list query
+            if results and results[0].get('is_list_item'):
+                print(f"         📜 LIST QUERY DETECTED: Building log list prompt")
+                return self.prompt_library.build_log_list_prompt(subject, results)
+            
+            # Check if this should use historical summary format (multiple logs)
+            elif results and results[0].get('use_historical_summary'):
+                print(f"         📚 HISTORICAL SUMMARY DETECTED: Building historical summary prompt")
+                return self.prompt_library.build_historical_summary_prompt(subject, results, temporal_type)
+            
+            # Default to narrative format for single logs
+            else:
+                print(f"         📖 NARRATIVE LOG DETECTED: Building standard log prompt")
+                return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
 
         # For everything else, use the comprehensive prompt.
         print(f"         📚 COMPREHENSIVE QUERY: Using general prompt")

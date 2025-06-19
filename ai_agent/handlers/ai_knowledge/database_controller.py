@@ -46,7 +46,7 @@ class FleetDatabaseController:
         Single unified search method for all database queries.
         
         Args:
-            query: Search terms
+            query: Search terms (can be empty for category-only searches)
             categories: Optional category filter 
             limit: Max results
             order_by: 'relevance', 'chronological', 'id_desc', 'id_asc', 'random'
@@ -55,6 +55,10 @@ class FleetDatabaseController:
         Returns:
             List of matching records with full content
         """
+        # Handle empty query - use category-only search
+        if not query or query.strip() == "":
+            return self.search_by_categories_only(categories, limit, order_by, ship_name)
+        
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -106,6 +110,19 @@ class FleetDatabaseController:
                                 END DESC NULLS LAST,
                                 id DESC
                         """
+                    elif order_by == 'closest_to_today':
+                        # Find logs with dates closest to current system date
+                        base_query += """
+                            ORDER BY 
+                                CASE 
+                                    WHEN title ~ '\\d{1,2}/\\d{1,2}/\\d{4}' THEN
+                                        ABS(CURRENT_DATE - TO_DATE(substring(title from '(\\d{1,2}/\\d{1,2}/\\d{4})'), 'MM/DD/YYYY'))
+                                    WHEN title ~ '\\d{4}[/-]\\d{1,2}[/-]\\d{1,2}' THEN
+                                        ABS(CURRENT_DATE - TO_DATE(substring(title from '(\\d{4}[/-]\\d{1,2}[/-]\\d{1,2})'), 'YYYY-MM-DD'))
+                                    ELSE 999999999
+                                END ASC,
+                                id DESC
+                        """
                     elif order_by == 'id_desc':
                         base_query += " ORDER BY id DESC"
                     elif order_by == 'id_asc':
@@ -132,6 +149,103 @@ class FleetDatabaseController:
                     
         except Exception as e:
             print(f"✗ Error in unified search: {e}")
+            return []
+
+    def search_by_categories_only(self, categories: Optional[List[str]] = None, 
+                                 limit: int = 10, order_by: str = 'relevance',
+                                 ship_name: Optional[str] = None) -> List[Dict]:
+        """
+        Search by categories only without requiring a text query.
+        Used for general log searches and random selections.
+        
+        Args:
+            categories: Category filter (required for this method)
+            limit: Max results
+            order_by: 'relevance', 'chronological', 'id_desc', 'id_asc', 'random'
+            ship_name: Optional ship name filter
+        
+        Returns:
+            List of matching records with full content
+        """
+        if not categories or len(categories) == 0:
+            print("⚠️  Category-only search requires categories")
+            return []
+        
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    
+                    print(f"📂 CATEGORY-ONLY SEARCH: categories={categories}, order={order_by}, limit={limit}")
+                    
+                    # Build query that filters by categories only
+                    base_query = """
+                        SELECT id, title, raw_content, url, categories
+                        FROM wiki_pages 
+                        WHERE categories IS NOT NULL 
+                        AND array_length(categories, 1) > 0 
+                        AND categories && %s
+                    """
+                    
+                    params = [categories]
+                    
+                    # Add ship name filter if specified
+                    if ship_name:
+                        base_query += " AND LOWER(title) LIKE %s"
+                        params.append(f'%{ship_name.lower()}%')
+                    
+                    # Add ordering
+                    if order_by == 'chronological':
+                        # Try to sort by extracted dates from titles, fallback to ID
+                        base_query += """
+                            ORDER BY 
+                                CASE 
+                                    WHEN title ~ '\\d{1,2}/\\d{1,2}/\\d{4}' THEN
+                                        TO_DATE(substring(title from '(\\d{1,2}/\\d{1,2}/\\d{4})'), 'MM/DD/YYYY')
+                                    WHEN title ~ '\\d{4}[/-]\\d{1,2}[/-]\\d{1,2}' THEN
+                                        TO_DATE(substring(title from '(\\d{4}[/-]\\d{1,2}[/-]\\d{1,2})'), 'YYYY-MM-DD')
+                                    ELSE NULL
+                                END DESC NULLS LAST,
+                                id DESC
+                        """
+                    elif order_by == 'closest_to_today':
+                        # Find logs with dates closest to current system date
+                        base_query += """
+                            ORDER BY 
+                                CASE 
+                                    WHEN title ~ '\\d{1,2}/\\d{1,2}/\\d{4}' THEN
+                                        ABS(CURRENT_DATE - TO_DATE(substring(title from '(\\d{1,2}/\\d{1,2}/\\d{4})'), 'MM/DD/YYYY'))
+                                    WHEN title ~ '\\d{4}[/-]\\d{1,2}[/-]\\d{1,2}' THEN
+                                        ABS(CURRENT_DATE - TO_DATE(substring(title from '(\\d{4}[/-]\\d{1,2}[/-]\\d{1,2})'), 'YYYY-MM-DD'))
+                                    ELSE 999999999
+                                END ASC,
+                                id DESC
+                        """
+                    elif order_by == 'id_desc':
+                        base_query += " ORDER BY id DESC"
+                    elif order_by == 'id_asc':
+                        base_query += " ORDER BY id ASC"
+                    elif order_by == 'random':
+                        base_query += " ORDER BY RANDOM()"
+                    else:  # relevance - for category-only, use chronological as default
+                        base_query += " ORDER BY id DESC"
+                    
+                    base_query += " LIMIT %s"
+                    params.append(limit)
+                    
+                    cur.execute(base_query, params)
+                    results = [dict(row) for row in cur.fetchall()]
+                    
+                    print(f"   ✅ Found {len(results)} category-filtered results")
+                    
+                    # Track content access for returned results
+                    if results:
+                        page_ids = [result['id'] for result in results]
+                        self.update_content_accessed(page_ids)
+                    
+                    return results
+                    
+        except Exception as e:
+            print(f"✗ Error in category-only search: {e}")
             return []
     
     def search_titles_only(self, query: str, categories: Optional[List[str]] = None, 
