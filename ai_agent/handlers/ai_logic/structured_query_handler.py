@@ -59,16 +59,20 @@ def handle_structured_message(user_message: str, conversation_history: List[Dict
         knowledge_engine = get_knowledge_engine()
         
         # Combine the raw content from all results into a single block
-        raw_log_content = "\\n".join([res.get('raw_content', '') for res in results])
+        raw_log_content = "\n".join([res.get('raw_content', '') for res in results])
         
         # Clean the logs using the KnowledgeEngine
         cleaned_content = knowledge_engine.process_logs(raw_log_content)
 
-        # --- DEBUGGING: Print the output from the KnowledgeEngine ---
-        print("   - KNOWLEDGE ENGINE OUTPUT START ---")
-        print(f"   - Cleaned content length: {len(cleaned_content)} chars")
-        print(cleaned_content) # Uncomment for full content view
-        print("   - KNOWLEDGE ENGINE OUTPUT END ---")
+        # --- DEBUGGING: Print stats from the KnowledgeEngine ---
+        print("   - KNOWLEDGE ENGINE PROCESSING COMPLETE ---")
+        print(f"   - Input content length: {len(raw_log_content)} chars, {raw_log_content.count(chr(10)) + 1} lines")
+        print(f"   - Output content length: {len(cleaned_content)} chars, {cleaned_content.count(chr(10)) + 1} lines")
+        retention_rate = (len(cleaned_content) / len(raw_log_content)) * 100 if len(raw_log_content) > 0 else 0
+        print(f"   - Content retention: {retention_rate:.1f}%")
+        # Uncomment below line for full content debugging:
+        # print(cleaned_content)
+        print("   - END KNOWLEDGE ENGINE STATS ---")
         # ---------------------------------------------------------
 
         # Replace the original results with a single entry containing the cleaned content
