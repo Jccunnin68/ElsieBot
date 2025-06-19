@@ -57,13 +57,31 @@ class WisdomEngine:
 
     def _build_prompt_for_strategy(self, strategy: Dict[str, Any], user_message: str, subject: str, results: list) -> str:
         """Builds the appropriate prompt based on the strategy."""
-        # Determine if this is a character query by inspecting the results.
-        # This is more reliable than relying on the category from the initial routing.
-        result_category = ''
-        if results:
-            result_category = (results[0].get('category') or '').lower()
         
-        is_character_query = 'character' in result_category or 'npc' in result_category
+        # Check for disambiguation case first
+        if results and results[0].get('type') == 'disambiguation':
+            print(f"         🔀 DISAMBIGUATION DETECTED: Building disambiguation prompt")
+            search_term = results[0].get('search_term', subject)
+            matches = results[0].get('matches', [])
+            return self.prompt_library.build_character_disambiguation_prompt(search_term, matches)
+        
+        # Determine if this is a character query by inspecting the results.
+        # Check the categories array from the database results
+        is_character_query = False
+        if results:
+            categories = results[0].get('categories', [])
+            if categories:
+                # Convert categories to lowercase for case-insensitive matching
+                categories_lower = [cat.lower() for cat in categories]
+                # Check if any category contains character-related terms
+                character_indicators = ['characters', 'npcs', 'personnel', 'crew']
+                is_character_query = any(
+                    any(indicator in category for indicator in character_indicators) 
+                    for category in categories_lower
+                )
+                
+                if is_character_query:
+                    print(f"         👤 CHARACTER QUERY DETECTED: categories={categories}")
 
         if is_character_query and results:
             # If the top result is a character, use the specialized prompt.
@@ -74,6 +92,7 @@ class WisdomEngine:
             return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
 
         # For everything else, use the comprehensive prompt.
+        print(f"         📚 COMPREHENSIVE QUERY: Using general prompt")
         return self.prompt_library.build_comprehensive_prompt(subject, results)
 
     def _execute_prompt_via_llm(self, prompt: str, approach: str) -> str:
@@ -92,7 +111,7 @@ class WisdomEngine:
             try:
                 generation_config = genai.types.GenerationConfig(
                     max_output_tokens=12000,
-                    temperature=0.5,
+                    temperature=0.6,
                     candidate_count=1
                 )
                 
@@ -130,13 +149,28 @@ class WisdomEngine:
 
         # The top result is our best candidate for the primary character.
         primary_candidate = results[0]
+        candidate_title = primary_candidate.get('title', '').lower()
+        subject_lower = subject.lower()
         
-        # Verify the candidate's title matches the subject to ensure relevance.
-        if subject.lower() in primary_candidate.get('title', '').lower():
+        # More flexible matching - check if subject words are in the title
+        subject_words = subject_lower.split()
+        title_contains_subject = any(word in candidate_title for word in subject_words if len(word) > 2)
+        
+        # Also check reverse - if title words are in subject (for cases like "Captain Marcus Blaine")
+        title_words = candidate_title.split()
+        subject_contains_title = any(word in subject_lower for word in title_words if len(word) > 2)
+        
+        is_match = title_contains_subject or subject_contains_title
+        
+        print(f"         🔍 Character matching: '{subject}' vs '{primary_candidate.get('title', '')}'")
+        print(f"         📊 Match result: {is_match} (title_contains_subject: {title_contains_subject}, subject_contains_title: {subject_contains_title})")
+        
+        if is_match:
             # Confirmed: the top result is the character we're looking for.
             primary_character_info = primary_candidate
             known_associates = results[1:]
             
+            print(f"         ✅ CHARACTER MATCH CONFIRMED: Using character prompt with {len(known_associates)} associates")
             return self.prompt_library.build_character_with_associates_prompt(
                 primary_character_info,
                 known_associates
@@ -144,5 +178,5 @@ class WisdomEngine:
         else:
             # The top result doesn't match, so we can't be confident.
             # Return a "not found" response to avoid presenting incorrect information.
-            print(f"         ⚠️  Top result '{primary_candidate.get('title')}' did not match subject '{subject}'.")
+            print(f"         ❌ CHARACTER MATCH FAILED: Top result '{primary_candidate.get('title')}' did not match subject '{subject}'.")
             return self.prompt_library.build_comprehensive_prompt(subject, []) 

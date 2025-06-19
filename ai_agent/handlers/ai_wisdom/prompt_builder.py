@@ -28,6 +28,9 @@ You are a main computer aboard the starship USS Stardancer.
 A user has asked you for information about "{subject}". Synthesize the provided data into a comprehensive, in-universe response.
 
 INSTRUCTIONS:
+- FORBIDDEN: Do not simply present the database results. You need to create a master resarchers's response.
+- FORBIDDEN: Do not present the information as a bulleted list, instead present it as non-fiction prose.
+- Critical: Present complete thoughts and ideas.
 - You do not need to greet the user.
 - SYNTHESIZE all provided information into a well-organized response.
 - STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
@@ -99,19 +102,20 @@ Provide a comprehensive retelling of these events with a master storyteller's fl
 
         return f"""
 CHARACTER INFORMATION SYNTHESIS:
-Create a detailed informative response about the primary character, and list any known associates.
+You are a federation master biographer. Create a detailed informative biographical response about the primary character, and list any known associates.
 
 INSTRUCTIONS:
+- FORBIDDEN: Do not simply present the database results. You need to create a master biographer's response.
+- CRITICAL: You must include known associates or a message that says you found none.
 - If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
 - PRIMARY FOCUS: The main body of your response should be a comprehensive summary of the **Primary Character**.
 - KNOWN ASSOCIATES: After the primary summary, create a section titled "Known Associates" and briefly list the other individuals (you do not have to indicate a lack of information past their names).
 - ACCURACY: Only use information explicitly provided in the search results.
 - CLARITY: Present information in an accessible, informative manner.
 - CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the database, state that you do not have that information.
-- use bulleted lists and numbered lists when appropriate.
+- Create a biographical style response. Include the primary character's history, background, and any other relevant information don't just return the database results.
 - Dedicate 75 percent of your response to the primary character and 25 percent to the associates with similiar names taking precedence.
 - If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
-- You do not need to format it like an email
 - It should appear like a informative page.
 
 **PRIMARY CHARACTER:**
@@ -119,6 +123,58 @@ INSTRUCTIONS:
 
 **KNOWN ASSOCIATES:**
 {associates_content}
+"""
+
+    def build_character_disambiguation_prompt(self, search_term: str, matching_characters: List[Dict]) -> str:
+        """Builds a disambiguation prompt when multiple characters match a partial name."""
+        
+        if not matching_characters:
+            return f"I was unable to find any characters matching '{search_term}' in the database."
+        
+        if len(matching_characters) == 1:
+            # Only one match, shouldn't need disambiguation
+            return self.build_character_with_associates_prompt(matching_characters[0], [])
+        
+        # Format the character list for disambiguation
+        character_list = []
+        for i, character in enumerate(matching_characters, 1):
+            title = character.get('title', 'Unknown Individual')
+            categories = character.get('categories', [])
+            
+            # Extract useful context from categories
+            context_info = []
+            for category in categories:
+                if 'crew' in category.lower():
+                    context_info.append(category)
+                elif any(ship in category.lower() for ship in ['stardancer', 'protector', 'adagio', 'manta', 'pilgrim']):
+                    context_info.append(category)
+                elif any(rank in category.lower() for rank in ['captain', 'commander', 'lieutenant', 'ensign', 'doctor']):
+                    context_info.append(category)
+            
+            context_str = f" ({', '.join(context_info)})" if context_info else ""
+            character_list.append(f"{i}. {title}{context_str}")
+        
+        character_list_str = '\n'.join(character_list)
+        
+        return f"""
+DISAMBIGUATION REQUEST:
+You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
+
+The user searched for '{search_term}' and I found {len(matching_characters)} characters with that name or similar names. 
+
+Please ask the user to clarify which character they're interested in by selecting from the following options:
+
+{character_list_str}
+
+INSTRUCTIONS:
+- Be polite and helpful in your response
+- Ask the user to specify which character they want to know about
+- You can suggest they provide more context (like rank, ship assignment, or full name) to help narrow down the search
+- Maintain your sophisticated AI persona
+- Do not provide detailed information about any of the characters - just list them for selection
+
+Example response format:
+"I found several characters matching '{search_term}'. Could you please specify which one you're interested in?"
 """
 
     def _format_character_results(self, results: List[Dict], is_primary: bool) -> str:
