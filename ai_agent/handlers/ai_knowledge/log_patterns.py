@@ -110,7 +110,6 @@ FALLBACK_CHARACTER_CORRECTIONS = {
     'schwarzweld': 'Cadet Hedwik Schwarzweld',
     'kodor': 'Cadet Kodor',
     'vrajen kodor': 'Cadet Vrajen Kodor',
-    'tavi': 'Cadet Antony'
 }
 
 # Legacy CHARACTER_CORRECTIONS for backward compatibility (deprecated)
