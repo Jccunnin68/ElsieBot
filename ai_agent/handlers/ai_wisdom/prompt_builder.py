@@ -33,9 +33,7 @@ INSTRUCTIONS:
 - STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
 - ACCURACY: Only use information explicitly provided in the search results.
 - CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the results, state that you do not have the information.
-- You do not need to format it like an email
 - It should appear like a infomrative page.
-- Conclude by asking if there is anything else you can help with.
 
 DATABASE SEARCH RESULTS ({len(results)} entries found):
 {result_content}
@@ -115,7 +113,6 @@ INSTRUCTIONS:
 - If no information is available about the primary character, you should inform the user that you could not find any information on the subject. 
 - You do not need to format it like an email
 - It should appear like a informative page.
-- You do not need to end with a summary of what was just performed instead you should ask the user if there is anything else you can help them with.
 
 **PRIMARY CHARACTER:**
 {primary_content}
