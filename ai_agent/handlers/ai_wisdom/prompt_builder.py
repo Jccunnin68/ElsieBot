@@ -510,26 +510,42 @@ Total: {total_count} log entries found in the database.
             else:
                 return f"Provide a historical summary of {result_count} logs regarding '{subject}'."
 
-def _format_conversation_history(conversation_history: List[Dict]) -> str:
-    if not conversation_history:
-        return ""
-    # Format the last 5 turns for the prompt
-    history_str = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in conversation_history[-5:]])
-    return f"""
+    def _format_conversation_history(self, conversation_history: List[Dict]) -> str:
+        """
+        Format conversation history for inclusion in prompts.
+        
+        Args:
+            conversation_history: List of conversation messages
+            
+        Returns:
+            Formatted conversation history string
+        """
+        if not conversation_history:
+            return ""
+        # Format the last 5 turns for the prompt
+        history_str = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in conversation_history[-5:]])
+        return f"""
 **CONVERSATION HISTORY (last 5 turns):**
 {history_str}
 """
 
-def get_simple_chat_prompt(user_message: str, conversation_history: List[Dict]) -> str:
-    """
-    Creates a streamlined prompt for simple, direct conversational messages.
+    def build_simple_chat_prompt(self, user_message: str, conversation_history: List[Dict]) -> str:
+        """
+        Creates a streamlined prompt for simple, direct conversational messages.
 
-    This prompt instructs the LLM to act as Elsie in a conversational manner
-    without the heavy context of database lookups or roleplay scenarios.
-    """
-    history_prompt = _format_conversation_history(conversation_history)
+        This prompt instructs the LLM to act as Elsie in a conversational manner
+        without the heavy context of database lookups or roleplay scenarios.
+        
+        Args:
+            user_message: The user's message
+            conversation_history: Recent conversation history
+            
+        Returns:
+            Formatted simple chat prompt
+        """
+        history_prompt = self._format_conversation_history(conversation_history)
 
-    return f"""
+        return f"""
 You are Elsie, an advanced AI providing information and assistance aboard the starship USS Stardancer.
 Maintain a helpful, sophisticated, and slightly formal persona.
 The user is having a simple conversation with you. Respond directly and naturally.
@@ -540,4 +556,14 @@ CRITICAL: Do not invent or fabricate information. If you do not know something, 
 
 Customer: {user_message}
 Elsie:
-""" 
+"""
+
+
+# Legacy function for backward compatibility
+def get_simple_chat_prompt(user_message: str, conversation_history: List[Dict]) -> str:
+    """
+    Legacy function for backward compatibility.
+    Use PromptLibrary().build_simple_chat_prompt() instead.
+    """
+    prompt_library = PromptLibrary()
+    return prompt_library.build_simple_chat_prompt(user_message, conversation_history) 

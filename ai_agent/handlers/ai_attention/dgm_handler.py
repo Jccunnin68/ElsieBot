@@ -10,7 +10,6 @@ import re
 from typing import Dict, List, Any, Optional
 
 from ..ai_logic.response_decision import ResponseDecision
-from .character_tracking import is_valid_character_name
 
 
 def extract_scene_context(user_message: str) -> Dict[str, Any]:
@@ -143,6 +142,9 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
     PHASE 2A: Enhanced to extract scene context (location, time, environment).
     Returns dict with is_dgm, action, triggers_roleplay, confidence, triggers, characters, dgm_controlled_elsie, scene_context
     """
+    # Get character tracking service for validation
+    from ..service_container import get_character_tracking_service
+    char_service = get_character_tracking_service()
     # Check for DGM tag at the start of the message
     dgm_pattern = r'^\s*\[DGM\]'
     if not re.search(dgm_pattern, user_message, re.IGNORECASE):
@@ -198,12 +200,12 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
         words = char_name.split()
         if len(words) > 1:
             # For multi-word names, validate the entire name as one entity
-            if is_valid_character_name(char_name):
+            if char_service.is_valid_character_name(char_name):
                 characters.add(char_name)
                 print(f"   👤 Multi-word character detected: {char_name}")
         else:
             # Single word names handled as before
-            if is_valid_character_name(char_name):
+            if char_service.is_valid_character_name(char_name):
                 characters.add(char_name)
     
     # 2. Extract from *italicized text*
@@ -216,7 +218,7 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
         for word in words:
             # Clean the word of any punctuation
             clean_word = re.sub(r'[^\w\s]', '', word)
-            if is_valid_character_name(clean_word):
+            if char_service.is_valid_character_name(clean_word):
                 characters.add(clean_word)
     
     # Convert set back to list for the return value
@@ -280,6 +282,10 @@ def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
     
     print(f"      🔍 PARSING DGM MESSAGE FOR CHARACTERS: '{clean_message[:100]}{'...' if len(clean_message) > 100 else ''}'")
     
+    # Get character tracking service for validation
+    from ..service_container import get_character_tracking_service
+    char_service = get_character_tracking_service()
+    
     # Titles to exclude from character names
     titles = {'Captain', 'Commander', 'Lieutenant', 'Doctor', 'Dr', 'Ensign', 'Chief', 'Admiral', 'Colonel', 'Major', 'Sergeant'}
     
@@ -295,7 +301,7 @@ def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
         for match in matches:
             for group_num in range(1, len(match.groups()) + 1):
                 potential_name = match.group(group_num)
-                if potential_name and potential_name not in titles and is_valid_character_name(potential_name):
+                if potential_name and potential_name not in titles and char_service.is_valid_character_name(potential_name):
                     name_normalized = potential_name.capitalize()
                     if name_normalized not in characters:
                         characters.append(name_normalized)
@@ -311,7 +317,7 @@ def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
         matches = re.finditer(pattern, clean_message)
         for match in matches:
             potential_name = match.group(1)
-            if potential_name and potential_name not in titles and is_valid_character_name(potential_name):
+            if potential_name and potential_name not in titles and char_service.is_valid_character_name(potential_name):
                 name_normalized = potential_name.capitalize()
                 if name_normalized not in characters:
                     characters.append(name_normalized)
@@ -329,7 +335,7 @@ def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
         matches = re.finditer(pattern, clean_message)
         for match in matches:
             potential_name = match.group(1)
-            if potential_name and potential_name not in titles and is_valid_character_name(potential_name):
+            if potential_name and potential_name not in titles and char_service.is_valid_character_name(potential_name):
                 name_normalized = potential_name.capitalize()
                 if name_normalized not in characters:
                     characters.append(name_normalized)
@@ -341,7 +347,7 @@ def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
     bracket_matches = re.findall(bracket_pattern, clean_message)
     for name in bracket_matches:
         name = name.strip()
-        if is_valid_character_name(name) and name not in titles:
+        if char_service.is_valid_character_name(name) and name not in titles:
             name_normalized = ' '.join(word.capitalize() for word in name.split())
             if name_normalized not in characters:
                 characters.append(name_normalized)

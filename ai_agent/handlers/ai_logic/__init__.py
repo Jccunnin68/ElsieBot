@@ -8,7 +8,7 @@ agentic architecture.
 """
 
 from .response_decision import ResponseDecision
-from .response_router import route_message_to_handler
+from .response_router import route_message
 from .roleplay_handler import handle_roleplay_message
 from .structured_query_handler import handle_structured_message
 from .structured_query_detector import StructuredQueryDetector
@@ -18,7 +18,7 @@ __all__ = [
     'ResponseDecision',
 
     # Main entry point for routing
-    'route_message_to_handler',
+    'route_message',
 
     # Specific handlers
     'handle_roleplay_message',

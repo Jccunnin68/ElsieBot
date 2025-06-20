@@ -12,7 +12,7 @@ import json
 from config import GEMMA_API_KEY
 from ..ai_logic.response_decision import ResponseDecision
 from .state_manager import RoleplayStateManager
-from ..ai_attention.character_tracking import extract_character_names_from_emotes
+
 
 class AttentionEngine:
     """

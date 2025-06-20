@@ -1,100 +1,178 @@
 """
-Response Router - Message Routing and Decision Coordination
-==========================================================
+Response Router - Routing Logic for AI Responses
+===============================================
 
-This module routes incoming messages to the appropriate handler based on:
-- Roleplay vs non-roleplay context
-- Enhanced query detection with conflict prevention
-- Cross-channel message coordination
-
-ENHANCED: Uses enhanced query detection to prevent conflicts and provide
-appropriate routing for different query types.
+This module handles the routing logic for determining how to respond to user messages,
+including roleplay state management and cross-channel busy signals.
+All responses go through the LLM with appropriate contextual information.
 """
 
-from typing import Dict, List, Optional
-import traceback
+from typing import Optional, Dict, Any
 
-from .response_decision import ResponseDecision
-from ..service_container import get_roleplay_state
-from ..ai_emotion.personality_contexts import is_simple_chat
-from ..ai_wisdom.prompt_builder import get_simple_chat_prompt
-from .context_detection import detect_elsie_mention
-
-# Specialized handlers imported lazily to avoid circular imports
+# Import services from service container
+from ..service_container import get_roleplay_state, get_context_analysis_service
 
 
-
-def route_message_to_handler(user_message: str, conversation_history: list, channel_context: Dict = None) -> ResponseDecision:
+def route_message(user_message: str, channel_context: Optional[Dict[str, Any]] = None) -> str:
     """
-    Routes the user's message to the appropriate handler based on the application's state.
+    Route incoming messages to appropriate handlers based on current state.
     
-    New Simplified Flow:
-    1. Check for DGM commands first to allow scene control.
-    2. Check if roleplay is active. If so, ALL messages go to the Roleplay Handler.
-    3. If not in roleplay, check for channel activation.
-    4. For simple conversational messages, route to a chat-focused LLM call.
-    5. Default to the standard structured query handler for all other messages.
+    This is the main entry point for message routing logic.
+    All responses go through the LLM with appropriate context.
     """
-    # Lazy imports to avoid circular dependencies
-    from .roleplay_handler import handle_roleplay_message
-    from .structured_query_handler import handle_structured_message
-    from ..ai_attention.dgm_handler import handle_dgm_command
-    
-    # 1. Check for DGM commands FIRST to short-circuit all other logic
-    dgm_decision = handle_dgm_command(user_message)
-    if dgm_decision:
-        print("🚦 ROUTER: DGM command detected, routing to DGM Handler.")
-        return dgm_decision
-
+    # Get services
     rp_state = get_roleplay_state()
+    context_service = get_context_analysis_service()
     
-    # 2. Prioritize active roleplay sessions
+    # Check if Elsie is mentioned (to wake her up in channels she's not monitoring)
+    if context_service.detect_elsie_mention(user_message):
+        print("   👋 ELSIE MENTIONED - Processing message")
+    
+    # Check roleplay state and handle cross-channel scenarios
     if rp_state.is_roleplaying:
-        # Check if this message is from a different channel than the active roleplay
         if channel_context and not rp_state.is_message_from_roleplay_channel(channel_context):
-            print("🚦 ROUTER: Cross-channel message during roleplay - sending busy signal.")
-            from .roleplay_handler import handle_cross_channel_busy
             return handle_cross_channel_busy(rp_state, channel_context)
-        
-        print("🚦 ROUTER: Roleplay active, routing to Roleplay Handler.")
-        return handle_roleplay_message(user_message, conversation_history)
-        
-    # 3. NEW: In non-roleplay, check for channel activation
-    channel_id = channel_context.get('channel_id') if channel_context else None
-    if not channel_id:
-        # If we have no channel context, we can't enforce the rule.
-        # Default to old behavior but log a warning.
-        print("⚠️ ROUTER: No channel ID found, cannot enforce mention-to-activate rule. Processing message.")
-    else:
-        is_activated = rp_state.is_channel_activated(channel_id)
-        is_mention = detect_elsie_mention(user_message)
+        return handle_roleplay_message(user_message, [])  # conversation_history would be passed from caller
+    
+    # Route to standard handler for non-roleplay scenarios
+    return handle_standard_message(user_message)
 
-        # If channel is not active and this message doesn't activate it, ignore.
-        if not is_activated and not is_mention:
-            print(f"🚦 ROUTER: Ignoring message in inactive channel ({channel_id}). Waiting for mention.")
-            return ResponseDecision.no_response(f"Ignoring message in inactive channel {channel_id}.")
 
-        # If this message is the activation, mark the channel as active.
-        if is_mention and not is_activated:
-            print(f"🚦 ROUTER: Elsie mentioned. Activating channel ({channel_id}).")
-            rp_state.activate_channel(channel_id)
+def handle_cross_channel_busy(rp_state, channel_context: Dict[str, Any]) -> str:
+    """
+    Handle cross-channel messages when Elsie is busy roleplaying in another channel.
+    """
+    current_channel = rp_state.current_roleplay_channel
+    busy_message = f"*interface flickers briefly* I'm currently engaged in roleplay in #{current_channel}. "
+    busy_message += "I'll be available for other interactions once that session concludes."
+    return busy_message
 
-    # 4. Handle simple conversational messages
-    if is_simple_chat(user_message):
-        print("🚦 ROUTER: Simple chat detected, routing to conversational LLM call.")
-        return ResponseDecision(
-            needs_ai_generation=True,
-            pre_generated_response=get_simple_chat_prompt(user_message, conversation_history),
-            strategy={
-                'approach': 'simple_chat',
-                'reasoning': 'Simple conversational message, routing to LLM for chat.'
-            }
+
+def handle_roleplay_message(user_message: str, conversation_history: list) -> str:
+    """
+    Handle messages during roleplay sessions.
+    All roleplay messages go through the LLM with roleplay context.
+    """
+    # Import services from service container
+    from ..service_container import get_attention_engine, get_ai_engine
+    
+    try:
+        # Use attention engine to determine roleplay strategy
+        attention_engine = get_attention_engine()
+        strategy = attention_engine.determine_response_strategy(
+            user_message, 
+            conversation_history or [], 
+            None  # roleplay state will be checked internally
         )
         
-    # 5. Default to the standard query handler for all other requests
-    print("🚦 ROUTER: Defaulting to Structured Query Handler.")
-    return handle_structured_message(user_message, conversation_history)
+        # Always use AI engine for roleplay - no mocking
+        ai_engine = get_ai_engine()
+        if hasattr(ai_engine, 'generate_ai_response'):
+            return ai_engine.generate_ai_response(user_message, strategy, conversation_history)
+        else:
+            # Fallback if method name is different
+            return ai_engine.generate_response_with_strategy(user_message, strategy, conversation_history)
+            
+    except Exception as e:
+        print(f"Error in roleplay handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return "I'm experiencing some technical difficulties during roleplay. Please try again in a moment."
 
 
-# REMOVED: All unused routing helper functions
-# The route_message_to_handler() function now implements all routing logic directly
+def handle_standard_message(user_message: str) -> str:
+    """
+    Handle standard (non-roleplay) messages.
+    All messages go through the LLM with appropriate contextual information.
+    """
+    # Import services from service container
+    from ..service_container import get_ai_engine
+    
+    try:
+        # Detect contextual information to pass to LLM
+        context_info = _detect_message_context(user_message)
+        
+        # Build strategy with contextual information
+        strategy = {
+            'approach': 'simple_chat',
+            'context_type': context_info['type'],
+            'personality_context': context_info['personality'],
+            'prompt_hints': context_info['hints'],
+            'needs_ai_generation': True
+        }
+        
+        # Always use AI engine - no mocking responses
+        ai_engine = get_ai_engine()
+        if hasattr(ai_engine, 'generate_ai_response'):
+            return ai_engine.generate_ai_response(user_message, strategy, [])
+        else:
+            # Fallback if method name is different
+            return ai_engine.generate_response_with_strategy(user_message, strategy, [])
+        
+    except Exception as e:
+        print(f"Error in standard handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return "I'm experiencing some technical difficulties. Please try again in a moment."
+
+
+def _detect_message_context(user_message: str) -> Dict[str, Any]:
+    """
+    Detect contextual information about the message to inform LLM processing.
+    
+    Returns:
+        Dictionary with context type, personality, and prompt hints
+    """
+    user_lower = user_message.lower().strip()
+    
+    # Detect greeting patterns
+    greeting_patterns = ["hello", "hi", "greetings", "hey", "good morning", "good afternoon", "good evening"]
+    is_greeting = any(pattern in user_lower for pattern in greeting_patterns)
+    
+    # Detect farewell patterns
+    farewell_patterns = ["bye", "goodbye", "see you", "farewell", "take care", "goodnight"]
+    is_farewell = any(pattern in user_lower for pattern in farewell_patterns)
+    
+    # Detect drink/bar related patterns
+    drink_patterns = ["drink", "beverage", "bar", "alcohol", "cocktail", "wine", "beer", "coffee", "tea"]
+    is_drink_related = any(pattern in user_lower for pattern in drink_patterns)
+    
+    # Detect status inquiry patterns
+    status_patterns = ["how are you", "how's it going", "what's up", "how do you feel"]
+    is_status_inquiry = any(pattern in user_lower for pattern in status_patterns)
+    
+    # Detect emotional context
+    from ..ai_emotion.personality_contexts import detect_mock_personality_context
+    personality_context = detect_mock_personality_context(user_message)
+    
+    # Build context info
+    if is_greeting:
+        return {
+            'type': 'greeting',
+            'personality': personality_context,
+            'hints': ['respond_warmly', 'establish_presence', 'invite_interaction']
+        }
+    elif is_farewell:
+        return {
+            'type': 'farewell', 
+            'personality': personality_context,
+            'hints': ['acknowledge_departure', 'warm_closure', 'leave_door_open']
+        }
+    elif is_drink_related:
+        return {
+            'type': 'drink_service',
+            'personality': 'bartender',
+            'hints': ['bartender_mode', 'drink_knowledge', 'service_oriented']
+        }
+    elif is_status_inquiry:
+        return {
+            'type': 'status_inquiry',
+            'personality': personality_context,
+            'hints': ['share_current_state', 'maintain_character', 'engage_conversation']
+        }
+    else:
+        return {
+            'type': 'general_chat',
+            'personality': personality_context,
+            'hints': ['natural_conversation', 'helpful_response', 'maintain_character']
+        }

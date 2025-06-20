@@ -22,7 +22,7 @@ from datetime import datetime
 # Refactor complete - importing from new handler packages
 from handlers.ai_coordinator import coordinate_response
 from handlers.ai_emotion import detect_mock_personality_context
-from handlers.handlers_utils import estimate_token_count
+from handlers.service_container import get_text_utility_service
 
 
 @dataclass
@@ -139,7 +139,7 @@ class DiscordInterface:
             'mentions': message_context.mentions or [],
             'has_attachments': bool(message_context.attachments),
             'personality_context': personality_context,
-            'estimated_tokens': estimate_token_count(message_context.content)
+            'estimated_tokens': get_text_utility_service().estimate_token_count(message_context.content)
         }
     
     def _format_discord_response(self, ai_response: str) -> str:
