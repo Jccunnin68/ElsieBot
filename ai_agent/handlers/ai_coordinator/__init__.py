@@ -18,12 +18,11 @@ Usage:
 """
 
 from .response_coordinator import coordinate_response
-from .ai_engine import generate_ai_response_with_decision
 
 __all__ = [
     # Main coordination
-    'coordinate_response',
-    
-    # AI generation
-    'generate_ai_response_with_decision'
-] 
+    'coordinate_response'
+]
+
+# REMOVED: generate_ai_response_with_decision is now obsolete
+# Use service_container.get_ai_engine().generate_response_with_decision() instead 

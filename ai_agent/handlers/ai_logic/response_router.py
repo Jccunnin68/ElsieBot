@@ -15,15 +15,12 @@ from typing import Dict, List, Optional
 import traceback
 
 from .response_decision import ResponseDecision
-from ..ai_attention import get_roleplay_state
+from ..service_container import get_roleplay_state
 from ..ai_emotion.personality_contexts import is_simple_chat
 from ..ai_wisdom.prompt_builder import get_simple_chat_prompt
 from .context_detection import detect_elsie_mention
 
-# Import the specialized handlers
-from .roleplay_handler import handle_roleplay_message
-from .structured_query_handler import handle_structured_message
-from ..ai_attention.dgm_handler import handle_dgm_command
+# Specialized handlers imported lazily to avoid circular imports
 
 
 
@@ -38,6 +35,11 @@ def route_message_to_handler(user_message: str, conversation_history: list, chan
     4. For simple conversational messages, route to a chat-focused LLM call.
     5. Default to the standard structured query handler for all other messages.
     """
+    # Lazy imports to avoid circular dependencies
+    from .roleplay_handler import handle_roleplay_message
+    from .structured_query_handler import handle_structured_message
+    from ..ai_attention.dgm_handler import handle_dgm_command
+    
     # 1. Check for DGM commands FIRST to short-circuit all other logic
     dgm_decision = handle_dgm_command(user_message)
     if dgm_decision:
@@ -48,6 +50,12 @@ def route_message_to_handler(user_message: str, conversation_history: list, chan
     
     # 2. Prioritize active roleplay sessions
     if rp_state.is_roleplaying:
+        # Check if this message is from a different channel than the active roleplay
+        if channel_context and not rp_state.is_message_from_roleplay_channel(channel_context):
+            print("🚦 ROUTER: Cross-channel message during roleplay - sending busy signal.")
+            from .roleplay_handler import handle_cross_channel_busy
+            return handle_cross_channel_busy(rp_state, channel_context)
+        
         print("🚦 ROUTER: Roleplay active, routing to Roleplay Handler.")
         return handle_roleplay_message(user_message, conversation_history)
         
@@ -88,89 +96,5 @@ def route_message_to_handler(user_message: str, conversation_history: list, chan
     return handle_structured_message(user_message, conversation_history)
 
 
-def _determine_routing_context(channel_context: Optional[Dict]) -> Dict:
-    """
-    Determine whether to route to roleplay or standard handler.
-    
-    SIMPLIFIED LOGIC: Only route to roleplay when actively in a roleplay state.
-    """
-    try:
-        # Get current roleplay state
-        rp_state = get_roleplay_state()
-        
-        # SIMPLIFIED: Only route to roleplay if actively in roleplay state
-        if rp_state.is_roleplaying:
-            return {
-                'mode': 'roleplay',
-                'reasoning': 'Active roleplay state detected'
-            }
-        
-        # All other cases go to standard handler
-        return {
-            'mode': 'standard',
-            'reasoning': 'Not in active roleplay - using standard handler'
-        }
-        
-    except Exception as e:
-        print(f"      ⚠️  Error determining routing context: {e}")
-        return {
-            'mode': 'standard',
-            'reasoning': f'Error fallback - using standard: {e}'
-        }
-
-
-def _route_to_roleplay_handler(user_message: str, conversation_history: List, channel_context: Dict) -> ResponseDecision:
-    """Route to roleplay handler."""
-    try:
-        print(f"   🎭 ROUTING TO ROLEPLAY HANDLER")
-        print(f"      Mode: Quick response for roleplay flow")
-        
-        return handle_roleplay_message(user_message, conversation_history, channel_context or {})
-        
-    except Exception as e:
-        print(f"   ❌ ERROR routing to roleplay handler: {e}")
-        return ResponseDecision(
-            needs_ai_generation=False,
-            pre_generated_response="I'm having difficulty with roleplay processing right now.",
-            strategy={
-                'approach': 'roleplay_fallback',
-                'needs_database': False,
-                'reasoning': f'Roleplay handler error: {e}',
-                'context_priority': 'safety'
-            }
-        )
-
-
-def _route_to_standard_handler(user_message: str, conversation_history: List) -> ResponseDecision:
-    """Route to the new structured query handler."""
-    try:
-        print(f"   💬 ROUTING TO STRUCTURED QUERY HANDLER")
-        print(f"      Mode: Comprehensive response with agentic reasoning")
-        
-        return handle_structured_message(user_message, conversation_history)
-        
-    except Exception as e:
-        print(f"   ❌ ERROR routing to standard handler: {e}")
-        return ResponseDecision(
-            needs_ai_generation=False,
-            pre_generated_response="I'm having difficulty processing that request right now.",
-            strategy={
-                'approach': 'general',
-                'needs_database': False,
-                'reasoning': f'Standard handler error: {e}',
-                'context_priority': 'safety'
-            }
-        )
-
-
-def is_cross_channel_message(channel_context: Optional[Dict]) -> bool:
-    """Check if this message is from a different channel than the current roleplay."""
-    rp_state = get_roleplay_state()
-    
-    if not rp_state.is_roleplaying or not channel_context:
-        return False
-    
-    return not rp_state.is_message_from_roleplay_channel(channel_context)
-
-
- 
+# REMOVED: All unused routing helper functions
+# The route_message_to_handler() function now implements all routing logic directly

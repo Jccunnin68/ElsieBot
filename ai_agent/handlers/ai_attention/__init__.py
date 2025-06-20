@@ -15,17 +15,12 @@ Core Components:
 - character_tracking.py: Utility for extracting character names.
 - dgm_handler.py: Handles commands from the DGM (Dungeon Game Master).
 """
-from .state_manager import get_roleplay_state, RoleplayStateManager
+from .state_manager import RoleplayStateManager
 from .character_tracking import extract_character_names_from_emotes
 from .dgm_handler import check_dgm_post, handle_dgm_command
-from .attention_engine import get_attention_engine
 
 __all__ = [
-    # New Attention Engine
-    'get_attention_engine',
-
     # State Management
-    'get_roleplay_state',
     'RoleplayStateManager',
 
     # Utilities
@@ -34,4 +29,7 @@ __all__ = [
     # DGM Handling (Non-LLM)
     'check_dgm_post',
     'handle_dgm_command'
-] 
+]
+
+# REMOVED: Global accessor functions moved to service_container
+# Use: from handlers.service_container import get_roleplay_state, get_attention_engine 

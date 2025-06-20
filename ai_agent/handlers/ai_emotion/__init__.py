@@ -18,14 +18,13 @@ Core Components:
 
 from .poetic_responses import should_trigger_poetic_circuit, get_poetic_response
 from .mock_responses import get_mock_response
-from .emotion_engine import get_emotion_engine
 
 __all__ = [
-    # New Emotion Engine
-    'get_emotion_engine',
-    
     # Existing Response Generators
     'should_trigger_poetic_circuit',
     'get_poetic_response',
     'get_mock_response',
-] 
+]
+
+# REMOVED: Global accessor functions moved to service_container
+# Use: from handlers.service_container import get_emotion_engine 

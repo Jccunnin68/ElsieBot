@@ -9,8 +9,7 @@ optimizing the flow to avoid expensive AI calls when possible.
 from typing import Dict
 
 from handlers.ai_logic.response_router import route_message_to_handler
-from handlers.ai_attention import extract_character_names_from_emotes, get_roleplay_state
-from handlers.ai_coordinator.ai_engine import generate_ai_response_with_decision
+from handlers.ai_attention import extract_character_names_from_emotes
 
 
 def coordinate_response(user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
@@ -82,6 +81,7 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
         
         # Handle tracking for roleplay responses that don't need AI
         if decision.strategy['approach'] == 'roleplay_active':
+            from handlers.service_container import get_roleplay_state
             rp_state = get_roleplay_state()
             turn_number = len(conversation_history) + 1
             
@@ -101,6 +101,8 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     
     # Otherwise, do the expensive AI generation
     print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")
-    ai_response = generate_ai_response_with_decision(decision, user_message, conversation_history)
+    from handlers.service_container import get_ai_engine
+    ai_engine = get_ai_engine()
+    ai_response = ai_engine.generate_response_with_decision(decision, user_message, conversation_history)
     
     return ai_response 

@@ -8,12 +8,6 @@ now acting as a lightweight orchestrator for the AttentionEngine.
 from typing import List, Dict
 
 from .response_decision import ResponseDecision
-from ..ai_attention import (
-    get_roleplay_state,
-    check_dgm_post,
-    handle_dgm_command,
-    get_attention_engine
-)
 from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
 
 def handle_roleplay_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
@@ -26,6 +20,10 @@ def handle_roleplay_message(user_message: str, conversation_history: List[Dict])
     3.  If the engine decides a response is needed, build the context for that strategy.
     4.  Return the final decision.
     """
+    # Import dependencies lazily to avoid circular imports
+    from ..service_container import get_roleplay_state, get_attention_engine
+    from ..ai_attention.dgm_handler import check_dgm_post, handle_dgm_command
+    
     rp_state = get_roleplay_state()
     
     # 1. Handle DGM commands (non-LLM)

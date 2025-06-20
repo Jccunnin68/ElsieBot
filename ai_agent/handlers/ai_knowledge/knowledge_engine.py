@@ -181,12 +181,5 @@ Reformatted:
         print("      ❌ All KnowledgeEngine processing attempts failed. Falling back to raw logs.")
         return raw_logs
 
-# Singleton instance
-_knowledge_engine = None
-
-def get_knowledge_engine() -> KnowledgeEngine:
-    """Provides a global singleton instance of the KnowledgeEngine."""
-    global _knowledge_engine
-    if _knowledge_engine is None:
-        _knowledge_engine = KnowledgeEngine()
-    return _knowledge_engine 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_knowledge_engine() instead 

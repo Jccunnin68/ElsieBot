@@ -10,13 +10,7 @@ Components:
 - knowledge_engine.py: An LLM-based engine for cleaning raw Discord logs.
 """
 
-from .database_controller import get_db_controller
-from .knowledge_engine import get_knowledge_engine
-
 __all__ = [
-    # Database access
-    'get_db_controller',
-
-    # Knowledge processing engine
-    'get_knowledge_engine',
+    # REMOVED: Global accessor functions moved to service_container
+    # Use: from handlers.service_container import get_db_controller, get_knowledge_engine
 ] 

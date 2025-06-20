@@ -11,8 +11,7 @@ import json
 
 from config import GEMMA_API_KEY
 from ..ai_logic.response_decision import ResponseDecision
-from .state_manager import RoleplayStateManager, get_roleplay_state
-from ..ai_emotion.emotion_engine import get_emotion_engine
+from .state_manager import RoleplayStateManager
 from ..ai_attention.character_tracking import extract_character_names_from_emotes
 
 class AttentionEngine:
@@ -22,9 +21,10 @@ class AttentionEngine:
     def __init__(self, model_name='gemma-3-27b-it'):
         """
         Initializes the AttentionEngine with a powerful model.
+        Dependencies injected after initialization.
         """
         self.model = genai.GenerativeModel(model_name)
-        self.emotion_engine = get_emotion_engine()
+        self.emotion_engine = None  # Will be injected via service container
 
     def determine_response_strategy(self, user_message: str, conversation_history: List[Dict], rp_state: RoleplayStateManager) -> ResponseDecision:
         """
@@ -43,7 +43,11 @@ class AttentionEngine:
             return ResponseDecision(needs_ai_generation=False, strategy={'approach': 'roleplay_listening', 'reasoning': 'No message or API key.'})
 
         try:
-            # 1. Get emotional context
+            # 1. Get emotional context (lazy load emotion engine)
+            if self.emotion_engine is None:
+                from ..service_container import get_emotion_engine
+                self.emotion_engine = get_emotion_engine()
+            
             emotional_analysis = self.emotion_engine.analyze_emotion(user_message)
 
             # 2. Build the comprehensive prompt
@@ -120,12 +124,5 @@ You must provide your decision as a single JSON object with the following struct
 **Your decision is critical. Provide only the JSON object.**
 """
 
-# Global instance for easy access
-_attention_engine_instance = None
-
-def get_attention_engine():
-    """Singleton accessor for the AttentionEngine."""
-    global _attention_engine_instance
-    if _attention_engine_instance is None:
-        _attention_engine_instance = AttentionEngine()
-    return _attention_engine_instance 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_attention_engine() instead 

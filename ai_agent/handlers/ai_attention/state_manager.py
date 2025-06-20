@@ -694,10 +694,5 @@ class RoleplayStateManager:
             return SessionMode.REGULAR_ROLEPLAY
 
 
-# Global roleplay state manager instance
-_roleplay_state = RoleplayStateManager()
-
-
-def get_roleplay_state() -> RoleplayStateManager:
-    """Get the global roleplay state manager."""
-    return _roleplay_state 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_roleplay_state() instead 
