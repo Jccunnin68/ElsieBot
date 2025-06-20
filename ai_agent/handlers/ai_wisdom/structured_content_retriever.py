@@ -113,6 +113,7 @@ class StructuredContentRetriever:
         - General mission queries (from all logs)
         - General log queries (from any logs)
         - List queries (show me a list of all X logs)
+        - Multi-log queries with forced historical summary
         """
         subject = query.get('subject')
         modifier = query.get('modifier', 'recent')
@@ -120,6 +121,7 @@ class StructuredContentRetriever:
         is_general_mission = query.get('is_general_mission', False)
         is_general_log = query.get('is_general_log', False)
         is_list_query = query.get('is_list_query', False)
+        force_historical_summary = query.get('force_historical_summary', False)
         
         # Handle list queries separately
         if is_list_query:
@@ -127,13 +129,19 @@ class StructuredContentRetriever:
             return self._handle_list_query(subject)
         
         # Map temporal modifiers to database ordering
-        # Use 'closest_to_today' for latest to find logs with dates closest to current date
-        order_by_map = {
-            'latest': 'closest_to_today',  # Find logs closest to current system date
-            'first': 'id_asc',
-            'recent': 'chronological',     # Keep chronological for general recent queries
-            'random': 'random'
-        }
+        # For multi-log queries, always use chronological order for historical summary
+        if force_historical_summary:
+            order_by = 'chronological'  # Always chronological for multi-log historical summaries
+            print(f"   📚 MULTI-LOG QUERY: Using chronological ordering for historical summary")
+        else:
+            # Use 'closest_to_today' for latest to find logs with dates closest to current date
+            order_by_map = {
+                'latest': 'closest_to_today',  # Find logs closest to current system date
+                'first': 'id_asc',
+                'recent': 'chronological',     # Keep chronological for general recent queries
+                'random': 'random'
+            }
+            order_by = order_by_map.get(modifier, 'chronological')
         
         # Map temporal modifiers to default limits
         limit_map = {
@@ -143,8 +151,6 @@ class StructuredContentRetriever:
             'random': 1
         }
 
-        order_by = order_by_map.get(modifier, 'chronological')
-        
         # Use count if specified, otherwise use default limit
         if count:
             limit = min(count, 10)  # Cap at 10 to prevent overwhelming results
@@ -152,7 +158,7 @@ class StructuredContentRetriever:
             limit = limit_map.get(modifier, 3)
         
         print(f"   📋 LOG SEARCH: subject='{subject}', modifier='{modifier}', count={count}, limit={limit}")
-        print(f"   📋 FLAGS: is_general_mission={is_general_mission}, is_general_log={is_general_log}")
+        print(f"   📋 FLAGS: is_general_mission={is_general_mission}, is_general_log={is_general_log}, force_historical_summary={force_historical_summary}")
         
         # Handle different types of log queries
         if is_general_mission:
@@ -194,9 +200,15 @@ class StructuredContentRetriever:
             )
         
         # Add metadata to indicate if this should use historical summary format
-        # Use historical summary for multiple logs (count > 1 or limit > 1)
-        if results and (count and count > 1) or (not count and limit > 1):
-            print(f"   📚 MULTIPLE LOGS DETECTED: Will use historical summary format")
+        # Use historical summary for:
+        # 1. Forced historical summary (multi-log queries)
+        # 2. Multiple logs (count > 1 or limit > 1)
+        if results and (force_historical_summary or (count and count > 1) or (not count and limit > 1)):
+            if force_historical_summary:
+                print(f"   📚 FORCED HISTORICAL SUMMARY: Multi-log query detected")
+            else:
+                print(f"   📚 MULTIPLE LOGS DETECTED: Will use historical summary format")
+            
             for result in results:
                 result['use_historical_summary'] = True
         

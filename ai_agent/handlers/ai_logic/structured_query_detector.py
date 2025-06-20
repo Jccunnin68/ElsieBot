@@ -231,7 +231,30 @@ class StructuredQueryDetector:
         4. [tell me about/summarize] [a] <modifier> <subject> log[s]
         5. [tell me about/summarize] [a] mission[s] (random from all logs)
         6. random log queries
+        7. multi-log queries (summarize the last X logs, tell me about the recent Y logs)
         """
+        
+        # NEW Pattern: Multi-log queries - "summarize the last X logs", "tell me about the recent Y logs"
+        # This pattern specifically catches numeric multi-log requests and forces historical summary
+        multi_log_pattern = re.compile(r'(?:summarize|tell me about|show me|give me)\s+(?:the\s+)?(last|latest|recent|first)(?:\s+(\d+))?\s+logs?\b', re.IGNORECASE)
+        multi_log_match = multi_log_pattern.search(user_message)
+        if multi_log_match:
+            modifier, count = multi_log_match.groups()
+            modifier = self._normalize_temporal_modifier(modifier)
+            
+            # Default to 3 logs if no specific count provided, but mark as multi-log
+            count_value = int(count) if count else 3
+            
+            print(f"   🔢 MULTI-LOG QUERY DETECTED: modifier='{modifier}', count={count_value}")
+            
+            return {
+                'type': 'logs',
+                'subject': 'any',  # Multi-log queries search across all logs
+                'modifier': modifier,
+                'count': count_value,
+                'is_general_log': True,
+                'force_historical_summary': True  # NEW: Force historical summary format
+            }
         
         # Pattern 1: "logs for <subject> [modifier]"
         pattern1 = re.compile(r'logs? for\s+([A-Za-z0-9\s\'-]+?)(?:\s+(latest|last|first|recent|most recent|random))?$', re.IGNORECASE)
@@ -266,6 +289,9 @@ class StructuredQueryDetector:
             # Add count if specified
             if count:
                 result['count'] = int(count)
+                # If count > 1, force historical summary
+                if int(count) > 1:
+                    result['force_historical_summary'] = True
             
             return result
 

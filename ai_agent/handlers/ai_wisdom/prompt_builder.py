@@ -56,25 +56,21 @@ DATABASE SEARCH RESULTS ({len(results)} entries found):
 
         return f"""
 Log Summarization:
-You are a main computer aboard the starship USS Stardancer. {context_description} You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
+Your task is to summarize the log data that presents a factual sequence of events in the style of a historical narrative. {context_description} You have been provided with cleaned log data that presents a factual sequence of events. Your task is to synthesize this data into a concise, factual summary.
 
 INSTRUCTIONS:
 - FORBIDDEN: Do not present the information like an episode summary. instead present it as a story.
 - FORBIDDEN: Do not present the information like a in universe log. instead present it as a story.
 - FORBIDDEN: Do not present a bulleted list. instead present it as a story.
-- FORBIDDEN: Do not present the information like a in universe log. instead present it as a story.
-- FORBIDDEN: Do not present a bulleted list. instead present it as a story.
-- IMPERATIVE: You must include a title for the result you may find a title the Setting scenes at the start fo the episode to use just after the Stardancer title card. 
-- You do not need to greet the user.
-- You do not need to format it like an email
+- FORBIDDEN: Do not invent positions for the characters. Assume the reader knows the positions of the characters.
+- FORBIDDEN: Inventing relationships between characters not described in the logs.
+- IMPERATIVE: You must include a title for the result you may find a title the Setting scenes at the start fo the episode to use just after the title card. (Star Trek: Stardancer "TITLE" Pattern) It varies for ships but roughly follows this pattern.
 - SYNTHESIZE all provided information into a well-organized long form response.
-- STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data.
+- STRUCTURE: Use clear sections and a logical flow. Do not use bullet points unless it is for a list of specifications or similar data. The -setting- events will always be the first set of actions until the first post in a -Scene- Channel, after that -setting- will augment, use the line numbers as references to action happening at the same time.
 - ACCURACY: Only use information explicitly provided in the search results.
 - CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If the information is not in the logs, state that you do not have that information.
-- LENGTH: Be thorough and detailed in your response. You have up to 45000 characters use as many as you need to be thorough.
+- LENGTH: Be thorough and detailed in your response. You have up to 32000 characters use as many as you need to be thorough.
 - Make sure to include all storylines even side storylines.
-- Format narratively like a story.
-- If the episode has a title, use it in your response. The title will appear in the first line by the Narrator if it exists.
 - You do not need to make up a stardate for the logs. It is in the data returned to you with "stardate: in the line of the log. If it does not exist, do not make one up. simply leave that line off.
 
 
@@ -83,7 +79,7 @@ CLEANED LOG DATA:
 {result_content}
 ---
 
-Provide a comprehensive retelling of these events with a master storyteller's flair.
+Provide a comprehensive retelling of these events with a master historical narrative storyteller's flair.
 """
 
     def _get_log_context_description(self, subject: str, temporal_type: str, result_count: int) -> str:
@@ -248,25 +244,44 @@ Example response format:
     def build_historical_summary_prompt(self, subject: str, results: List[Dict], temporal_type: str) -> str:
         """
         Builds a prompt for historical summary of multiple logs.
-        This format is better for multiple log entries as it provides structured summaries
-        separated by log entry rather than a single narrative.
+        Enhanced for multi-log queries to ensure chronological order and log source separation.
         """
         if not results:
             return f"I searched the mission logs but found no entries matching your query for '{subject}'."
 
-        # Format each log entry separately for historical summary
-        log_entries = []
-        for i, result in enumerate(results, 1):
-            title = result.get('title', f'Log Entry {i}')
-            content = result.get('raw_content', 'No content available.')
-            
-            # Extract date from title if available
-            date_info = self._extract_date_info(title)
-            date_str = f" - {date_info}" if date_info else ""
-            
-            log_entries.append(f"**LOG ENTRY {i}: {title}{date_str}**\n{content}")
+        # Group logs by source/category for better organization
+        logs_by_source = {}
+        for result in results:
+            # Try to extract source from categories or title
+            source = self._extract_log_source(result)
+            if source not in logs_by_source:
+                logs_by_source[source] = []
+            logs_by_source[source].append(result)
 
-        formatted_logs = "\n\n" + "="*50 + "\n\n".join(log_entries)
+        # Format logs grouped by source, maintaining chronological order within each source
+        formatted_sections = []
+        
+        for source, source_logs in logs_by_source.items():
+            # Sort logs within each source chronologically (earliest to latest)
+            sorted_logs = self._sort_logs_chronologically(source_logs)
+            
+            source_entries = []
+            for i, result in enumerate(sorted_logs, 1):
+                title = result.get('title', f'Log Entry {i}')
+                content = result.get('raw_content', 'No content available.')
+                
+                # Extract date from title if available
+                date_info = self._extract_date_info(title)
+                date_str = f" - {date_info}" if date_info else ""
+                
+                source_entries.append(f"**{title}{date_str}**\n{content}")
+            
+            # Create a section for this source
+            source_section = f"**=== {source.upper()} LOGS ===**\n\n" + "\n\n" + "-"*30 + "\n\n".join(source_entries)
+            formatted_sections.append(source_section)
+
+        # Join all sections with clear separators
+        formatted_logs = "\n\n" + "="*60 + "\n\n".join(formatted_sections)
         
         # Determine the context based on temporal type and subject
         context_description = self._get_historical_context_description(subject, temporal_type, len(results))
@@ -275,22 +290,26 @@ Example response format:
 Historical Log Summary:
 You are a main computer aboard the starship USS Stardancer. {context_description} You have been provided with multiple log entries that should be summarized in a structured historical format.
 
-INSTRUCTIONS:
-- PRESENT each log entry as a separate historical summary
-- STRUCTURE: Create a clear section for each log entry with its title and summary
-- FORMAT: Use "**LOG ENTRY X: [Title]**" as section headers titles are found in the first few lines of the log.
-- SUMMARIZE: Provide a concise summary of each log entry's key events
-- CHRONOLOGY: Maintain the chronological order provided
+INSTRUCTIONS FOR MULTI-LOG HISTORICAL SUMMARY:
+- FORBIDDEN: Do not present the information like the raw laws with the "scene" structure intact.
+- PRESENT logs in CHRONOLOGICAL ORDER from EARLIEST to LATEST within each source
+- SEPARATE logs by source/origin (ship, mission, character, etc.)
+- CREATE clear sections for each log source with "=== SOURCE LOGS ===" headers
+- STRUCTURE: Provide a concise summary of key events for each log entry
+- CHRONOLOGY: Maintain strict chronological progression from earliest events to most recent
+- LOG SOURCE SEPARATION: Group related logs together by their source or origin
 - ACCURACY: Only use information explicitly provided in the search results
 - CRITICAL: DO NOT INVENT, FABRICATE, OR SPECULATE. If information is missing, state that you do not have that information
-- CONSISTENCY: Use consistent formatting throughout
-- BREVITY: Keep each log summary focused and concise while capturing key events
-MULTIPLE LOG ENTRIES TO SUMMARIZE:
+- CONSISTENCY: Use consistent formatting throughout all log entries
+- BREVITY: Keep each log summary focused and concise while capturing key events and timeline
+- IMPERATIVE: Each summary should be a short descriptive informational summary of the events of the logs you do not need scne tracking mearly a summary of the what has transpired.
+
+MULTIPLE LOG ENTRIES TO SUMMARIZE (Organized by Source):
 ---
 {formatted_logs}
 ---
 
-Provide a structured historical summary with each log entry clearly separated and summarized.
+Provide a structured historical summary with logs organized by source and presented in chronological order from earliest to latest events.
 """
 
     def build_log_list_prompt(self, subject: str, results: List[Dict]) -> str:
@@ -362,6 +381,108 @@ Total: {total_count} log entries found in the database.
                 return match.group(1)
         
         return ""
+
+    def _extract_log_source(self, log_result: Dict) -> str:
+        """
+        Extract the source/origin of a log entry for grouping purposes.
+        
+        Args:
+            log_result: Dictionary containing log information
+            
+        Returns:
+            String representing the log source (ship name, mission, character, etc.)
+        """
+        # Try to extract source from categories first
+        categories = log_result.get('categories', [])
+        if categories:
+            for category in categories:
+                category_lower = category.lower()
+                # Look for ship names, mission types, or character-related categories
+                if any(ship_term in category_lower for ship_term in ['stardancer', 'adagio', 'protector', 'manta', 'pilgrim']):
+                    return category
+                elif 'mission' in category_lower:
+                    return 'Mission Logs'
+                elif any(char_term in category_lower for char_term in ['captain', 'commander', 'crew', 'personnel']):
+                    return 'Personnel Logs'
+        
+        # Try to extract from title
+        title = log_result.get('title', '').lower()
+        if 'stardancer' in title:
+            return 'USS Stardancer'
+        elif 'adagio' in title:
+            return 'USS Adagio'
+        elif 'protector' in title:
+            return 'USS Protector'
+        elif 'mission' in title:
+            return 'Mission Logs'
+        elif any(rank in title for rank in ['captain', 'commander', 'lieutenant']):
+            return 'Personnel Logs'
+        
+        # Default fallback
+        return 'General Logs'
+
+    def _sort_logs_chronologically(self, logs: List[Dict]) -> List[Dict]:
+        """
+        Sort logs chronologically from earliest to latest.
+        
+        Args:
+            logs: List of log dictionaries to sort
+            
+        Returns:
+            List of logs sorted chronologically (earliest to latest)
+        """
+        import re
+        from datetime import datetime
+        
+        def extract_sortable_date(log):
+            """Extract a date that can be used for sorting"""
+            title = log.get('title', '')
+            
+            # Look for stardate first (most common in Star Trek logs)
+            stardate_match = re.search(r'stardate\s+(\d+\.?\d*)', title, re.IGNORECASE)
+            if stardate_match:
+                return float(stardate_match.group(1))
+            
+            # Look for standard date formats
+            date_patterns = [
+                (r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b', '%Y-%m-%d'),  # YYYY-MM-DD
+                (r'\b(\d{1,2})/(\d{1,2})/(\d{4})\b', '%m/%d/%Y'),   # MM/DD/YYYY
+                (r'\b(\d{1,2})-(\d{1,2})-(\d{4})\b', '%m-%d-%Y'),   # MM-DD-YYYY
+            ]
+            
+            for pattern, date_format in date_patterns:
+                match = re.search(pattern, title)
+                if match:
+                    try:
+                        if date_format == '%Y-%m-%d':
+                            date_str = f"{match.group(1)}-{match.group(2).zfill(2)}-{match.group(3).zfill(2)}"
+                        else:
+                            date_str = match.group(0)
+                        date_obj = datetime.strptime(date_str, date_format)
+                        # Convert to a sortable number (days since epoch)
+                        return date_obj.timestamp()
+                    except ValueError:
+                        continue
+            
+            # If no date found, try to extract ID or use order in results
+            log_id = log.get('id')
+            if log_id:
+                # Try to extract numeric part of ID for sorting
+                id_match = re.search(r'(\d+)', str(log_id))
+                if id_match:
+                    return float(id_match.group(1))
+            
+            # Final fallback - return 0 to maintain original order
+            return 0
+        
+        # Sort logs by extracted date
+        try:
+            sorted_logs = sorted(logs, key=extract_sortable_date)
+            return sorted_logs
+        except Exception as e:
+            print(f"   ⚠️  Error sorting logs chronologically: {e}")
+            # Return original order if sorting fails
+            return logs
 
     def _get_historical_context_description(self, subject: str, temporal_type: str, result_count: int) -> str:
         """

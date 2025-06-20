@@ -17,7 +17,7 @@ class WisdomEngine:
     """Orchestrates prompt generation using a strategy and the PromptLibrary, then executes via LLM."""
 
     LLM_MODEL_NAME = 'gemini-2.0-flash-lite'
-    MAX_RETRIES = 3
+    MAX_RETRIES = 1
 
     def __init__(self):
         self.prompt_library = PromptLibrary()
@@ -56,36 +56,11 @@ class WisdomEngine:
         return self._execute_prompt_via_llm(prompt, approach)
 
     def _build_prompt_for_strategy(self, strategy: Dict[str, Any], user_message: str, subject: str, results: list) -> str:
-        """Builds the appropriate prompt based on the strategy."""
-        
-        # Check for disambiguation case first
-        if results and results[0].get('type') == 'disambiguation':
-            print(f"         🔀 DISAMBIGUATION DETECTED: Building disambiguation prompt")
-            search_term = results[0].get('search_term', subject)
-            matches = results[0].get('matches', [])
-            return self.prompt_library.build_character_disambiguation_prompt(search_term, matches)
-        
-        # Determine if this is a character query by inspecting the results.
-        # Check the categories array from the database results
-        is_character_query = False
-        if results:
-            categories = results[0].get('categories', [])
-            if categories:
-                # Convert categories to lowercase for case-insensitive matching
-                categories_lower = [cat.lower() for cat in categories]
-                # Check if any category contains character-related terms
-                character_indicators = ['characters', 'npcs', 'personnel', 'crew']
-                is_character_query = any(
-                    any(indicator in category for indicator in character_indicators) 
-                    for category in categories_lower
-                )
-                
-                if is_character_query:
-                    print(f"         👤 CHARACTER QUERY DETECTED: categories={categories}")
-
-        if is_character_query and results:
-            # If the top result is a character, use the specialized prompt.
-            return self._build_character_prompt(subject, results)
+        """
+        Builds the appropriate prompt based on the strategy.
+        """
+        print(f"         🎯 WISDOM ENGINE: Building prompt for approach '{strategy.get('approach')}'")
+        print(f"         📊 Working with {len(results)} results")
         
         if strategy.get('approach') == 'logs':
             temporal_type = strategy.get('temporal_type', 'latest')
@@ -95,9 +70,20 @@ class WisdomEngine:
                 print(f"         📜 LIST QUERY DETECTED: Building log list prompt")
                 return self.prompt_library.build_log_list_prompt(subject, results)
             
-            # Check if this should use historical summary format (multiple logs)
-            elif results and results[0].get('use_historical_summary'):
-                print(f"         📚 HISTORICAL SUMMARY DETECTED: Building historical summary prompt")
+            # NEW: Check for multi-log queries by looking at BOTH results AND strategy
+            # This is crucial when database connection fails and we have no results
+            force_historical_from_results = results and any(result.get('use_historical_summary') for result in results)
+            force_historical_from_strategy = any(strategy.get(key, False) for key in ['force_historical_summary', 'is_multi_log'])
+            
+            print(f"         🔍 MULTI-LOG DETECTION:")
+            print(f"         - force_historical_from_results: {force_historical_from_results}")
+            print(f"         - force_historical_from_strategy: {force_historical_from_strategy}")
+            
+            if force_historical_from_results or force_historical_from_strategy:
+                if force_historical_from_strategy:
+                    print(f"         🔢 MULTI-LOG HISTORICAL SUMMARY: Detected from strategy (works even without DB results)")
+                else:
+                    print(f"         📚 HISTORICAL SUMMARY DETECTED: Detected from results")
                 return self.prompt_library.build_historical_summary_prompt(subject, results, temporal_type)
             
             # Default to narrative format for single logs
@@ -124,8 +110,8 @@ class WisdomEngine:
         for attempt in range(self.MAX_RETRIES):
             try:
                 generation_config = genai.types.GenerationConfig(
-                    max_output_tokens=12000,
-                    temperature=0.6,
+                    max_output_tokens=8192,
+                    temperature=0.3,
                     candidate_count=1
                 )
                 
