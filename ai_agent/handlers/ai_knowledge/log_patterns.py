@@ -29,6 +29,7 @@ SHIP_SPECIFIC_CHARACTER_CORRECTIONS = {
         # Default for Stardancer
         'marcus': 'Captain Marcus Blaine',
         'captain blaine': 'Captain Marcus Blaine',
+        'yngrid': 'Commander Sif',
     },
     'protector': {
         'tolena': 'Doctor t\'Lena',

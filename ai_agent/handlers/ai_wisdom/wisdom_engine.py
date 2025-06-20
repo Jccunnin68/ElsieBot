@@ -17,7 +17,7 @@ class WisdomEngine:
     """Orchestrates prompt generation using a strategy and the PromptLibrary, then executes via LLM."""
 
     LLM_MODEL_NAME = 'gemini-2.0-flash-lite'
-    MAX_RETRIES = 3
+    MAX_RETRIES = 1
 
     def __init__(self):
         self.prompt_library = PromptLibrary()
@@ -56,24 +56,43 @@ class WisdomEngine:
         return self._execute_prompt_via_llm(prompt, approach)
 
     def _build_prompt_for_strategy(self, strategy: Dict[str, Any], user_message: str, subject: str, results: list) -> str:
-        """Builds the appropriate prompt based on the strategy."""
-        # Determine if this is a character query by inspecting the results.
-        # This is more reliable than relying on the category from the initial routing.
-        result_category = ''
-        if results:
-            result_category = (results[0].get('category') or '').lower()
-        
-        is_character_query = 'character' in result_category or 'npc' in result_category
-
-        if is_character_query and results:
-            # If the top result is a character, use the specialized prompt.
-            return self._build_character_prompt(subject, results)
+        """
+        Builds the appropriate prompt based on the strategy.
+        """
+        print(f"         🎯 WISDOM ENGINE: Building prompt for approach '{strategy.get('approach')}'")
+        print(f"         📊 Working with {len(results)} results")
         
         if strategy.get('approach') == 'logs':
             temporal_type = strategy.get('temporal_type', 'latest')
-            return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
+            
+            # Check if this is a list query
+            if results and results[0].get('is_list_item'):
+                print(f"         📜 LIST QUERY DETECTED: Building log list prompt")
+                return self.prompt_library.build_log_list_prompt(subject, results)
+            
+            # NEW: Check for multi-log queries by looking at BOTH results AND strategy
+            # This is crucial when database connection fails and we have no results
+            force_historical_from_results = results and any(result.get('use_historical_summary') for result in results)
+            force_historical_from_strategy = any(strategy.get(key, False) for key in ['force_historical_summary', 'is_multi_log'])
+            
+            print(f"         🔍 MULTI-LOG DETECTION:")
+            print(f"         - force_historical_from_results: {force_historical_from_results}")
+            print(f"         - force_historical_from_strategy: {force_historical_from_strategy}")
+            
+            if force_historical_from_results or force_historical_from_strategy:
+                if force_historical_from_strategy:
+                    print(f"         🔢 MULTI-LOG HISTORICAL SUMMARY: Detected from strategy (works even without DB results)")
+                else:
+                    print(f"         📚 HISTORICAL SUMMARY DETECTED: Detected from results")
+                return self.prompt_library.build_historical_summary_prompt(subject, results, temporal_type)
+            
+            # Default to narrative format for single logs
+            else:
+                print(f"         📖 NARRATIVE LOG DETECTED: Building standard log prompt")
+                return self.prompt_library.build_logs_prompt(subject, results, temporal_type)
 
         # For everything else, use the comprehensive prompt.
+        print(f"         📚 COMPREHENSIVE QUERY: Using general prompt")
         return self.prompt_library.build_comprehensive_prompt(subject, results)
 
     def _execute_prompt_via_llm(self, prompt: str, approach: str) -> str:
@@ -91,8 +110,8 @@ class WisdomEngine:
         for attempt in range(self.MAX_RETRIES):
             try:
                 generation_config = genai.types.GenerationConfig(
-                    max_output_tokens=12000,
-                    temperature=0.5,
+                    max_output_tokens=8192,
+                    temperature=0.3,
                     candidate_count=1
                 )
                 
@@ -130,13 +149,28 @@ class WisdomEngine:
 
         # The top result is our best candidate for the primary character.
         primary_candidate = results[0]
+        candidate_title = primary_candidate.get('title', '').lower()
+        subject_lower = subject.lower()
         
-        # Verify the candidate's title matches the subject to ensure relevance.
-        if subject.lower() in primary_candidate.get('title', '').lower():
+        # More flexible matching - check if subject words are in the title
+        subject_words = subject_lower.split()
+        title_contains_subject = any(word in candidate_title for word in subject_words if len(word) > 2)
+        
+        # Also check reverse - if title words are in subject (for cases like "Captain Marcus Blaine")
+        title_words = candidate_title.split()
+        subject_contains_title = any(word in subject_lower for word in title_words if len(word) > 2)
+        
+        is_match = title_contains_subject or subject_contains_title
+        
+        print(f"         🔍 Character matching: '{subject}' vs '{primary_candidate.get('title', '')}'")
+        print(f"         📊 Match result: {is_match} (title_contains_subject: {title_contains_subject}, subject_contains_title: {subject_contains_title})")
+        
+        if is_match:
             # Confirmed: the top result is the character we're looking for.
             primary_character_info = primary_candidate
             known_associates = results[1:]
             
+            print(f"         ✅ CHARACTER MATCH CONFIRMED: Using character prompt with {len(known_associates)} associates")
             return self.prompt_library.build_character_with_associates_prompt(
                 primary_character_info,
                 known_associates
@@ -144,5 +178,5 @@ class WisdomEngine:
         else:
             # The top result doesn't match, so we can't be confident.
             # Return a "not found" response to avoid presenting incorrect information.
-            print(f"         ⚠️  Top result '{primary_candidate.get('title')}' did not match subject '{subject}'.")
+            print(f"         ❌ CHARACTER MATCH FAILED: Top result '{primary_candidate.get('title')}' did not match subject '{subject}'.")
             return self.prompt_library.build_comprehensive_prompt(subject, []) 
