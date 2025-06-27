@@ -410,6 +410,37 @@ class RoleplayStateManager:
         """Get list of all participant names."""
         return [p['name'] for p in self.participants]
     
+    def get_characters_present(self) -> List[str]:
+        """Get list of characters currently present in the roleplay session."""
+        return self.get_participant_names()
+    
+    def is_elsie_turn_overdue(self) -> bool:
+        """
+        Check if Elsie's turn to respond is overdue based on conversation flow.
+        
+        Returns:
+            True if Elsie should respond soon, False otherwise
+        """
+        if not self.is_roleplaying:
+            return False
+        
+        # Check if it's been too long since Elsie last responded
+        if not self.turn_history:
+            return True  # No turn history, Elsie should respond
+        
+        # Count turns since Elsie last spoke
+        turns_since_elsie = 0
+        for turn_num, speaker in reversed(self.turn_history):
+            if speaker == "Elsie":
+                break
+            turns_since_elsie += 1
+        
+        # In DGM sessions, be more passive
+        if self.dgm_initiated:
+            return turns_since_elsie >= 4  # Allow more turns without Elsie in DGM sessions
+        else:
+            return turns_since_elsie >= 2  # Regular sessions - respond more frequently
+    
     def get_active_participants(self, current_turn: int, max_turns_inactive: int = 10) -> List[str]:
         """Get list of participants who have been mentioned recently."""
         active = []
@@ -504,9 +535,15 @@ class RoleplayStateManager:
         self.last_character_spoke = ""
         self.turn_history = []
         
-        # Reset conversation memory
-        self.conversation_memory.clear_memory()
-        self.last_conversation_analysis = None
+        # Reset conversation memory (if available)
+        if hasattr(self, 'conversation_memory') and self.conversation_memory:
+            try:
+                self.conversation_memory.clear_memory()
+            except Exception as e:
+                print(f"   ⚠️  Could not clear conversation memory: {e}")
+        
+        if hasattr(self, 'last_conversation_analysis'):
+            self.last_conversation_analysis = None
         
         print(f"   🔓 CHANNEL LOCK RELEASED - Now accepting messages from all channels")
     
@@ -680,7 +717,13 @@ class RoleplayStateManager:
     
     def has_conversation_memory(self) -> bool:
         """Check if we have conversation memory available."""
-        return self.conversation_memory.has_sufficient_context()
+        if hasattr(self, 'conversation_memory') and self.conversation_memory:
+            try:
+                return self.conversation_memory.has_sufficient_context()
+            except Exception as e:
+                print(f"   ⚠️  Error checking conversation memory: {e}")
+                return False
+        return False
     
     @property
     def current_mode(self) -> SessionMode:

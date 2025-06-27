@@ -12,9 +12,15 @@ from typing import Dict, List, Any, Optional
 from ..ai_logic.response_decision import ResponseDecision
 
 
+
+
+
 def extract_scene_context(user_message: str) -> Dict[str, Any]:
     """
-    PHASE 2A: Extract scene context information from DGM posts.
+    Extract basic scene context information from DGM posts using pattern matching.
+    
+    The attention engine will handle AI-powered analysis of the scene context.
+    This function provides basic structure extraction for immediate use.
     
     Parses location, time, environment, and other scene details that Elsie should understand.
     Examples:
@@ -24,16 +30,14 @@ def extract_scene_context(user_message: str) -> Dict[str, Any]:
     # Remove DGM tag for cleaner parsing
     clean_message = re.sub(r'^\s*\[DGM\]\s*', '', user_message, flags=re.IGNORECASE).strip()
     
+    print(f"   🎬 EXTRACTING BASIC SCENE CONTEXT from: '{clean_message[:100]}{'...' if len(clean_message) > 100 else ''}'")
+    
     scene_context = {
         'location': None,
         'time_of_day': None,
-        'ship_status': None,
-        'environment': None,
         'atmosphere': None,
         'raw_description': clean_message
     }
-    
-    print(f"   🎬 EXTRACTING SCENE CONTEXT from: '{clean_message[:100]}{'...' if len(clean_message) > 100 else ''}'")
     
     # Extract location information
     location_patterns = [
@@ -50,6 +54,9 @@ def extract_scene_context(user_message: str) -> Dict[str, Any]:
         # General location patterns
         r'(?:doors to|entrance to|inside|within)\s+([A-Z][a-zA-Z\s]+)',
         r'([A-Z][a-zA-Z\s]+)\s+(?:slide open|opens|closes)',
+        
+        # Bar/venue names
+        r'(?:the\s+)?([A-Z][a-zA-Z\s]*(?:lizzy|lounge|bar|pub|cantina))',
     ]
     
     for pattern in location_patterns:
@@ -75,43 +82,11 @@ def extract_scene_context(user_message: str) -> Dict[str, Any]:
             print(f"      🕐 TIME: {time_of_day}")
             break
     
-    # Extract ship status
-    ship_status_patterns = [
-        r'(?:was|is|remains)\s+(?:currently\s+)?(?:in\s+)?(orbit|docked|traveling|at warp|in space)',
-        r'(?:orbiting|approaching|leaving|departing)\s+([A-Z][a-z]+)',
-        r'(?:at|in|near)\s+(warp|impulse|full stop)',
-    ]
-    
-    for pattern in ship_status_patterns:
-        match = re.search(pattern, clean_message, re.IGNORECASE)
-        if match:
-            ship_status = match.group(0).strip()
-            scene_context['ship_status'] = ship_status
-            print(f"      🚀 SHIP STATUS: {ship_status}")
-            break
-    
-    # Extract environmental details
-    environment_patterns = [
-        r'\*([^*]+(?:lighting|atmosphere|temperature|sound|music|noise)[^*]*)\*',
-        r'\*([^*]+(?:warm|cold|bright|dim|quiet|loud|peaceful|busy)[^*]*)\*',
-        r'\*([^*]+(?:glow|shimmer|flicker|hum|buzz)[^*]*)\*',
-    ]
-    
-    environment_details = []
-    for pattern in environment_patterns:
-        matches = re.finditer(pattern, clean_message, re.IGNORECASE)
-        for match in matches:
-            detail = match.group(1).strip()
-            environment_details.append(detail)
-            print(f"      🌟 ENVIRONMENT: {detail}")
-    
-    if environment_details:
-        scene_context['environment'] = environment_details
-    
     # Extract atmospheric mood
     atmosphere_patterns = [
         r'\b(peaceful|busy|quiet|lively|tense|relaxed|formal|casual|festive|somber)\b',
         r'\b(empty|crowded|bustling|serene|chaotic)\b',
+        r'(?:pulsing|thrumming|vibrating)\s+with\s+(\w+)',
     ]
     
     for pattern in atmosphere_patterns:
@@ -126,7 +101,7 @@ def extract_scene_context(user_message: str) -> Dict[str, Any]:
     filtered_context = {k: v for k, v in scene_context.items() if v is not None}
     
     if len(filtered_context) > 1:  # More than just raw_description
-        print(f"   ✅ SCENE CONTEXT EXTRACTED: {len(filtered_context)-1} elements")
+        print(f"   ✅ BASIC SCENE CONTEXT EXTRACTED: {len(filtered_context)-1} elements")
     else:
         print(f"   ℹ️  No specific scene context detected")
     
@@ -184,47 +159,26 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
             'scene_context': scene_context
         }
     
-    # Extract character names from multiple sources
-    characters = set()  # Use a set to avoid duplicates
+    # Basic character extraction from explicit [Character Name] format only
+    # NOTE: Advanced AI-powered character detection is handled by the attention engine
+    characters = []
     
-    # 1. Extract from [Character Name] format - now handles multi-word names
+    # Only extract from explicit [Character Name] format for immediate structure
     bracket_pattern = r'\[([^\]]+)\]'
     bracket_matches = re.finditer(bracket_pattern, user_message)
     for match in bracket_matches:
         char_name = match.group(1).strip()
-        # Skip DGM tag itself
-        if char_name.lower() == 'dgm':
-            continue
-            
-        # Check if this is a multi-word name
-        words = char_name.split()
-        if len(words) > 1:
-            # For multi-word names, validate the entire name as one entity
+        # Skip DGM tag itself and other system tags
+        if char_name.lower() not in ['dgm', 'end', 'scene']:
+            # Basic validation using character service
             if char_service.is_valid_character_name(char_name):
-                characters.add(char_name)
-                print(f"   👤 Multi-word character detected: {char_name}")
-        else:
-            # Single word names handled as before
-            if char_service.is_valid_character_name(char_name):
-                characters.add(char_name)
+                characters.append(char_name)
+                print(f"   👤 Explicit character: [{char_name}]")
     
-    # 2. Extract from *italicized text*
-    italic_pattern = r'\*([^*]+)\*'
-    italic_matches = re.finditer(italic_pattern, user_message)
-    for match in italic_matches:
-        italic_text = match.group(1).strip()
-        # Split the italicized text into words and check each
-        words = italic_text.split()
-        for word in words:
-            # Clean the word of any punctuation
-            clean_word = re.sub(r'[^\w\s]', '', word)
-            if char_service.is_valid_character_name(clean_word):
-                characters.add(clean_word)
-    
-    # Convert set back to list for the return value
-    character_list = list(characters)
-    if character_list:
-        print(f"   👥 CHARACTERS DETECTED IN DGM POST: {character_list}")
+    if characters:
+        print(f"   👥 EXPLICIT CHARACTERS: {characters}")
+    else:
+        print(f"   ℹ️  No explicit character brackets found (AI analysis will handle scene text)")
     
     # Check for scene end indicators - multiple patterns
     scene_end_patterns = [
@@ -250,7 +204,7 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
                 'triggers_roleplay': False,
                 'confidence': 1.0,
                 'triggers': ['dgm_scene_end'],
-                'characters': character_list,
+                'characters': characters,
                 'dgm_controlled_elsie': False,
                 'elsie_content': '',
                 'scene_context': scene_context
@@ -264,100 +218,17 @@ def check_dgm_post(user_message: str) -> Dict[str, Any]:
         'triggers_roleplay': True,
         'confidence': 1.0,
         'triggers': ['dgm_scene_setting'],
-        'characters': character_list,
+        'characters': characters,
         'dgm_controlled_elsie': False,
         'elsie_content': '',
         'scene_context': scene_context
     }
 
 
-def extract_characters_from_dgm_post(dgm_message: str) -> List[str]:
-    """
-    Extract character names from DGM scene descriptions.
-    Looks for proper nouns that could be character names.
-    Enhanced to detect character lists like "Fallo and Maeve".
-    """
-    characters = []
-    clean_message = re.sub(r'\[DGM\]', '', dgm_message, flags=re.IGNORECASE).strip()
-    
-    print(f"      🔍 PARSING DGM MESSAGE FOR CHARACTERS: '{clean_message[:100]}{'...' if len(clean_message) > 100 else ''}'")
-    
-    # Get character tracking service for validation
-    from ..service_container import get_character_tracking_service
-    char_service = get_character_tracking_service()
-    
-    # Titles to exclude from character names
-    titles = {'Captain', 'Commander', 'Lieutenant', 'Doctor', 'Dr', 'Ensign', 'Chief', 'Admiral', 'Colonel', 'Major', 'Sergeant'}
-    
-    # STEP 1: Handle character lists with "and" - "Name and Name"
-    print(f"      📋 STEP 1: Checking for character lists...")
-    list_patterns = [
-        r'\b([A-Z][a-z]+)\s+and\s+([A-Z][a-z]+)\b',
-        r'\b([A-Z][a-z]+)\s*,\s*([A-Z][a-z]+)\b',
-    ]
-    
-    for pattern in list_patterns:
-        matches = re.finditer(pattern, clean_message)
-        for match in matches:
-            for group_num in range(1, len(match.groups()) + 1):
-                potential_name = match.group(group_num)
-                if potential_name and potential_name not in titles and char_service.is_valid_character_name(potential_name):
-                    name_normalized = potential_name.capitalize()
-                    if name_normalized not in characters:
-                        characters.append(name_normalized)
-                        print(f"         👤 CHARACTER FOUND: '{name_normalized}' via list pattern")
-    
-    # STEP 2: Handle titles with names - "Captain Smith and Lieutenant Jones"
-    print(f"      📋 STEP 2: Checking for titled characters...")
-    titled_patterns = [
-        r'(?:Captain|Commander|Lieutenant|Doctor|Dr\.|Ensign|Chief|Admiral|Colonel|Major|Sergeant)\s+([A-Z][a-z]+)',
-    ]
-    
-    for pattern in titled_patterns:
-        matches = re.finditer(pattern, clean_message)
-        for match in matches:
-            potential_name = match.group(1)
-            if potential_name and potential_name not in titles and char_service.is_valid_character_name(potential_name):
-                name_normalized = potential_name.capitalize()
-                if name_normalized not in characters:
-                    characters.append(name_normalized)
-                    print(f"         👤 CHARACTER FOUND: '{name_normalized}' via titled pattern")
-    
-    # STEP 3: Look for individual character names in various contexts
-    print(f"      📋 STEP 3: Checking for individual characters...")
-    individual_patterns = [
-        r'\b([A-Z][a-z]+)\s+(?:enters|arrives|walks|sits|stands|looks|turns|speaks|says|approaches|moves)',
-        r'\b([A-Z][a-z]+)\'s\s+',
-        r'(?:^|\.\s+)([A-Z][a-z]+)\s+',
-    ]
-    
-    for pattern in individual_patterns:
-        matches = re.finditer(pattern, clean_message)
-        for match in matches:
-            potential_name = match.group(1)
-            if potential_name and potential_name not in titles and char_service.is_valid_character_name(potential_name):
-                name_normalized = potential_name.capitalize()
-                if name_normalized not in characters:
-                    characters.append(name_normalized)
-                    print(f"         👤 CHARACTER FOUND: '{name_normalized}' via individual pattern")
-    
-    # STEP 4: Check for bracket format characters that might be in DGM posts
-    print(f"      📋 STEP 4: Checking for bracket format...")
-    bracket_pattern = r'\[([A-Z][a-zA-Z\s]+)\]'
-    bracket_matches = re.findall(bracket_pattern, clean_message)
-    for name in bracket_matches:
-        name = name.strip()
-        if char_service.is_valid_character_name(name) and name not in titles:
-            name_normalized = ' '.join(word.capitalize() for word in name.split())
-            if name_normalized not in characters:
-                characters.append(name_normalized)
-                print(f"         👤 CHARACTER FOUND: '[{name_normalized}]' via bracket format")
-    
-    print(f"      📋 TOTAL CHARACTERS EXTRACTED: {len(characters)} - {characters}")
-    return characters
 
 
-def handle_dgm_command(user_message: str) -> Optional[ResponseDecision]:
+
+def handle_dgm_command(user_message: str, channel_context: Dict = None) -> Optional[ResponseDecision]:
     """
     Checks for and handles DGM commands, returning a ResponseDecision if found.
     This encapsulates the logic for scene setting, ending, and character control.
@@ -367,7 +238,7 @@ def handle_dgm_command(user_message: str) -> Optional[ResponseDecision]:
         return None
 
     dgm_action = dgm_result['action']
-    from .state_manager import get_roleplay_state
+    from ..service_container import get_roleplay_state
     rp_state = get_roleplay_state()
 
     if dgm_action == 'scene_setting':
@@ -376,6 +247,7 @@ def handle_dgm_command(user_message: str) -> Optional[ResponseDecision]:
             rp_state.start_roleplay_session(
                 turn_number=0, # Turn number is not available here, but session starts at 0
                 initial_triggers=['dgm_scene_setting'],
+                channel_context=channel_context,  # Pass channel context for proper isolation
                 dgm_characters=dgm_result.get('characters', [])
             )
         rp_state.store_dgm_scene_context(dgm_result.get('scene_context', {}))
@@ -398,7 +270,11 @@ def handle_dgm_command(user_message: str) -> Optional[ResponseDecision]:
     elif dgm_action == 'control_elsie':
         print(f"   🎭 DGM Controlled Elsie")
         if not rp_state.is_roleplaying:
-             rp_state.start_roleplay_session(turn_number=0, initial_triggers=['dgm_controlled_elsie'])
+             rp_state.start_roleplay_session(
+                 turn_number=0, 
+                 initial_triggers=['dgm_controlled_elsie'],
+                 channel_context=channel_context
+             )
         rp_state.store_dgm_scene_context(dgm_result.get('scene_context', {}))
         elsie_content = dgm_result.get('elsie_content', '')
         return ResponseDecision(

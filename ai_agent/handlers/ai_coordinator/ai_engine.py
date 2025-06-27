@@ -6,6 +6,7 @@ This module handles the actual generation of AI responses, including chunking fo
 caching, and response post-processing. Updated to use pythonic service classes with dependency injection.
 """
 
+import re
 import google.generativeai as genai
 from typing import List, Dict, Optional, TYPE_CHECKING, Any
 from config import GEMMA_API_KEY
@@ -187,8 +188,15 @@ class AIEngine:
                 print(f"   📦 Content appears truncated - returning what we have")
                 # For roleplay mode, return the partial response rather than trying to chunk
             
+            # Determine if this is a roleplay response
+            is_roleplay_response = strategy.get('approach', '').startswith('roleplay_')
+            
             # Post-processing and tracking logic for roleplay...
             response_text = self._post_process_response(response_text, strategy, user_message, conversation_history)
+            
+            # Enhanced roleplay tracking for better context continuity
+            if is_roleplay_response:
+                self._update_roleplay_context_tracking(response_text, strategy, user_message, conversation_history)
 
             # Cache the response
             self.response_cache[cache_key] = response_text
@@ -364,13 +372,18 @@ END OF CONTEXT
             print(f"🎭 POETIC SHORT CIRCUIT TRIGGERED")
             response_text = self.poetic_service.get_poetic_response(user_message, response_text)
             
+        # Clean Discord formatting for all responses
+        response_text = self.content_filter_service.clean_discord_formatting(response_text)
+        
         # Roleplay-specific processing
         if is_roleplay_response:
-            # Convert to third person emotes and strip Discord formatting
+            # Light formatting cleanup only (AI should generate properly formatted responses)
+            response_text = self._light_roleplay_cleanup(response_text)
+        else:
+            # For non-roleplay, only convert within existing asterisks
             response_text = self._convert_to_third_person_emotes(response_text)
-            response_text = self.content_filter_service.clean_discord_formatting(response_text)
             
-            # Track who Elsie addressed in her response using context analysis service
+            # Basic roleplay tracking (detailed tracking handled in dedicated method)
             try:
                 from ..service_container import get_roleplay_state
                 rp_state = get_roleplay_state()
@@ -389,30 +402,302 @@ END OF CONTEXT
     
     def _convert_to_third_person_emotes(self, text: str) -> str:
         """
-        Convert first-person emotes to third-person for roleplay consistency.
-        This method encapsulates the logic that was previously in conversation_utils.
+        Convert first-person to third-person ONLY within emotes (asterisks).
+        Regular speech remains first-person.
         """
         if not text:
             return text
         
-        # First-person to third-person conversions
+        import re
+        
+        def convert_emote(match):
+            emote_content = match.group(1)
+            # Convert first-person to third-person within this emote
+            conversions = [
+                ("I ", "Elsie "),
+                (" I ", " Elsie "),
+                (" my ", " her "),
+                (" mine", " hers"),
+                (" myself", " herself"),
+            ]
+            
+            for first_person, third_person in conversions:
+                emote_content = emote_content.replace(first_person, third_person)
+            
+            return f"*{emote_content}*"
+        
+        # Only convert within asterisk emotes
+        converted_text = re.sub(r'\*([^*]+)\*', convert_emote, text)
+        
+        return converted_text
+
+    def _light_roleplay_cleanup(self, text: str) -> str:
+        """
+        Light cleanup for roleplay responses that should already be properly formatted.
+        Just handles basic cleanup issues without major reformatting.
+        """
+        if not text:
+            return text
+        
+        import re
+        
+        print(f"   🧹 LIGHT ROLEPLAY CLEANUP: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+        
+        cleaned_text = text.strip()
+        
+        # Basic cleanup only
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # Clean up extra spaces
+        cleaned_text = re.sub(r'""([^"]+)""', r'"\1"', cleaned_text)  # Fix double quotes
+        cleaned_text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', cleaned_text)  # Fix double asterisks
+        
+        # Ensure [Elsie] prefix if missing (fallback only)
+        if not cleaned_text.startswith('[Elsie]'):
+            cleaned_text = f'[Elsie] {cleaned_text}'
+            print(f"   ⚠️  Added missing [Elsie] prefix")
+        
+        print(f"   ✅ LIGHT CLEANUP COMPLETE: '{cleaned_text[:50]}{'...' if len(cleaned_text) > 50 else ''}'")
+        
+        return cleaned_text
+
+    def _convert_roleplay_to_third_person(self, text: str) -> str:
+        """
+        Convert ALL first-person references to third-person in roleplay responses.
+        This is more comprehensive than _convert_to_third_person_emotes and handles
+        first-person references anywhere in the response.
+        """
+        if not text:
+            return text
+        
+        import re
+        
+        print(f"   👤 CONVERTING TO THIRD PERSON: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+        
+        # Comprehensive first-person to third-person conversions
         conversions = [
-            ("I ", "Elsie "),
-            (" I ", " Elsie "),
-            (" my ", " her "),
-            (" mine", " hers"),
-            (" myself", " herself"),
-            ("*I ", "*Elsie "),
-            ("* I ", "* Elsie "),
-            ("*my ", "*her "),
-            ("* my ", "* her "),
+            # Subject pronouns
+            (r'\bI\b', 'Elsie'),
+            (r'\bI\'m\b', 'Elsie is'),
+            (r'\bI\'ll\b', 'Elsie will'),
+            (r'\bI\'d\b', 'Elsie would'),
+            (r'\bI\'ve\b', 'Elsie has'),
+            
+            # Possessive pronouns  
+            (r'\bmy\b', 'her'),
+            (r'\bmine\b', 'hers'),
+            
+            # Reflexive pronouns
+            (r'\bmyself\b', 'herself'),
+            
+            # Object pronouns
+            (r'\bme\b', 'her'),
+            
+            # Common verb constructions
+            (r'\bI chime\b', 'Elsie chimes'),
+            (r'\bI gesture\b', 'Elsie gestures'),
+            (r'\bI focus\b', 'Elsie focuses'),
+            (r'\bI smile\b', 'Elsie smiles'),
+            (r'\bI nod\b', 'Elsie nods'),
+            (r'\bI look\b', 'Elsie looks'),
+            (r'\bI turn\b', 'Elsie turns'),
+            (r'\bI move\b', 'Elsie moves'),
+            (r'\bI reach\b', 'Elsie reaches'),
+            (r'\bI adjust\b', 'Elsie adjusts'),
+            (r'\bI lean\b', 'Elsie leans'),
+            (r'\bI step\b', 'Elsie steps'),
+            (r'\bI pause\b', 'Elsie pauses'),
+            (r'\bI tilt\b', 'Elsie tilts'),
+            (r'\bI raise\b', 'Elsie raises'),
+            (r'\bI lower\b', 'Elsie lowers'),
         ]
         
         converted_text = text
-        for first_person, third_person in conversions:
-            converted_text = converted_text.replace(first_person, third_person)
+        for pattern, replacement in conversions:
+            converted_text = re.sub(pattern, replacement, converted_text, flags=re.IGNORECASE)
+        
+        print(f"   ✅ THIRD PERSON CONVERSION COMPLETE: '{converted_text[:50]}{'...' if len(converted_text) > 50 else ''}'")
         
         return converted_text
+
+    def _format_roleplay_response(self, text: str) -> str:
+        """
+        Format roleplay responses to follow proper Discord conventions:
+        - Dialogue in quotes
+        - Actions in asterisks
+        - Prefixed with [Elsie]
+        """
+        if not text:
+            return text
+        
+        import re
+        
+        print(f"   🎭 FORMATTING ROLEPLAY RESPONSE: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+        
+        # Clean up the text first
+        formatted_text = text.strip()
+        
+        # Step 1: Check if already properly formatted (prevent double formatting)
+        if (formatted_text.startswith('[Elsie]') and 
+            ('"' in formatted_text or '*' in formatted_text)):
+            print(f"   ⚠️  Already formatted - skipping formatting")
+            return formatted_text
+        
+        # Step 2: Check if already prefixed with [Elsie] and handle it properly
+        has_elsie_prefix = formatted_text.startswith('[Elsie]')
+        if has_elsie_prefix:
+            formatted_text = formatted_text[7:].strip()  # Remove [Elsie] temporarily for processing
+        
+        # Step 3: Handle mixed action + dialogue constructions
+        # Pattern 1: "nods and says I'm doing well" -> "nods" + "I'm doing well"
+        says_pattern = r'(\b(?:nods?|smiles?|looks?|turns?|walks?|sits?|stands?|moves?|reaches?|touches?|holds?|gestures?|pauses?|tilts?|raises?|lowers?|steps?|approaches?|glances?|adjusts?)\b[^"]*?)\s+(?:and\s+)?says?\s+(.*)'
+        says_match = re.search(says_pattern, formatted_text, re.IGNORECASE)
+        
+        # Pattern 2: "looks up from cleaning a glass and smiles. Good evening!" -> action + dialogue
+        action_dialogue_pattern = r'^(\b(?:looks?|glances?|turns?|moves?|reaches?|adjusts?|picks?|grabs?|takes?|puts?|sets?)\s+[^.!?]*[.!?])\s*(.*)'
+        action_dialogue_match = re.search(action_dialogue_pattern, formatted_text, re.IGNORECASE)
+        
+        if says_match:
+            action_part = says_match.group(1).strip()
+            dialogue_part = says_match.group(2).strip()
+            # Clean up punctuation from dialogue
+            dialogue_part = re.sub(r'^[,.\s]+', '', dialogue_part)
+            formatted_text = f'*{action_part}* "{dialogue_part}"'
+        elif action_dialogue_match:
+            action_part = action_dialogue_match.group(1).strip()
+            dialogue_part = action_dialogue_match.group(2).strip()
+            # Remove ending punctuation from action
+            action_part = re.sub(r'[.!?]+$', '', action_part)
+            if dialogue_part:
+                formatted_text = f'*{action_part}* "{dialogue_part}"'
+            else:
+                formatted_text = f'*{action_part}*'
+        else:
+            # Step 4: Split into segments and format each appropriately
+            segments = self._parse_roleplay_segments(formatted_text)
+            formatted_segments = []
+            
+            for segment_type, content in segments:
+                content = content.strip()
+                if not content:
+                    continue
+                    
+                if segment_type == 'dialogue':
+                    # Clean up leading punctuation and wrap in quotes
+                    content = re.sub(r'^[,.\s]+', '', content)
+                    if content and not (content.startswith('"') and content.endswith('"')):
+                        formatted_segments.append(f'"{content}"')
+                    elif content:
+                        formatted_segments.append(content)
+                elif segment_type == 'action':
+                    # Wrap in asterisks if not already wrapped
+                    if not (content.startswith('*') and content.endswith('*')):
+                        formatted_segments.append(f'*{content}*')
+                    else:
+                        formatted_segments.append(content)
+                else:
+                    # Handle unclassified content - default to dialogue if it looks like speech
+                    if self._is_likely_dialogue(content):
+                        content = re.sub(r'^[,.\s]+', '', content)
+                        if content:
+                            formatted_segments.append(f'"{content}"')
+                    elif self._is_likely_action(content):
+                        formatted_segments.append(f'*{content}*')
+                    else:
+                        # Default to dialogue for ambiguous content
+                        content = re.sub(r'^[,.\s]+', '', content)
+                        if content:
+                            formatted_segments.append(f'"{content}"')
+            
+            # Join the segments back together
+            if formatted_segments:
+                formatted_text = ' '.join(formatted_segments)
+        
+        # Step 5: Clean up any double wrapping or formatting issues
+        formatted_text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', formatted_text)  # Fix double asterisks
+        formatted_text = re.sub(r'""([^"]+)""', r'"\1"', formatted_text)  # Fix double quotes
+        formatted_text = re.sub(r'\s+', ' ', formatted_text)  # Clean up extra spaces
+        
+        # Step 6: Add [Elsie] prefix
+        formatted_text = f'[Elsie] {formatted_text}'
+        
+        print(f"   ✅ ROLEPLAY FORMATTING COMPLETE: '{formatted_text[:50]}{'...' if len(formatted_text) > 50 else ''}'")
+        
+        return formatted_text
+    
+    def _parse_roleplay_segments(self, text: str) -> List[tuple]:
+        """
+        Parse roleplay text into dialogue and action segments.
+        
+        Returns:
+            List of (segment_type, content) tuples
+        """
+        import re
+        
+        segments = []
+        
+        # Look for existing quoted dialogue and asterisk actions
+        pattern = r'(\*[^*]+\*|"[^"]+"|[^*"]+)'
+        matches = re.findall(pattern, text)
+        
+        for match in matches:
+            match = match.strip()
+            if not match:
+                continue
+                
+            if match.startswith('*') and match.endswith('*'):
+                segments.append(('action', match))
+            elif match.startswith('"') and match.endswith('"'):
+                segments.append(('dialogue', match))
+            else:
+                # Determine if this is likely dialogue or action based on content
+                if self._is_likely_dialogue(match):
+                    segments.append(('dialogue', match))
+                elif self._is_likely_action(match):
+                    segments.append(('action', match))
+                else:
+                    # Default to dialogue for ambiguous content
+                    segments.append(('dialogue', match))
+        
+        return segments
+    
+    def _is_likely_dialogue(self, text: str) -> bool:
+        """
+        Determine if text is likely spoken dialogue.
+        """
+        import re
+        
+        # Common indicators of dialogue
+        dialogue_indicators = [
+            r'\b(I|you|we|they|me|us|them)\b',  # Personal pronouns
+            r'\b(yes|no|yeah|okay|sure|well|so|but|and|or)\b',  # Common speech words
+            r'[?!]',  # Questions and exclamations
+            r'\b(hello|hi|hey|goodbye|bye|thanks|thank you|please|sorry)\b'  # Greetings/politeness
+        ]
+        
+        for pattern in dialogue_indicators:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
+        
+        return False
+    
+    def _is_likely_action(self, text: str) -> bool:
+        """
+        Determine if text is likely a physical action or emote.
+        """
+        import re
+        
+        # Common action verbs and descriptors
+        action_indicators = [
+            r'\b(nods?|smiles?|looks?|turns?|walks?|sits?|stands?|moves?|reaches?|touches?|holds?)\b',
+            r'\b(gestures?|pauses?|tilts?|raises?|lowers?|steps?|approaches?|glances?|adjusts?)\b',
+            r'\b(chuckles?|laughs?|sighs?|frowns?|grins?|winks?|blinks?|shrugs?)\b',
+            r'\b(behind|toward|across|through|around|against|beside)\b'  # Spatial prepositions
+        ]
+        
+        for pattern in action_indicators:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
+        
+        return False
 
     def generate_response_with_strategy(self, user_message: str, strategy: Dict[str, Any], conversation_history: list) -> str:
         """
@@ -476,7 +761,7 @@ END OF CONTEXT
         elif personality == 'dance_instructor':
             personality_instruction = "You are Elsie, a holographic dance instructor. You're graceful, encouraging, and knowledgeable about various dance forms and movement."
         else:
-            personality_instruction = "You are Elsie, a sophisticated holographic assistant aboard a starship. You're helpful, intelligent, and maintain an elegant presence."
+            personality_instruction = "You are Elsie, a holographic assistant aboard a starship. Be helpful and direct."
         
         # Build context-specific instructions
         context_instruction = ""
@@ -499,22 +784,100 @@ END OF CONTEXT
             for i, msg in enumerate(recent_history):
                 history_context += f"{i+1}. {msg}\n"
         
+        # Check if this is a roleplay context
+        is_roleplay = strategy.get('approach', '').startswith('roleplay_')
+        
         # Build the complete prompt
+        roleplay_instructions = ""
+        if is_roleplay:
+            roleplay_instructions = """
+ROLEPLAY FORMATTING REQUIREMENTS:
+- Use third-person narration: 'Elsie smiles' not 'I smile'
+- Prefix ALL responses with [Elsie]
+- Put spoken dialogue in quotes: "Hello there!"
+- Put actions/emotes in asterisks: *smiles warmly*
+- Example: [Elsie] *looks up from cleaning a glass* "Good evening! What can I get for you?"
+- Location is Dizzy Lizzy's Bar (NOT Ten Forward)
+"""
+        
         prompt = f"""You are Elsie, a holographic assistant. {personality_instruction}
 
 {context_instruction}
-
+{roleplay_instructions}
 Response guidelines:
-- Be authentic and maintain character consistency
-- Use appropriate emotes in *asterisks* when natural
-- Keep responses conversational and engaging
-- Match the tone and context of the interaction
+- Be concise and to the point
+- Use emotes in *asterisks* sparingly and only when natural  
+- Keep responses helpful but brief
+- Don't be overly dramatic or verbose
 {history_context}
 
 User: {user_message}
 Elsie:"""
         
         return prompt
+
+    def _update_roleplay_context_tracking(self, response_text: str, strategy: Dict, user_message: str, conversation_history: List[str]) -> None:
+        """
+        Enhanced roleplay context tracking for better conversation continuity.
+        
+        This method updates roleplay state with context information from the current interaction
+        to improve future context building and decision making.
+        
+        Args:
+            response_text: The generated response
+            strategy: The strategy used for this response
+            user_message: The original user message
+            conversation_history: The conversation history
+        """
+        try:
+            # Import services for context tracking
+            from ..service_container import get_roleplay_state, get_character_tracking_service
+            rp_state = get_roleplay_state()
+            char_service = get_character_tracking_service()
+            
+            if not rp_state or not rp_state.is_roleplaying:
+                return
+            
+            print(f"   📝 ENHANCED ROLEPLAY TRACKING: Updating context for future interactions")
+            
+            # 1. Track character interactions from user message
+            speaking_character = char_service.detect_speaking_character(user_message)
+            addressed_characters = char_service.extract_addressed_characters(user_message)
+            
+            # Add speaking character as participant
+            if speaking_character != 'Unknown':
+                turn_number = len(conversation_history) + 1
+                rp_state.add_speaking_character(speaking_character, turn_number)
+                rp_state.mark_character_turn(turn_number, speaking_character)
+            
+            # 2. Track who Elsie addressed in her response
+            addressed_by_elsie = self.context_analysis_service.detect_who_elsie_addressed(response_text, user_message)
+            if addressed_by_elsie:
+                rp_state.set_last_character_addressed(addressed_by_elsie)
+                print(f"      → Elsie addressed: {addressed_by_elsie}")
+            
+            # 3. Update turn tracking
+            turn_number = len(conversation_history) + 1
+            rp_state.mark_response_turn(turn_number)
+            
+            # 4. Store strategy context for future reference
+            if hasattr(rp_state, 'last_strategy_context'):
+                rp_state.last_strategy_context = {
+                    'approach': strategy.get('approach'),
+                    'reasoning': strategy.get('reasoning'),
+                    'suggested_tone': strategy.get('suggested_tone'),
+                    'user_message': user_message,
+                    'response_length': len(response_text)
+                }
+            
+            # 5. Update roleplay channel activity timer
+            rp_state.update_roleplay_channel_activity()
+            
+            print(f"      ✅ Context tracking updated successfully")
+            
+        except Exception as e:
+            print(f"      ❌ Error in enhanced roleplay tracking: {e}")
+            # Don't let tracking errors break the response
 
 
 # REMOVED: Global functions replaced by AIEngine class

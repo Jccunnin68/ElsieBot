@@ -10,7 +10,7 @@ from typing import List, Dict
 from .response_decision import ResponseDecision
 from handlers.ai_wisdom.roleplay_context_builder import get_enhanced_roleplay_context
 
-def handle_roleplay_message(user_message: str, conversation_history: List[Dict]) -> ResponseDecision:
+def handle_roleplay_message(user_message: str, conversation_history: List[Dict], channel_context: Dict = None) -> ResponseDecision:
     """
     Handles messages during a roleplay session using the new engine-driven architecture.
 
@@ -27,7 +27,7 @@ def handle_roleplay_message(user_message: str, conversation_history: List[Dict])
     rp_state = get_roleplay_state()
     
     # 1. Handle DGM commands (non-LLM)
-    dgm_decision = handle_dgm_command(user_message)
+    dgm_decision = handle_dgm_command(user_message, channel_context)
     if dgm_decision:
         dgm_post_info = check_dgm_post(user_message)
         if dgm_post_info and dgm_post_info.get('is_scene_end'):
@@ -44,8 +44,20 @@ def handle_roleplay_message(user_message: str, conversation_history: List[Dict])
         print(f"   🛠️ Building context for selected approach: {decision.strategy.get('approach')}")
         if 'reasoning' not in decision.strategy:
             decision.strategy['reasoning'] = f"Roleplay response determined by AttentionEngine with approach: {decision.strategy.get('approach', 'unknown')}"
-        # The context builder now receives the entire strategy dictionary
-        context_prompt = get_enhanced_roleplay_context(decision.strategy, user_message, conversation_history)
+        
+        # FIXED: Pass parameters in correct order - user_message first, then conversation_history, then strategy as character_context
+        # Convert conversation_history from List[Dict] to List[str] for compatibility
+        formatted_history = []
+        if conversation_history:
+            for msg in conversation_history:
+                if isinstance(msg, dict):
+                    role = msg.get('role', 'user')
+                    content = msg.get('content', '')
+                    formatted_history.append(f"{role}: {content}")
+                else:
+                    formatted_history.append(str(msg))
+        
+        context_prompt = get_enhanced_roleplay_context(user_message, formatted_history, decision.strategy)
         decision.pre_generated_response = context_prompt
 
     return decision

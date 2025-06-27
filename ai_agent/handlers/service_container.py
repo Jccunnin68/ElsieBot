@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .ai_attention.character_tracking_service import CharacterTrackingService
     from .ai_attention.roleplay_exit_service import RoleplayExitService
     from .ai_wisdom.context_coordination_service import ContextCoordinationService
+    from .ai_wisdom.wisdom_engine import WisdomEngine
 
 T = TypeVar('T')
 
@@ -151,6 +152,7 @@ def register_default_services() -> None:
     from .ai_attention.character_tracking_service import CharacterTrackingService
     from .ai_attention.roleplay_exit_service import RoleplayExitService
     from .ai_wisdom.context_coordination_service import ContextCoordinationService
+    from .ai_wisdom.wisdom_engine import WisdomEngine
     
     container = get_container()
     
@@ -179,6 +181,7 @@ def register_default_services() -> None:
     container.register_singleton('character_tracking_service', CharacterTrackingService)
     container.register_singleton('roleplay_exit_service', RoleplayExitService)
     container.register_singleton('context_coordination_service', ContextCoordinationService)
+    container.register_singleton('wisdom_engine', WisdomEngine)
 
 # Convenience functions for common services
 def get_roleplay_state() -> 'RoleplayStateManager':
@@ -255,4 +258,8 @@ def get_roleplay_exit_service() -> 'RoleplayExitService':
 
 def get_context_coordination_service() -> 'ContextCoordinationService':
     """Get the context coordination service."""
-    return get_container().get('context_coordination_service') 
+    return get_container().get('context_coordination_service')
+
+def get_wisdom_engine() -> 'WisdomEngine':
+    """Get the wisdom engine."""
+    return get_container().get('wisdom_engine') 

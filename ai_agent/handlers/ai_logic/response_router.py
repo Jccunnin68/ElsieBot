@@ -28,11 +28,21 @@ def route_message(user_message: str, channel_context: Optional[Dict[str, Any]] =
     if context_service.detect_elsie_mention(user_message):
         print("   👋 ELSIE MENTIONED - Processing message")
     
+    # CRITICAL FIX: Check for DGM posts FIRST, before roleplay routing decisions
+    # This allows DGM posts to initiate roleplay sessions even when not currently in roleplay
+    from ..ai_attention.dgm_handler import check_dgm_post
+    dgm_result = check_dgm_post(user_message)
+    if dgm_result and dgm_result.get('is_dgm'):
+        print(f"   🎬 DGM POST DETECTED - Routing to roleplay handler")
+        print(f"   🎯 DGM Action: {dgm_result.get('action')}")
+        print(f"   🎭 Triggers Roleplay: {dgm_result.get('triggers_roleplay')}")
+        return _handle_roleplay_message_properly(user_message, [], channel_context)  # DGM posts always go to roleplay handler
+    
     # Check roleplay state and handle cross-channel scenarios
     if rp_state.is_roleplaying:
         if channel_context and not rp_state.is_message_from_roleplay_channel(channel_context):
             return handle_cross_channel_busy(rp_state, channel_context)
-        return handle_roleplay_message(user_message, [])  # conversation_history would be passed from caller
+        return _handle_roleplay_message_properly(user_message, [], channel_context)  # conversation_history would be passed from caller
     
     # Route to standard handler for non-roleplay scenarios
     return handle_standard_message(user_message)
@@ -48,10 +58,45 @@ def handle_cross_channel_busy(rp_state, channel_context: Dict[str, Any]) -> str:
     return busy_message
 
 
+def _handle_roleplay_message_properly(user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
+    """
+    Handle messages during roleplay sessions using the correct roleplay handler.
+    This calls the proper roleplay handler that handles DGM commands first.
+    """
+    try:
+        # Use the proper roleplay handler from roleplay_handler.py
+        from .roleplay_handler import handle_roleplay_message as proper_roleplay_handler
+        
+        # The proper handler returns a ResponseDecision, so we need to process it
+        decision = proper_roleplay_handler(user_message, conversation_history, channel_context)
+        
+        # If no AI generation needed, return the pre-generated response
+        if not decision.needs_ai_generation:
+            response = decision.pre_generated_response
+            # FIXED: Return "NO_RESPONSE" as-is for Discord bot to handle properly
+            if response == "NO_RESPONSE":
+                return "NO_RESPONSE"  # DGM posts that don't need responses - Discord bot will stay silent
+            return response or ""
+        
+        # Otherwise, generate AI response
+        from ..service_container import get_ai_engine
+        ai_engine = get_ai_engine()
+        return ai_engine.generate_response_with_decision(decision, user_message, conversation_history)
+            
+    except Exception as e:
+        print(f"Error in proper roleplay handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return "I'm experiencing some technical difficulties during roleplay. Please try again in a moment."
+
+
 def handle_roleplay_message(user_message: str, conversation_history: list) -> str:
     """
     Handle messages during roleplay sessions.
     All roleplay messages go through the LLM with roleplay context.
+    
+    DEPRECATED: This function is kept for backwards compatibility but should not be used.
+    Use _handle_roleplay_message_properly instead.
     """
     # Import services from service container
     from ..service_container import get_attention_engine, get_ai_engine
