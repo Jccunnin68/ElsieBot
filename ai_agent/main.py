@@ -6,7 +6,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from handlers.ai_coordinator.response_coordinator import coordinate_response
-from handlers.ai_knowledge.database_controller import get_db_controller
 import traceback
 
 # Check if cleanup flag is set
@@ -24,8 +23,14 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     print("🚀 Starting Elsie AI Agent...")
     
+    # Initialize service container and register all services
+    from handlers.service_container import register_default_services
+    register_default_services()
+    print("✅ Service container initialized with dependency injection")
+    
     # Check database connection by performing a lightweight query
     try:
+        from handlers.service_container import get_db_controller
         db = get_db_controller()
         db.get_all_categories()
         print("✅ Database connection successful.")
@@ -34,7 +39,7 @@ async def lifespan(app: FastAPI):
     
     # CLEANUP: Reset roleplay state on startup to ensure clean state
     try:
-        from handlers.ai_attention.state_manager import get_roleplay_state
+        from handlers.service_container import get_roleplay_state
         rp_state = get_roleplay_state()
         if rp_state.is_roleplaying:
             print("🧹 CLEANUP: Ending orphaned roleplay session from previous run")
@@ -140,6 +145,7 @@ async def health_check():
     """Health check endpoint"""
     db_status = "healthy"
     try:
+        from handlers.service_container import get_db_controller
         get_db_controller().get_all_categories()
     except Exception:
         db_status = "unhealthy"
@@ -157,7 +163,7 @@ async def manual_cleanup():
 async def debug_roleplay_state():
     """Debug endpoint to check current roleplay state"""
     try:
-        from handlers.ai_attention.state_manager import get_roleplay_state
+        from handlers.service_container import get_roleplay_state
         rp_state = get_roleplay_state()
         
         state_info = {
@@ -175,7 +181,7 @@ async def debug_roleplay_state():
 async def reset_roleplay_state():
     """Debug endpoint to force reset roleplay state"""
     try:
-        from handlers.ai_attention.state_manager import get_roleplay_state
+        from handlers.service_container import get_roleplay_state
         rp_state = get_roleplay_state()
         
         was_active = rp_state.is_roleplaying

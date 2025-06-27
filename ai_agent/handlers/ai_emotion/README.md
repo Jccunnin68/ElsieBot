@@ -1,15 +1,137 @@
 # AI Emotion Package
 
-This package is responsible for all emotional processing and for generating simple, "mock" responses that do not require the full structured query pipeline.
+This package is responsible for emotional analysis and contextual information that informs LLM-powered responses. All responses now go through the LLM with appropriate emotional context rather than using pre-generated responses.
+
+## Service Container Integration
+
+This package provides several services through the service container:
+- **`EmotionEngine`**: LLM-powered emotional analysis and personality context
+- **`GreetingService`**: Greeting detection and contextual information for LLM
+- **`DrinkService`**: Bar service context and drink menu information for LLM
+- **`PoeticService`**: Creative context and poetic trigger detection for LLM
 
 ## Core Components
 
 ### `emotion_engine.py`
-This module contains the `EmotionEngine`, a dedicated LLM-powered component for all nuanced emotional analysis. It takes a user's message and returns a structured analysis of the perceived emotions, intensity, and underlying emotional needs. This analysis is a key input for the `AttentionEngine` when deciding on a roleplay strategy. This engine replaces the previous heuristic-based emotion detection.
+The `EmotionEngine` service is a dedicated LLM-powered component for nuanced emotional analysis. It takes a user's message and returns structured analysis of perceived emotions, intensity, and underlying emotional needs. This analysis is a key input for the `AttentionEngine` when deciding on roleplay strategy.
 
-### Mock & Canned Responses
-This package also houses a collection of modules for providing simple, pre-determined, or lightly-generated responses for common interactions. This allows the agent to feel responsive and natural for simple cases without invoking the expensive and powerful core engines.
-- **`greetings.py`**: Handles simple "hello", "goodbye", and "how are you" interactions.
-- **`drink_menu.py`**: Provides responses related to drink orders and the bar menu.
-- **`mock_responses.py`**: A general handler for other simple, canned responses.
-- **`poetic_responses.py`**: Contains the "poetic circuit," a fun feature that allows Elsie to give an esoteric, poetic, or philosophical response to certain simple inputs, adding variety to her character. 
+**Service Usage:**
+```python
+from handlers.service_container import get_emotion_engine
+emotion_engine = get_emotion_engine()
+analysis = emotion_engine.analyze_emotion(user_message)
+personality_context = emotion_engine.get_personality_context(user_message)
+```
+
+**Enhanced Features:**
+- **Comprehensive emotional analysis** with intensity scoring
+- **Personality context determination** (bartender, counselor, stellar cartographer)
+- **Emotional need identification** for appropriate response targeting
+- **LLM-powered analysis** replacing heuristic-based detection
+
+### Contextual Information Services
+
+#### `greeting_service.py`
+The `GreetingService` provides intelligent greeting detection and contextual information for the LLM to generate appropriate responses.
+
+**Service Usage:**
+```python
+from handlers.service_container import get_greeting_service
+greeting_service = get_greeting_service()
+greeting_context = greeting_service.detect_greeting_context(message)
+```
+
+**Features:**
+- **Multi-pattern greeting detection** (hello, hi, hey, good morning, etc.)
+- **Contextual information** based on time and situation
+- **Personality context** matching Elsie's character
+- **Farewell detection** and context
+
+#### `drink_service.py`
+The `DrinkService` handles detection of bar-related interactions and provides contextual information for LLM responses.
+
+**Service Usage:**
+```python
+from handlers.service_container import get_drink_service
+drink_service = get_drink_service()
+drink_context = drink_service.detect_drink_context(message)
+```
+
+**Features:**
+- **Comprehensive drink menu** information with Star Trek-themed beverages
+- **Context detection** for drink-related requests
+- **Bar service context** for appropriate bartender personality
+- **Special drink information** for contextual recommendations
+
+#### `poetic_service.py`
+The `PoeticService` implements Elsie's "poetic circuit" detection - identifying when creative, philosophical, or artistic responses are appropriate.
+
+**Service Usage:**
+```python
+from handlers.service_container import get_poetic_service
+poetic_service = get_poetic_service()
+poetic_context = poetic_service.detect_poetic_context(message)
+```
+
+**Features:**
+- **Trigger pattern detection** for appropriate poetic moments
+- **Creative context information** (philosophical, artistic, whimsical)
+- **Character consistency** context for maintaining Elsie's personality
+- **Style guidance** for LLM response generation
+
+### `personality_contexts.py`
+Provides personality context determination and management for different interaction modes.
+
+**Features:**
+- **Personality mode detection** (bartender, counselor, stellar cartographer)
+- **Context-appropriate behavior** information for LLM
+- **Personality consistency** guidance across different services
+- **Dynamic personality context** based on conversation flow
+
+## Architecture Benefits
+
+- **🏗️ Service-Oriented**: Clean separation of concerns with focused service APIs
+- **🔧 Enhanced Functionality**: Services provide rich contextual information for LLM
+- **⚡ Performance Optimized**: Fast context detection with all responses through LLM
+- **🧪 Testable**: All services can be easily mocked for unit testing
+- **🔒 Type Safe**: Full type hints throughout the service layer
+- **🎯 Dependency Injection**: Services are injected as dependencies for clean architecture
+- **🎭 Personality Driven**: Consistent character behavior across all services
+- **🤖 LLM-Powered**: All responses generated by AI with appropriate context
+
+## Migration from Legacy Functions
+
+**Old Pattern (Deprecated):**
+```python
+# Legacy standalone functions (removed)
+from handlers.ai_emotion.greetings import detect_greeting, get_greeting_response
+from handlers.ai_emotion.drink_menu import is_drink_request, get_drink_response
+from handlers.ai_emotion.mock_responses import get_mock_response
+from handlers.ai_emotion.poetic_responses import should_trigger_poetic_circuit
+```
+
+**New Pattern (Current):**
+```python
+# Modern service container pattern
+from handlers.service_container import (
+    get_emotion_engine,
+    get_greeting_service,
+    get_drink_service,
+    get_poetic_service
+)
+
+emotion_engine = get_emotion_engine()
+greeting_service = get_greeting_service()
+drink_service = get_drink_service()
+poetic_service = get_poetic_service()
+```
+
+## Response Strategy
+
+The emotion services implement a **contextual information strategy**:
+1. **Fast Context Detection**: Quick identification of interaction type
+2. **Rich Contextual Information**: Detailed context provided to LLM
+3. **Personality Guidance**: Appropriate personality context for responses
+4. **LLM Processing**: All responses generated by AI with full context
+
+This ensures Elsie provides natural, contextually appropriate responses powered by AI while maintaining efficiency through fast context detection and rich information provision to the LLM. 

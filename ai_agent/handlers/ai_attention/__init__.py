@@ -12,26 +12,21 @@ New Architecture:
 
 Core Components:
 - state_manager.py: Manages the RoleplayStateManager.
-- character_tracking.py: Utility for extracting character names.
+- character_tracking_service.py: Service for extracting character names.
 - dgm_handler.py: Handles commands from the DGM (Dungeon Game Master).
 """
-from .state_manager import get_roleplay_state, RoleplayStateManager
-from .character_tracking import extract_character_names_from_emotes
+from .state_manager import RoleplayStateManager
 from .dgm_handler import check_dgm_post, handle_dgm_command
-from .attention_engine import get_attention_engine
 
 __all__ = [
-    # New Attention Engine
-    'get_attention_engine',
-
     # State Management
-    'get_roleplay_state',
     'RoleplayStateManager',
-
-    # Utilities
-    'extract_character_names_from_emotes',
 
     # DGM Handling (Non-LLM)
     'check_dgm_post',
     'handle_dgm_command'
-] 
+]
+
+# Use service container for character tracking:
+# from handlers.service_container import get_character_tracking_service
+# Use: from handlers.service_container import get_roleplay_state, get_attention_engine 

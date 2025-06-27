@@ -1,31 +1,36 @@
 """
-AI Emotion - Emotional Analysis and Response Generation
-=======================================================
+AI Emotion - Emotional Context Analysis
+=======================================
 
-This package handles the emotional analysis of user messages and can
-generate emotionally-aware responses, including poetic or mock responses.
+This package handles the emotional analysis of user messages to provide
+contextual information for LLM processing. All responses now go through
+the LLM with appropriate emotional context.
 
-New Architecture:
-- emotion_engine.py: A dedicated LLM-powered engine for all nuanced
-  emotional analysis. Replaces the old heuristic-based modules.
+Architecture:
+- emotion_engine.py: A dedicated LLM-powered engine for emotional analysis
+- Service classes: GreetingService, DrinkService, PoeticResponseService (for context)
 
-Core Components:
-- poetic_responses.py: Generates esoteric, poetic responses.
-- greetings.py: Handles simple greetings.
-- drink_menu.py: Provides mock responses for bar service.
-- personality_contexts.py: Provides personality information (mostly deprecated).
+All services are available through the service container for dependency injection.
+Note: These services now provide contextual information rather than generating responses.
 """
 
-from .poetic_responses import should_trigger_poetic_circuit, get_poetic_response
-from .mock_responses import get_mock_response
-from .emotion_engine import get_emotion_engine
+# Import service classes for direct access if needed
+from .greeting_service import GreetingService
+from .drink_service import DrinkService
+from .poetic_service import PoeticResponseService
+
+# Import legacy functions for backward compatibility (marked for deprecation)
+from .personality_contexts import detect_mock_personality_context
 
 __all__ = [
-    # New Emotion Engine
-    'get_emotion_engine',
+    # Service Classes (Provide contextual information)
+    'GreetingService',
+    'DrinkService', 
+    'PoeticResponseService',
     
-    # Existing Response Generators
-    'should_trigger_poetic_circuit',
-    'get_poetic_response',
-    'get_mock_response',
-] 
+    # Legacy Functions (Deprecated - use service container instead)
+    'detect_mock_personality_context',
+]
+
+# REMOVED: All old standalone function imports and mocking system
+# Use service container: from handlers.service_container import get_*_service 

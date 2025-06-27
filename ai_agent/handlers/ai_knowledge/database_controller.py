@@ -832,12 +832,5 @@ class FleetDatabaseController:
             print(f"✗ Error in ship search: {e}")
             return []
 
-# Global database controller instance
-db_controller = None
-
-def get_db_controller():
-    """Get the global database controller instance"""
-    global db_controller
-    if db_controller is None:
-        db_controller = FleetDatabaseController()
-    return db_controller 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_db_controller() instead 

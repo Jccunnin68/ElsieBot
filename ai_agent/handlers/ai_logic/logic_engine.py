@@ -180,14 +180,5 @@ You are a database routing specialist. Your task is to analyze a user's query an
 '''
         return prompt.strip()
 
-# Singleton instance of the LogicEngine
-_logic_engine = None
-
-def get_logic_engine():
-    """
-    Provides a global singleton instance of the LogicEngine.
-    """
-    global _logic_engine
-    if _logic_engine is None:
-        _logic_engine = LogicEngine()
-    return _logic_engine
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_logic_engine() instead

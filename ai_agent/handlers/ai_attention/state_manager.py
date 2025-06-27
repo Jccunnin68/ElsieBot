@@ -9,7 +9,6 @@ Enhanced with conversation memory for better context continuity.
 
 import time
 from typing import Dict, List, Optional
-from .character_tracking import extract_current_speaker, is_valid_character_name, extract_addressed_characters
 from .contextual_cues import SessionMode
 
 
@@ -284,7 +283,9 @@ class RoleplayStateManager:
             return False
         
         # Extract character name from current message
-        current_character = extract_current_speaker(user_message)
+        from ..service_container import get_character_tracking_service
+        char_service = get_character_tracking_service()
+        current_character = char_service.detect_speaking_character(user_message)
         if not current_character:
             print(f"   💭 IMPLICIT RESPONSE CHECK: No current character detected")
             return False
@@ -316,7 +317,7 @@ class RoleplayStateManager:
         
         # ENHANCED: Check if this message is actually directed at someone else
         # This prevents false positives when characters start talking to each other
-        other_characters_addressed = extract_addressed_characters(user_message)
+        other_characters_addressed = char_service.extract_addressed_characters(user_message)
         # Filter out the current speaker, as they can't address themselves in this context
         other_characters_addressed = [name for name in other_characters_addressed if name.lower() != current_character.lower()]
 
@@ -367,16 +368,17 @@ class RoleplayStateManager:
         print(f"      🔍 _message_contains_other_character_names DEBUG:")
         print(f"         - Message: '{user_message}'")
         
-        # Import here to avoid circular imports
-        from .character_tracking import extract_character_names_from_emotes, extract_addressed_characters
+        # Get character tracking service
+        from ..service_container import get_character_tracking_service
+        char_service = get_character_tracking_service()
         
         # Extract speaker from bracket format [Character Name] - this should be ignored
-        speaker_from_bracket = extract_current_speaker(user_message)
+        speaker_from_bracket = char_service.detect_speaking_character(user_message)
         print(f"         - Speaker from bracket: '{speaker_from_bracket}'")
         
         # Check for character names in emotes and addressing patterns
-        character_names = extract_character_names_from_emotes(user_message)
-        addressed_characters = extract_addressed_characters(user_message)
+        character_names = char_service.extract_character_names_from_emotes(user_message)
+        addressed_characters = char_service.extract_addressed_characters(user_message)
         
         print(f"         - Character names from emotes: {character_names}")
         print(f"         - Addressed characters: {addressed_characters}")
@@ -391,7 +393,7 @@ class RoleplayStateManager:
         # Filter out the speaker (from brackets) since that's who is talking, not being addressed
         other_character_names = [name for name in all_detected_names 
                                if (name.lower() not in elsie_names and 
-                                   is_valid_character_name(name) and
+                                   char_service.is_valid_character_name(name) and
                                    name.lower() != speaker_from_bracket.lower())]
         
         print(f"         - After filtering Elsie names: {[name for name in all_detected_names if name.lower() not in elsie_names]}")
@@ -407,6 +409,37 @@ class RoleplayStateManager:
     def get_participant_names(self) -> List[str]:
         """Get list of all participant names."""
         return [p['name'] for p in self.participants]
+    
+    def get_characters_present(self) -> List[str]:
+        """Get list of characters currently present in the roleplay session."""
+        return self.get_participant_names()
+    
+    def is_elsie_turn_overdue(self) -> bool:
+        """
+        Check if Elsie's turn to respond is overdue based on conversation flow.
+        
+        Returns:
+            True if Elsie should respond soon, False otherwise
+        """
+        if not self.is_roleplaying:
+            return False
+        
+        # Check if it's been too long since Elsie last responded
+        if not self.turn_history:
+            return True  # No turn history, Elsie should respond
+        
+        # Count turns since Elsie last spoke
+        turns_since_elsie = 0
+        for turn_num, speaker in reversed(self.turn_history):
+            if speaker == "Elsie":
+                break
+            turns_since_elsie += 1
+        
+        # In DGM sessions, be more passive
+        if self.dgm_initiated:
+            return turns_since_elsie >= 4  # Allow more turns without Elsie in DGM sessions
+        else:
+            return turns_since_elsie >= 2  # Regular sessions - respond more frequently
     
     def get_active_participants(self, current_turn: int, max_turns_inactive: int = 10) -> List[str]:
         """Get list of participants who have been mentioned recently."""
@@ -502,9 +535,15 @@ class RoleplayStateManager:
         self.last_character_spoke = ""
         self.turn_history = []
         
-        # Reset conversation memory
-        self.conversation_memory.clear_memory()
-        self.last_conversation_analysis = None
+        # Reset conversation memory (if available)
+        if hasattr(self, 'conversation_memory') and self.conversation_memory:
+            try:
+                self.conversation_memory.clear_memory()
+            except Exception as e:
+                print(f"   ⚠️  Could not clear conversation memory: {e}")
+        
+        if hasattr(self, 'last_conversation_analysis'):
+            self.last_conversation_analysis = None
         
         print(f"   🔓 CHANNEL LOCK RELEASED - Now accepting messages from all channels")
     
@@ -678,7 +717,13 @@ class RoleplayStateManager:
     
     def has_conversation_memory(self) -> bool:
         """Check if we have conversation memory available."""
-        return self.conversation_memory.has_sufficient_context()
+        if hasattr(self, 'conversation_memory') and self.conversation_memory:
+            try:
+                return self.conversation_memory.has_sufficient_context()
+            except Exception as e:
+                print(f"   ⚠️  Error checking conversation memory: {e}")
+                return False
+        return False
     
     @property
     def current_mode(self) -> SessionMode:
@@ -694,10 +739,5 @@ class RoleplayStateManager:
             return SessionMode.REGULAR_ROLEPLAY
 
 
-# Global roleplay state manager instance
-_roleplay_state = RoleplayStateManager()
-
-
-def get_roleplay_state() -> RoleplayStateManager:
-    """Get the global roleplay state manager."""
-    return _roleplay_state 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_roleplay_state() instead 

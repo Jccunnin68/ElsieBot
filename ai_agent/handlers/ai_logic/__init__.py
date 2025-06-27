@@ -8,19 +8,17 @@ agentic architecture.
 """
 
 from .response_decision import ResponseDecision
-from .response_router import route_message_to_handler
+from .response_router import route_message
 from .roleplay_handler import handle_roleplay_message
 from .structured_query_handler import handle_structured_message
 from .structured_query_detector import StructuredQueryDetector
-from .logic_engine import get_logic_engine
-from ..ai_attention.attention_engine import get_attention_engine
 
 __all__ = [
     # Core data structures
     'ResponseDecision',
 
     # Main entry point for routing
-    'route_message_to_handler',
+    'route_message',
 
     # Specific handlers
     'handle_roleplay_message',
@@ -28,6 +26,7 @@ __all__ = [
 
     # Agentic components
     'StructuredQueryDetector',
-    'get_logic_engine',
-    'get_attention_engine',
-] 
+]
+
+# REMOVED: Global accessor functions moved to service_container
+# Use: from handlers.service_container import get_logic_engine, get_attention_engine 

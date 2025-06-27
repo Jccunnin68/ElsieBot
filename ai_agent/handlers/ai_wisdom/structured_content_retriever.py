@@ -9,19 +9,28 @@ LLMInterface when necessary for general queries.
 """
 
 from typing import Dict, Any, List
-from handlers.ai_knowledge.database_controller import get_db_controller
-from handlers.ai_logic.logic_engine import get_logic_engine
+# REMOVED: Global imports replaced by service container
+# Dependencies injected lazily via _ensure_dependencies()
 
 class StructuredContentRetriever:
     """
     Retrieves content from the database based on a structured query object.
     """
     def __init__(self):
-        self.db_controller = get_db_controller()
-        self.logic_engine = get_logic_engine()
-        # Set up database controller dependency for smart failover
-        self.logic_engine.set_database_controller(self.db_controller)
-        print("✓ StructuredContentRetriever initialized with smart failover")
+        # Initialize with None - dependencies will be injected lazily
+        self.db_controller = None
+        self.logic_engine = None
+        print("✓ StructuredContentRetriever initialized - dependencies will be injected lazily")
+    
+    def _ensure_dependencies(self):
+        """Lazy initialization of dependencies via service container."""
+        if self.db_controller is None or self.logic_engine is None:
+            from ..service_container import get_db_controller, get_logic_engine
+            self.db_controller = get_db_controller()
+            self.logic_engine = get_logic_engine()
+            # Set up database controller dependency for smart failover
+            self.logic_engine.set_database_controller(self.db_controller)
+            print("✓ StructuredContentRetriever dependencies injected with smart failover")
 
     def get_content(self, structured_query: Dict[str, Any]) -> List[Dict]:
         """
@@ -33,6 +42,9 @@ class StructuredContentRetriever:
         Returns:
             A list of matching records from the database.
         """
+        # Ensure dependencies are injected
+        self._ensure_dependencies()
+        
         query_type = structured_query.get('type')
         print(f"   📚 Structured Content Retriever: Handling type '{query_type}'")
 
@@ -616,14 +628,5 @@ class StructuredContentRetriever:
                 limit=10
             )
 
-# Singleton instance
-_content_retriever = None
-
-def get_structured_content_retriever():
-    """
-    Provides a global singleton instance of the StructuredContentRetriever.
-    """
-    global _content_retriever
-    if _content_retriever is None:
-        _content_retriever = StructuredContentRetriever()
-    return _content_retriever 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_content_retriever() instead 

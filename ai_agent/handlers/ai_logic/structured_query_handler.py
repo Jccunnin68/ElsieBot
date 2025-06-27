@@ -14,7 +14,7 @@ from handlers.ai_logic.structured_query_detector import StructuredQueryDetector
 from handlers.ai_wisdom.structured_content_retriever import StructuredContentRetriever
 from handlers.ai_wisdom.wisdom_engine import WisdomEngine
 from handlers.ai_logic.logic_engine import LogicEngine
-from handlers.ai_knowledge.knowledge_engine import get_knowledge_engine
+# REMOVED: Global import replaced by service container
 
 # Constants for chunking
 KNOWLEDGE_ENGINE_CHUNK_SIZE = 25000  # 25,000 characters per chunk
@@ -52,6 +52,8 @@ def process_single_log_through_knowledge_engine(raw_content: str) -> str:
     if not raw_content:
         return raw_content
     
+    # Lazy import to avoid circular dependencies
+    from handlers.service_container import get_knowledge_engine
     knowledge_engine = get_knowledge_engine()
     
     # Split into chunks if content is large

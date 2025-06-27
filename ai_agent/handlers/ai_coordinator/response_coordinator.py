@@ -8,9 +8,7 @@ optimizing the flow to avoid expensive AI calls when possible.
 
 from typing import Dict
 
-from handlers.ai_logic.response_router import route_message_to_handler
-from handlers.ai_attention import extract_character_names_from_emotes, get_roleplay_state
-from handlers.ai_coordinator.ai_engine import generate_ai_response_with_decision
+from handlers.ai_logic.response_router import route_message
 
 
 def coordinate_response(user_message: str, conversation_history: list, channel_context: Dict = None) -> str:
@@ -49,6 +47,13 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     else:
         print(f"   ⚠️  No channel context provided - assuming allowed")
     
+    # For now, return a simple response since the old routing system is being refactored
+    # TODO: Implement proper routing with the new service architecture
+    return route_message(user_message, channel_context)
+    
+    # COMMENTED OUT: Old complex routing logic
+    # This will be reimplemented with the new service architecture
+    """
     # Make the decision using existing logic
     decision = route_message_to_handler(user_message, conversation_history, channel_context)
     
@@ -82,12 +87,15 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
         
         # Handle tracking for roleplay responses that don't need AI
         if decision.strategy['approach'] == 'roleplay_active':
+            from handlers.service_container import get_roleplay_state
             rp_state = get_roleplay_state()
             turn_number = len(conversation_history) + 1
             
             # Track who Elsie addressed for simple responses
             if decision.strategy.get('response_reason') == 'subtle_bar_service':
-                character_names = extract_character_names_from_emotes(user_message)
+                from handlers.service_container import get_character_tracking_service
+                char_service = get_character_tracking_service()
+                character_names = char_service.extract_character_names_from_emotes(user_message)
                 if character_names:
                     rp_state.set_last_character_addressed(character_names[0])
                     print(f"   📝 TRACKING UPDATE: Elsie addressed {character_names[0]} (subtle service)")
@@ -101,6 +109,9 @@ def coordinate_response(user_message: str, conversation_history: list, channel_c
     
     # Otherwise, do the expensive AI generation
     print(f"🤖 AI GENERATION NEEDED: {decision.strategy['reasoning']}")
-    ai_response = generate_ai_response_with_decision(decision, user_message, conversation_history)
+    from handlers.service_container import get_ai_engine
+    ai_engine = get_ai_engine()
+    ai_response = ai_engine.generate_response_with_decision(decision, user_message, conversation_history)
     
-    return ai_response 
+    return ai_response
+    """ 

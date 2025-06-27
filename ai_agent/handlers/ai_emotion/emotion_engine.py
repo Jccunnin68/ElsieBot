@@ -91,12 +91,5 @@ Provide only the JSON object in your response.
             "needs_support": False
         }
 
-# Global instance for easy access
-_emotion_engine_instance = None
-
-def get_emotion_engine():
-    """Singleton accessor for the EmotionEngine."""
-    global _emotion_engine_instance
-    if _emotion_engine_instance is None:
-        _emotion_engine_instance = EmotionEngine()
-    return _emotion_engine_instance 
+# REMOVED: Global instance replaced by service container
+# Use service_container.get_emotion_engine() instead 
