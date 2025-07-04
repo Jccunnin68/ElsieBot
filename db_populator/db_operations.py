@@ -127,16 +127,25 @@ class DatabaseOperations:
                     
                     # Convert remote touched timestamp
                     try:
+                        # Parse remote timestamp (MediaWiki format with 'Z' suffix = UTC)
                         remote_dt = datetime.fromisoformat(remote_touched.replace('Z', '+00:00'))
-                        local_dt = local_touched if isinstance(local_touched, datetime) else \
-                                  datetime.fromisoformat(str(local_touched).replace('Z', '+00:00'))
+                        # Convert to naive UTC datetime for comparison
+                        remote_dt_naive = remote_dt.replace(tzinfo=None)
                         
-                        # Update if remote is newer than local
-                        should_update = remote_dt > local_dt
-                        if should_update:
-                            print(f"  🔄 Page '{page_title}' needs update: remote {remote_dt} > local {local_dt}")
+                        # Parse local timestamp (database TIMESTAMP without timezone - stored as naive UTC)
+                        if isinstance(local_touched, datetime):
+                            # Database datetime object - already naive UTC
+                            local_dt_naive = local_touched
                         else:
-                            print(f"  ✓ Page '{page_title}' is current: remote {remote_dt} <= local {local_dt}")
+                            # String format - parse as naive UTC
+                            local_dt_naive = datetime.fromisoformat(str(local_touched))
+                        
+                        # Update if remote is newer than local (both naive UTC)
+                        should_update = remote_dt_naive > local_dt_naive
+                        if should_update:
+                            print(f"  🔄 Page '{page_title}' needs update: remote {remote_dt_naive} > local {local_dt_naive}")
+                        else:
+                            print(f"  ✓ Page '{page_title}' is current: remote {remote_dt_naive} <= local {local_dt_naive}")
                         
                         return should_update
                         
@@ -179,7 +188,9 @@ class DatabaseOperations:
                     if touched:
                         try:
                             # MediaWiki format: "2025-05-13T15:09:05Z"
-                            touched_timestamp = datetime.fromisoformat(touched.replace('Z', '+00:00'))
+                            # Convert to UTC and then to naive datetime for database storage
+                            touched_dt = datetime.fromisoformat(touched.replace('Z', '+00:00'))
+                            touched_timestamp = touched_dt.replace(tzinfo=None)  # Store as naive UTC datetime
                         except Exception as e:
                             print(f"      ⚠️  Could not parse touched timestamp '{touched}': {e}")
                     

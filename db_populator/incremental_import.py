@@ -13,15 +13,17 @@ from typing import List, Dict, Optional, Tuple
 from content_extractor import ContentExtractor
 from content_processor import ContentProcessor
 from db_operations import DatabaseOperations
+from api_client import MediaWikiAPIClient
 
 
 class IncrementalImportController:
     """Orchestrates incremental import process using MediaWiki touched timestamps"""
     
     def __init__(self):
-        self.extractor = ContentExtractor()
-        self.processor = ContentProcessor()
+        self.api_client = MediaWikiAPIClient()
         self.db_ops = DatabaseOperations()
+        self.extractor = ContentExtractor(self.api_client, self.db_ops)
+        self.processor = ContentProcessor(self.db_ops)
         self.stats = {
             'total_pages': 0,
             'checked': 0,
@@ -121,7 +123,7 @@ class IncrementalImportController:
                 
                 # Get remote metadata (touched timestamp)
                 print(f"\n   📄 [{i}/{len(page_titles)}] Checking: {title}")
-                remote_metadata = self.extractor.api_client.get_page_metadata(title)
+                remote_metadata = self.api_client.get_page_metadata(title)
                 
                 if not remote_metadata:
                     print(f"      ⚠️  Could not get metadata for: {title}")
