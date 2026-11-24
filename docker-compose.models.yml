@@ -1,0 +1,99 @@
+services:
+  gemma-voice:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_MODEL: gemma3:4b
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      - gemma_voice:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    gpus: all
+    entrypoint: ["sh", "/ollama-entrypoint.sh"]
+    networks:
+      - elsie_models
+
+  gemma-attention:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11435:11434"
+    environment:
+      OLLAMA_MODEL: gemma3:4b
+    volumes:
+      - gemma_attention:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["sh", "/ollama-entrypoint.sh"]
+    networks:
+      - elsie_models
+
+  gemma-emotion:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11436:11434"
+    environment:
+      OLLAMA_MODEL: gemma3:1b
+    volumes:
+      - gemma_emotion:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["sh", "/ollama-entrypoint.sh"]
+    networks:
+      - elsie_models
+
+  gemma-logic:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11437:11434"
+    environment:
+      OLLAMA_MODEL: gemma3:1b
+    volumes:
+      - gemma_logic:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["sh", "/ollama-entrypoint.sh"]
+    networks:
+      - elsie_models
+
+  gemma-knowledge:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11438:11434"
+    environment:
+      OLLAMA_MODEL: gemma3:1b
+    volumes:
+      - gemma_knowledge:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["sh", "/ollama-entrypoint.sh"]
+    networks:
+      - elsie_models
+
+  gemma-wisdom:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11439:11434"
+    environment:
+      OLLAMA_MODEL: gemma3:4b
+    volumes:
+      - gemma_wisdom:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["sh", "/ollama-entrypoint.sh"]
+    networks:
+      - elsie_models
+
+volumes:
+  gemma_voice:
+  gemma_attention:
+  gemma_emotion:
+  gemma_logic:
+  gemma_knowledge:
+  gemma_wisdom:
+
+networks:
+  elsie_models:
+    name: elsie_models

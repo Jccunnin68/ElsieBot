@@ -7,9 +7,9 @@ caching, and response post-processing. Updated to use pythonic service classes w
 """
 
 import re
-import google.generativeai as genai
 from typing import List, Dict, Optional, TYPE_CHECKING, Any
-from config import GEMMA_API_KEY
+from config import OLLAMA_VOICE_MODEL, OLLAMA_VOICE_URL, OLLAMA_WISDOM_MODEL, OLLAMA_WISDOM_URL
+from ..local_gemma import LocalGemma
 
 from ..ai_logic.response_decision import ResponseDecision
 
@@ -51,6 +51,8 @@ class AIEngine:
             text_utility_service: Service for text utilities
         """
         self.response_cache = {}  # Instance-level cache instead of global
+        self.voice = LocalGemma(OLLAMA_VOICE_URL, OLLAMA_VOICE_MODEL)
+        self.summarizer = LocalGemma(OLLAMA_WISDOM_URL, OLLAMA_WISDOM_MODEL)
         
         # Store service dependencies
         self._poetic_service = poetic_service
@@ -133,8 +135,8 @@ class AIEngine:
         For roleplay mode: use AI engine processing.
         """
         try:
-            if not GEMMA_API_KEY:
-                return "I'm currently unable to access my AI capabilities. Please check the API configuration."
+            if not self.voice.configured:
+                return "I'm currently unable to access my AI capabilities. Please check the local model configuration."
 
             strategy = decision.strategy
             approach = strategy.get('approach', '')
@@ -172,14 +174,11 @@ class AIEngine:
                 print("   ✅ CACHE HIT - Returning cached response.")
                 return self.response_cache[cache_key]
             
-            model = genai.GenerativeModel('gemma-3-27b-it')
-            generation_config = genai.types.GenerationConfig(
-                max_output_tokens=8000,
-                temperature=0.8
+            response_text = self.voice.generate(
+                final_prompt,
+                temperature=0.8,
+                max_tokens=8000,
             )
-
-            response = model.generate_content(final_prompt, generation_config=generation_config)
-            response_text = response.text.strip()
             
             # Check if the response might be truncated and needs chunking
             estimated_full_size = self._estimate_output_size(final_prompt)
@@ -212,8 +211,9 @@ class AIEngine:
         """Uses a fast LLM to summarize a long context prompt that exceeds token limits."""
         print(f"   🔄 SUMMARIZING long prompt ({len(long_prompt)} chars)...")
         try:
-            # Use a fast, capable model for summarization
-            summarizer_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+            summarizer_model = self.summarizer
+            if not summarizer_model.configured:
+                raise RuntimeError("Local wisdom model is not configured")
 
             # The user's most recent message is the most important part.
             # We find it, separate it, summarize the rest of the context, and append it back.
@@ -246,9 +246,7 @@ END OF CONTEXT
 
 """
             
-            # Use a simple generation config for summarization
-            summary_response = summarizer_model.generate_content(summarization_prompt)
-            summarized_context = summary_response.text.strip()
+            summarized_context = summarizer_model.generate(summarization_prompt, temperature=0.2)
             
             # Re-assemble the final prompt
             final_prompt = summarized_context + suffix_to_preserve

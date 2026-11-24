@@ -4,7 +4,8 @@ This guide provides comprehensive instructions for setting up, configuring, and 
 
 ## 1. Prerequisites
 
-- **Docker & Docker Compose**: For running the containerized services.
+- **Docker & Docker Compose**: For running the containerized services and the local Gemma engines.
+- **NVIDIA GPU in Docker**: Required for the voice model. The other five engines run on CPU.
 - **Git**: For cloning the repository.
 - **VS Code**: Recommended editor.
 - **Remote - Containers Extension**: For the best development experience with VS Code.
@@ -22,7 +23,7 @@ The entire project is configured using a single `.env` file in the root director
 
 2.  **Edit the `.env` file** and provide the following values:
     -   `DISCORD_TOKEN`: Your Discord bot token.
-    -   `GEMMA_API_KEY`: Your API key for the Google Gemma service.
+    -   `OLLAMA_*_URL` and `OLLAMA_*_MODEL`: Local Gemma endpoint for each engine. The defaults in `sample.env` match `docker-compose.models.yml`.
     -   `DB_PASSWORD`: A secure password for the PostgreSQL database.
     -   `DB_PORT`: The port for the database (default: 5432).
     -   `DB_NAME`: The name of the database to use (e.g., `elsie`)
@@ -73,18 +74,24 @@ This is the easiest way to get started.
 
 If not using the dev container, you can run the services directly with Docker Compose.
 
-1.  **Start the database first**:
+1.  **Start the local Gemma engines**:
+    ```bash
+    docker compose -f docker-compose.models.yml up -d
+    ```
+    This starts one Ollama container per engine and pulls its model on first launch. Voice is `gemma3:4b` on the GPU. Attention and wisdom are `gemma3:4b` on CPU. Emotion, logic, and knowledge are `gemma3:1b` on CPU.
+
+2.  **Start the database**:
     ```bash
     docker-compose -f docker-compose.db.yml up -d
     ```
     This will start the PostgreSQL database on port 5433 (to avoid conflicts with local Postgres).
 
-2.  **Wait for the database to be healthy**, then start the application services:
+3.  **Wait for the database to be healthy**, then start the application services:
     ```bash
     docker-compose up -d
     ```
 
-3.  **View logs**:
+4.  **View logs**:
     ```bash
     # Database logs
     docker-compose -f docker-compose.db.yml logs -f
@@ -135,7 +142,7 @@ Once the bot is running and in your Discord server, you can interact with it.
     -   Ensure the "Message Content Intent" is enabled in the Discord Developer Portal.
     -   Check that the bot has the correct permissions in your Discord server.
 -   **AI Agent Errors**:
-    -   Check the `GEMMA_API_KEY` in your `.env` file.
+    -   Confirm the Gemma containers are running: `docker compose -f docker-compose.models.yml ps`.
     -   View the `ai_agent` container logs for errors: `docker-compose logs -f ai_agent`.
     -   To test the DB connection from the agent container: `docker-compose exec ai_agent python -c "from handlers.ai_wisdom.content_retriever import check_elsiebrain_connection; check_elsiebrain_connection()"`
 -   **Database Issues**:

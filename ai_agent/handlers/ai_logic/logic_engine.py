@@ -9,24 +9,23 @@ with smart failover to general search if no results are found.
 """
 
 from typing import List, Dict, Optional
-import os
-import google.generativeai as genai
+
+from config import OLLAMA_LOGIC_MODEL, OLLAMA_LOGIC_URL
+from ..local_gemma import LocalGemma
 
 class LogicEngine:
     """
     An engine that uses an LLM for performing specific reasoning tasks with smart failover.
     """
-    def __init__(self, model_name="gemini-2.0-flash-lite"):
+    def __init__(self, model_name=None):
         """
-        Initializes the Logic Engine.
+        Initializes the Logic Engine against the local Gemma logic container.
 
         Args:
-            model_name: The name of the Gemini model to use.
+            model_name: Optional model tag override.
         """
-        self.api_key = os.getenv("GEMMA_API_KEY")
-        genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel(model_name)
-        self.model_name = model_name
+        self.model_name = model_name or OLLAMA_LOGIC_MODEL
+        self.client = LocalGemma(OLLAMA_LOGIC_URL, self.model_name)
         self.db_controller = None  # Will be set by dependency injection
         print(f"✓ Logic Engine initialized for model: {self.model_name}")
 
@@ -126,12 +125,15 @@ class LogicEngine:
         Returns:
             The single most relevant category name as a string.
         """
+        if not self.client.configured:
+            print("   ⚠️  Local logic model is not configured - using General")
+            return "General"
+
         prompt = self._build_category_selection_prompt(query, available_categories)
 
         print(f"   🧠 LLM aAbient: Determining category for query '{query}'")
         
-        response = self.model.generate_content(prompt)
-        category = response.text.strip()
+        category = self.client.generate(prompt, temperature=0.1)
         
         print(f"   🤖 LLM Returned Category: '{category}'")
         

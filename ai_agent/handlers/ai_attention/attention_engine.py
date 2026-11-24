@@ -5,11 +5,11 @@ Attention Engine - LLM-Powered Roleplay Strategy
 This module provides the core engine for determining Elsie's response
 strategy during roleplay, using a powerful LLM to act as a "Roleplay Director."
 """
-import google.generativeai as genai
 from typing import Dict, List
 import json
 
-from config import GEMMA_API_KEY
+from config import OLLAMA_ATTENTION_MODEL, OLLAMA_ATTENTION_URL
+from ..local_gemma import LocalGemma
 from ..ai_logic.response_decision import ResponseDecision
 from .state_manager import RoleplayStateManager
 
@@ -18,12 +18,12 @@ class AttentionEngine:
     """
     An engine that uses an LLM to decide on the optimal roleplay strategy.
     """
-    def __init__(self, model_name='gemma-3-27b-it'):
+    def __init__(self, model_name=None):
         """
-        Initializes the AttentionEngine with Gemma for roleplay strategy decisions.
+        Initializes the AttentionEngine with the local Gemma attention container.
         Dependencies injected after initialization.
         """
-        self.model = genai.GenerativeModel(model_name)
+        self.client = LocalGemma(OLLAMA_ATTENTION_URL, model_name or OLLAMA_ATTENTION_MODEL)
         self.emotion_engine = None  # Will be injected via service container
 
     def determine_response_strategy(self, user_message: str, conversation_history: List[Dict], rp_state: RoleplayStateManager) -> ResponseDecision:
@@ -39,8 +39,8 @@ class AttentionEngine:
         Returns:
             A ResponseDecision object containing the chosen strategy.
         """
-        if not user_message or not GEMMA_API_KEY:
-            return ResponseDecision(needs_ai_generation=False, strategy={'approach': 'roleplay_listening', 'reasoning': 'No message or API key.'})
+        if not user_message or not self.client.configured:
+            return ResponseDecision(needs_ai_generation=False, strategy={'approach': 'roleplay_listening', 'reasoning': 'No message or local model.'})
 
         try:
             # 1. Get emotional context (lazy load emotion engine)
@@ -54,15 +54,7 @@ class AttentionEngine:
             prompt = self._build_prompt(user_message, conversation_history, rp_state, emotional_analysis)
             
             # 3. Get the strategy from the LLM
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.3 # Higher creativity for strategy
-                )
-            )
-            
-            # Parse the response - Gemma will return structured text, extract JSON from it
-            response_text = response.text.strip()
+            response_text = self.client.generate(prompt, temperature=0.3, json_mode=True)
             strategy_decision = self._parse_strategy_response(response_text)
 
             print(f"   🎬 ATTENTION ENGINE DECISION: {strategy_decision}")
@@ -92,8 +84,8 @@ class AttentionEngine:
         Returns:
             Dictionary with enhanced scene analysis including characters and context
         """
-        if not GEMMA_API_KEY or not dgm_text.strip():
-            print("      ⚠️  No API key or empty text - returning basic analysis")
+        if not self.client.configured or not dgm_text.strip():
+            print("      ⚠️  No local model or empty text - returning basic analysis")
             return {'characters': [], 'scene_context': {}}
         
         try:
@@ -142,15 +134,8 @@ Return ONLY a JSON object:
 }}"""
 
             # Use the same model (Gemma) for consistency
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.1  # Low temperature for consistent analysis
-                )
-            )
-            
-            # Parse the response using our parsing method
-            analysis_result = self._parse_dgm_analysis_response(response.text.strip())
+            response_text = self.client.generate(prompt, temperature=0.1, json_mode=True)
+            analysis_result = self._parse_dgm_analysis_response(response_text)
             
             print(f"      ✅ ENHANCED DGM ANALYSIS COMPLETE:")
             if analysis_result.get('characters'):

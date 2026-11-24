@@ -5,23 +5,23 @@ Emotion Engine - LLM-Powered Emotional Analysis
 This module provides an LLM-based engine for analyzing the emotional
 content of text.
 """
-import google.generativeai as genai
 from typing import Dict
 import json
 
-from config import GEMMA_API_KEY
+from config import OLLAMA_EMOTION_MODEL, OLLAMA_EMOTION_URL
+from ..local_gemma import LocalGemma
 
 class EmotionEngine:
     """
     An engine that uses an LLM to perform nuanced emotional analysis.
     """
-    def __init__(self, model_name='gemini-1.5-flash-latest'):
+    def __init__(self, model_name=None):
         """
-        Initializes the EmotionEngine with a specific model.
+        Initializes the EmotionEngine with the local Gemma emotion container.
         Args:
-            model_name: The name of the generative model to use (defaults to a fast model).
+            model_name: Optional model tag override.
         """
-        self.model = genai.GenerativeModel(model_name)
+        self.client = LocalGemma(OLLAMA_EMOTION_URL, model_name or OLLAMA_EMOTION_MODEL)
 
     def analyze_emotion(self, text: str) -> Dict:
         """
@@ -35,22 +35,16 @@ class EmotionEngine:
             primary emotion, intensity, and whether it suggests a need for support.
             Returns a default neutral analysis on failure.
         """
-        if not text or not GEMMA_API_KEY:
+        if not text or not self.client.configured:
             return self._default_emotion()
 
         try:
             prompt = self._build_prompt(text)
-            
-            response = self.model.generate_content(
+            cleaned_response = self.client.generate(
                 prompt,
-                generation_config=genai.types.GenerationConfig(
-                    response_mime_type="application/json",
-                    temperature=0.2 # Low temperature for consistent JSON output
-                )
-            )
-            
-            # Clean the response to ensure it's valid JSON
-            cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
+                temperature=0.2,
+                json_mode=True,
+            ).replace("```json", "").replace("```", "")
             
             analysis = json.loads(cleaned_response)
             print(f"   🧠 EMOTION ANALYSIS: {analysis}")

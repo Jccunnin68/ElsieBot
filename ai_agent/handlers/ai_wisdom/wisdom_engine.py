@@ -9,30 +9,22 @@ prompts and then executes them via LLM to generate responses.
 
 import time
 from typing import Dict, Any
-import google.generativeai as genai
-from config import GEMMA_API_KEY
+from config import OLLAMA_WISDOM_MODEL, OLLAMA_WISDOM_URL
 from handlers.ai_wisdom.prompt_builder import PromptLibrary
+from handlers.local_gemma import LocalGemma
 
 class WisdomEngine:
     """Orchestrates prompt generation using a strategy and the PromptLibrary, then executes via LLM."""
 
-    LLM_MODEL_NAME = 'gemini-2.0-flash-lite'
     MAX_RETRIES = 1
 
     def __init__(self):
         self.prompt_library = PromptLibrary()
-        self.client = self._initialize_gemini_client()
-
-    def _initialize_gemini_client(self):
-        """Initializes the Gemini client."""
-        try:
-            genai.configure(api_key=GEMMA_API_KEY)
-            model = genai.GenerativeModel(self.LLM_MODEL_NAME)
-            print(f"✅ WisdomEngine initialized with {self.LLM_MODEL_NAME}")
-            return model
-        except Exception as e:
-            print(f"⚠️  Failed to initialize Gemini client for WisdomEngine: {e}")
-            return None
+        self.client = LocalGemma(OLLAMA_WISDOM_URL, OLLAMA_WISDOM_MODEL)
+        if self.client.configured:
+            print(f"✅ WisdomEngine initialized with {OLLAMA_WISDOM_MODEL} at {OLLAMA_WISDOM_URL}")
+        else:
+            print("⚠️  WisdomEngine local model is not configured")
 
     def build_context_for_strategy(self, strategy: Dict[str, Any], user_message: str) -> str:
         """
@@ -97,7 +89,7 @@ class WisdomEngine:
 
     def _execute_prompt_via_llm(self, prompt: str, approach: str) -> str:
         """Executes the built prompt via LLM and returns the response."""
-        if not self.client:
+        if not self.client.configured:
             print(f"         ❌ WisdomEngine LLM client not available. Returning raw prompt.")
             return prompt
 
@@ -109,14 +101,7 @@ class WisdomEngine:
 
         for attempt in range(self.MAX_RETRIES):
             try:
-                generation_config = genai.types.GenerationConfig(
-                    max_output_tokens=8192,
-                    temperature=0.3,
-                    candidate_count=1
-                )
-                
-                response = self.client.generate_content(prompt, generation_config=generation_config)
-                response_text = response.text.strip()
+                response_text = self.client.generate(prompt, temperature=0.3, max_tokens=8192)
                 
                 if response_text:
                     print(f"         ✅ WisdomEngine successfully generated {len(response_text)} character response")

@@ -8,52 +8,22 @@ a clean, third-person sequence of events suitable for summarization.
 """
 
 import time
-import google.generativeai as genai
-from config import GEMMA_API_KEY
+from config import OLLAMA_KNOWLEDGE_MODEL, OLLAMA_KNOWLEDGE_URL
+from handlers.local_gemma import LocalGemma
 from .log_patterns import SHIP_SPECIFIC_CHARACTER_CORRECTIONS, FALLBACK_CHARACTER_CORRECTIONS, FLEET_SHIP_NAMES
 
 class KnowledgeEngine:
     """A simplified engine for processing log data with an LLM."""
 
-    LLM_MODEL_NAME = 'gemini-2.0-flash-lite'  # Fast model for better response times
     MAX_RETRIES = 1
-    
-    # Model-specific output token limits based on Google's official documentation
-    MODEL_OUTPUT_LIMITS = {
-        'gemini-2.0-flash-lite': 8192,
-        'gemini-2.0-flash': 8192,
-        'gemini-2.5-flash': 65536,
-        'gemini-2.5-pro': 65536,
-        'gemini-1.5-flash': 8192,
-        'gemini-1.5-pro': 8192,
-    }
 
     def __init__(self):
-        self.client = self._initialize_gemini_client()
-        self.max_output_tokens = self._get_max_output_tokens()
-
-    def _initialize_gemini_client(self):
-        """Initializes the Gemini client."""
-        try:
-            genai.configure(api_key=GEMMA_API_KEY)
-            model = genai.GenerativeModel(self.LLM_MODEL_NAME)
-            print(f"✅ KnowledgeEngine initialized with {self.LLM_MODEL_NAME}")
-            return model
-        except Exception as e:
-            print(f"⚠️  Failed to initialize Gemini client for KnowledgeEngine: {e}")
-            return None
-
-    def _get_max_output_tokens(self) -> int:
-        """Get the maximum output tokens for the current model."""
-        # Get the base model name (remove version suffixes)
-        base_model = self.LLM_MODEL_NAME
-        for model_key in self.MODEL_OUTPUT_LIMITS:
-            if model_key in base_model:
-                return self.MODEL_OUTPUT_LIMITS[model_key]
-        
-        # Default to conservative limit if model not found
-        print(f"      ⚠️  Unknown model {self.LLM_MODEL_NAME}, using conservative 8192 token limit")
-        return 8192
+        self.client = LocalGemma(OLLAMA_KNOWLEDGE_URL, OLLAMA_KNOWLEDGE_MODEL)
+        self.max_output_tokens = 8192
+        if self.client.configured:
+            print(f"✅ KnowledgeEngine initialized with {OLLAMA_KNOWLEDGE_MODEL} at {OLLAMA_KNOWLEDGE_URL}")
+        else:
+            print("⚠️  KnowledgeEngine local model is not configured")
 
     def _create_character_corrections_text(self) -> str:
         """Creates the character corrections section for the prompt."""
@@ -112,7 +82,7 @@ Reformatted:
             A string containing the cleaned log data, or the original data if processing fails.
         """
         
-        if not self.client:
+        if not self.client.configured:
             print("      ❌ KnowledgeEngine LLM client not available. Falling back to raw logs.")
             return raw_logs
 
@@ -125,20 +95,16 @@ Reformatted:
 
         for attempt in range(self.MAX_RETRIES):
             try:
-                print(f"      🔄 KnowledgeEngine attempt {attempt + 1}/{self.MAX_RETRIES} - Calling {self.LLM_MODEL_NAME}...")
-                
-                # Configure for maximum output and consistency
-                generation_config = genai.types.GenerationConfig(
-                    max_output_tokens=self.max_output_tokens,
-                    temperature=0.05,  # Very low temperature for maximum consistency
-                    candidate_count=1,
-                    top_p=0.8,  # Reduce randomness in token selection
-                    top_k=20    # Further limit token choices for consistency
-                )
-                
-                # Add timing to detect hangs
+                print(f"      🔄 KnowledgeEngine attempt {attempt + 1}/{self.MAX_RETRIES} - Calling {OLLAMA_KNOWLEDGE_MODEL}...")
+
                 start_time = time.time()
-                response = self.client.generate_content(prompt, generation_config=generation_config)
+                cleaned_content = self.client.generate(
+                    prompt,
+                    temperature=0.05,
+                    max_tokens=self.max_output_tokens,
+                    top_p=0.8,
+                    top_k=20,
+                )
                 end_time = time.time()
                 
                 print(f"      ⏱️  LLM call completed in {end_time - start_time:.2f} seconds")
@@ -146,7 +112,6 @@ Reformatted:
                 # If call took too long, warn but continue
                 if end_time - start_time > 30:
                     print(f"      ⚠️  KnowledgeEngine call took {end_time - start_time:.2f}s - consider bypassing for speed")
-                cleaned_content = response.text.strip()
                 
                 if cleaned_content:
                     output_lines = cleaned_content.count('\n') + 1

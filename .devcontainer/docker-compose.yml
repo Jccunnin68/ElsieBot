@@ -37,7 +37,12 @@ services:
       - ../.env
     environment:
       - PORT=8000
-      - GEMMA_API_KEY=${GEMMA_API_KEY}
+      - OLLAMA_VOICE_URL=http://host.docker.internal:11434
+      - OLLAMA_ATTENTION_URL=http://host.docker.internal:11435
+      - OLLAMA_EMOTION_URL=http://host.docker.internal:11436
+      - OLLAMA_LOGIC_URL=http://host.docker.internal:11437
+      - OLLAMA_KNOWLEDGE_URL=http://host.docker.internal:11438
+      - OLLAMA_WISDOM_URL=http://host.docker.internal:11439
       - DB_HOST=host.docker.internal
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
@@ -66,7 +71,6 @@ services:
       - ../.env
     environment:
       - AI_AGENT_URL=http://ai_agent:8000
-      - GEMMA_API_KEY=${GEMMA_API_KEY}
       - DISCORD_TOKEN=${DISCORD_TOKEN}
     networks:
       - elsie_dev_network

@@ -26,10 +26,14 @@ The agent employs a decoupled, engine-driven architecture. For a detailed explan
     cp sample.env .env
     ```
 2.  **Edit the `.env` file:**
-    Open the newly created `.env` file and add your Google AI API Key:
+    Open the newly created `.env` file. Local Gemma endpoints are already set in `sample.env`:
     ```env
-    # .env
-    GEMMA_API_KEY="YOUR_API_KEY_HERE"
+    OLLAMA_VOICE_URL=http://localhost:11434
+    OLLAMA_ATTENTION_URL=http://localhost:11435
+    OLLAMA_EMOTION_URL=http://localhost:11436
+    OLLAMA_LOGIC_URL=http://localhost:11437
+    OLLAMA_KNOWLEDGE_URL=http://localhost:11438
+    OLLAMA_WISDOM_URL=http://localhost:11439
     ```
 
 ### Running the Agent

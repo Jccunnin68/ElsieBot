@@ -9,7 +9,12 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
-      - GEMMA_API_KEY=${GEMMA_API_KEY:-your_gemma_api_key_here}
+      - OLLAMA_VOICE_URL=http://host.docker.internal:11434
+      - OLLAMA_ATTENTION_URL=http://host.docker.internal:11435
+      - OLLAMA_EMOTION_URL=http://host.docker.internal:11436
+      - OLLAMA_LOGIC_URL=http://host.docker.internal:11437
+      - OLLAMA_KNOWLEDGE_URL=http://host.docker.internal:11438
+      - OLLAMA_WISDOM_URL=http://host.docker.internal:11439
     networks:
       - elsie_network
     healthcheck:
