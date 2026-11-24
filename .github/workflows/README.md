@@ -26,7 +26,6 @@ To activate any deployment workflow, you need to:
 ### Common Secrets (All Platforms)
 ```
 DISCORD_TOKEN          # Discord bot token
-GEMMA_API_KEY         # Gemma API key for AI functionality  
 DB_PASSWORD           # Database password
 ```
 

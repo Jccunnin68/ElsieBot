@@ -255,9 +255,6 @@ Resources:
           
           # Discord Configuration
           DISCORD_TOKEN=your_discord_token_here
-          
-          # API Keys
-          GEMMA_API_KEY=your_gemma_key_here
           EOF
           
           chown ec2-user:ec2-user /home/ec2-user/elsie/.env.template

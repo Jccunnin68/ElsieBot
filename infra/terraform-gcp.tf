@@ -41,12 +41,6 @@ variable "discord_token" {
   sensitive   = true
 }
 
-variable "gemma_api_key" {
-  description = "Gemma API key"
-  type        = string
-  sensitive   = true
-}
-
 variable "db_password" {
   description = "Database password"
   type        = string
@@ -94,26 +88,6 @@ resource "google_secret_manager_secret" "discord_token" {
 resource "google_secret_manager_secret_version" "discord_token" {
   secret      = google_secret_manager_secret.discord_token.id
   secret_data = var.discord_token
-}
-
-resource "google_secret_manager_secret" "gemma_api_key" {
-  secret_id = "${var.project_name}-gemma-api-key"
-
-  labels = {
-    environment = var.environment
-    project     = var.project_name
-  }
-
-  replication {
-    auto {}
-  }
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_secret_manager_secret_version" "gemma_api_key" {
-  secret      = google_secret_manager_secret.gemma_api_key.id
-  secret_data = var.gemma_api_key
 }
 
 resource "google_secret_manager_secret" "db_password" {
@@ -359,16 +333,6 @@ resource "google_cloud_run_v2_service" "ai_agent" {
         }
       }
 
-      env {
-        name = "GEMMA_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.gemma_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
-
       volume_mounts {
         name       = "cloudsql"
         mount_path = "/cloudsql"
@@ -427,16 +391,6 @@ resource "google_cloud_run_v2_service" "discord_bot" {
       env {
         name  = "AI_AGENT_URL"
         value = google_cloud_run_v2_service.ai_agent.uri
-      }
-
-      env {
-        name = "GEMMA_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.gemma_api_key.secret_id
-            version = "latest"
-          }
-        }
       }
     }
   }

@@ -147,9 +147,6 @@ jobs:
           # Discord Configuration
           DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
           
-          # API Keys
-          GEMMA_API_KEY=${{ secrets.GEMMA_API_KEY }}
-          
           # Application Configuration
           PORT=8000
           AI_AGENT_URL=http://ai_agent:8000

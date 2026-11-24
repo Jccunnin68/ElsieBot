@@ -17,7 +17,6 @@ if [ ! -f .env ]; then
     echo "DB_USER=elsie"
     echo "DB_PASSWORD=your_password"
     echo "DISCORD_TOKEN=your_discord_token"
-    echo "GEMMA_API_KEY=your_gemma_key"
     exit 1
 fi
 

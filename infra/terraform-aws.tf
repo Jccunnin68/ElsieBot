@@ -36,12 +36,6 @@ variable "discord_token" {
   sensitive   = true
 }
 
-variable "gemma_api_key" {
-  description = "Gemma API key"
-  type        = string
-  sensitive   = true
-}
-
 variable "db_password" {
   description = "Database password"
   type        = string
@@ -536,10 +530,6 @@ resource "aws_ecs_task_definition" "ai_agent" {
         {
           name  = "DB_PASSWORD"
           value = var.db_password
-        },
-        {
-          name  = "GEMMA_API_KEY"
-          value = var.gemma_api_key
         }
       ]
       
@@ -589,10 +579,6 @@ resource "aws_ecs_task_definition" "discord_bot" {
         {
           name  = "AI_AGENT_URL"
           value = "http://${aws_lb.main.dns_name}:8000"
-        },
-        {
-          name  = "GEMMA_API_KEY"
-          value = var.gemma_api_key
         }
       ]
       

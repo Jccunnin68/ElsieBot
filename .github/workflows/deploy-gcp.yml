@@ -86,12 +86,10 @@ jobs:
           -target="terraform-gcp.tf" \
           -var="gcp_project_id=${{ github.event.inputs.gcp_project_id }}" \
           -var="discord_token=${{ secrets.DISCORD_TOKEN }}" \
-          -var="gemma_api_key=${{ secrets.GEMMA_API_KEY }}" \
           -var="db_password=${{ secrets.DB_PASSWORD }}" \
           -out=tfplan-gcp
       env:
         TF_VAR_discord_token: ${{ secrets.DISCORD_TOKEN }}
-        TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
     - name: Comment Plan on PR
@@ -131,12 +129,10 @@ jobs:
         terraform destroy \
           -var="gcp_project_id=${{ github.event.inputs.gcp_project_id }}" \
           -var="discord_token=${{ secrets.DISCORD_TOKEN }}" \
-          -var="gemma_api_key=${{ secrets.GEMMA_API_KEY }}" \
           -var="db_password=${{ secrets.DB_PASSWORD }}" \
           -auto-approve
       env:
         TF_VAR_discord_token: ${{ secrets.DISCORD_TOKEN }}
-        TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
     - name: Output Infrastructure Info

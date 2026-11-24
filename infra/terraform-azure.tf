@@ -36,12 +36,6 @@ variable "discord_token" {
   sensitive   = true
 }
 
-variable "gemma_api_key" {
-  description = "Gemma API key"
-  type        = string
-  sensitive   = true
-}
-
 variable "db_password" {
   description = "Database password"
   type        = string
@@ -119,14 +113,6 @@ data "azurerm_client_config" "current" {}
 resource "azurerm_key_vault_secret" "discord_token" {
   name         = "discord-token"
   value        = var.discord_token
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_key_vault.main]
-}
-
-resource "azurerm_key_vault_secret" "gemma_api_key" {
-  name         = "gemma-api-key"
-  value        = var.gemma_api_key
   key_vault_id = azurerm_key_vault.main.id
 
   depends_on = [azurerm_key_vault.main]
@@ -483,8 +469,7 @@ resource "azurerm_container_group" "ai_agent" {
     }
 
     secure_environment_variables = {
-      DB_PASSWORD   = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.db_password.id})"
-      GEMMA_API_KEY = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.gemma_api_key.id})"
+      DB_PASSWORD = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.db_password.id})"
     }
   }
 
@@ -539,7 +524,6 @@ resource "azurerm_container_group" "discord_bot" {
 
     secure_environment_variables = {
       DISCORD_TOKEN = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.discord_token.id})"
-      GEMMA_API_KEY = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.gemma_api_key.id})"
     }
   }
 
